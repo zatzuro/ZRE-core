@@ -61,7 +61,19 @@ def _copy_program_tree(source: Path) -> None:
         else:
             shutil.copy2(item, destination)
 
+
+def _rebuild_source_parts() -> None:
+    """Rebuild large runtime files shipped as text parts in the update channel."""
+    server = ROOT / "server"
+    parts = sorted(server.glob("iracing_bridge.part*"))
+    if len(parts) >= 3:
+        content = "".join(part.read_text(encoding="utf-8") for part in parts)
+        target = server / "iracing_bridge.py"
+        if not target.exists() or target.read_text(encoding="utf-8") != content:
+            target.write_text(content, encoding="utf-8")
+
 def update_if_available(*, background: bool = False) -> bool:
+    _rebuild_source_parts()
     local = _read_local_version()
     try:
         remote_meta = _fetch_json(REMOTE_VERSION_URL)
@@ -88,6 +100,7 @@ def update_if_available(*, background: bool = False) -> bool:
             if str(package_meta.get("version")) != remote:
                 raise RuntimeError("version del paquete no coincide")
             _copy_program_tree(roots[0])
+            _rebuild_source_parts()
         suffix = " La carrera sigue con el codigo ya cargado; la nueva version queda activa al proximo inicio." if background else ""
         print(f"ZRE Update: actualizado correctamente a v{remote}.{suffix}")
         return True
