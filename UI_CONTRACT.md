@@ -1,30 +1,18 @@
-# iRacing Dashboard v2.0 — UI payload contract
+# ZRE Core — UI payload contract
 
-The frontend is split into three automatic screens: live, pit and summary.
-
-## v2.2 live additions
-- The live screen keeps a permanent coach loss map.
-- One timing table switches between Relative and class-only Standings.
-- Timing rows use POS/NUM, manufacturer identity, driver, gap, last lap and delta to best.
-- Lap history rows may include `consumption` in addition to lap/time/delta.
-- `standing[]` is expected to contain only the player's car class; `relative[]` may contain nearby cars from other classes.
-
-## Screen selection
-- `live`: default when `self.pit == "EN PISTA"`.
-- `pit`: automatic when `self.pit != "EN PISTA"`.
-- `summary`: when `sessionSummary.active == true`.
+## v2.2.1 live screen
+- Top cards: Reference, Tyres, Fuel, Pit.
+- Bottom engineering boards: persistent stint loss map, one selectable Relative/Class Standings table, and lap pace/history.
+- Timing columns: `POS/NUM`, `COCHE`, `PILOTO`, `DIF.`, `ÚLT.`, `Δ MEJOR`.
+- `standing[]` is class-only and uses class position; `relative[]` remains spatial and may include other classes.
+- Lap rows may include `consumption`.
+- `coach.trackMap` contains `points`, up to three `markers`, and `source`. After a stint ends, markers remain frozen from that stint until the next stint summary replaces them.
+- `appVersion` identifies the running bridge build. The frontend reloads itself when the browser is serving an older build.
 
 ## Required payload
-- `connected`, `demo`
+- `appVersion`, `connected`, `demo`
 - `header.{car,track,driver,position,lap,state}`
 - `self.{fuel,lastUse,bestUse,worstUse,lastLap,bestLap,laps,wear,pit,pitWindow,nextStop}`
 - `lastLapSummary`
-- `relative[]`
-- `standing[]`
-- `coach.trackMap.{points,markers}` when a trace is available
-
-Timing rows can include `brand`, `classId`, `className`, and `classPos`.
-Lap rows can include `consumption`.
-
-## Performance
-Unchanged DOM text is not rewritten; timing/lap rows are rebuilt only when their data changes; hidden screens are not rendered every WebSocket tick; no UI framework is used.
+- `relative[]`, `standing[]`
+- `coach.trackMap.{points,markers,source}` when a trace is available
