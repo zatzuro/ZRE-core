@@ -1,6 +1,6 @@
 # ZRE Core — UI payload contract
 
-## v2.2.1 live screen
+## v2.2.2 live screen
 - Top cards: Reference, Tyres, Fuel, Pit.
 - Bottom engineering boards: persistent stint loss map, one selectable Relative/Class Standings table, and lap pace/history.
 - Timing columns: `POS/NUM`, `COCHE`, `PILOTO`, `DIF.`, `ÚLT.`, `Δ MEJOR`.
@@ -16,3 +16,5 @@
 - `lastLapSummary`
 - `relative[]`, `standing[]`
 - `coach.trackMap.{points,markers,source}` when a trace is available
+
+- `GET /version` returns `installedVersion` from disk and `runtimeVersion` from the active Python process. The browser checks it every 5 seconds only for update detection and reloads itself when the installed frontend changes.
