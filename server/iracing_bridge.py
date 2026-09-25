@@ -5,6 +5,7 @@ Runs in demo mode automatically until iRacing's SDK is available.
 """
 import argparse
 import asyncio
+import json
 import math
 import logging
 from logging.handlers import RotatingFileHandler
@@ -40,6 +41,10 @@ except ImportError:
     irsdk = None
 
 WEB_ROOT = ROOT / "web"
+try:
+    APP_VERSION = str(json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["version"])
+except Exception:
+    APP_VERSION = "unknown"
 logger = logging.getLogger("dashboard")
 logger.setLevel(logging.INFO)
 if not logger.handlers:
@@ -100,6 +105,7 @@ class DashboardSource:
         self.audio_mode = "off"
         self.audio_coach = AudioCoach()
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
+        self.stint_active = False
 
     def get(self,key,default=None):
         try:
@@ -228,8 +234,17 @@ class DashboardSource:
             explicit_on_track = self.get("IsOnTrack")
             on_track = bool(explicit_on_track) if explicit_on_track is not None else player_pct is not None
             in_garage = not on_track and not on_pit_road
+            driving_stint = bool(on_track and not on_pit_road)
+            if self.stint_active and not driving_stint:
+                frozen = self.coach.freeze_stint_summary()
+                if frozen: logger.info("COACH STINT SUMMARY frozen priorities=%s", len(frozen))
+            elif not self.stint_active and driving_stint:
+                self.coach.start_stint()
+                logger.info("COACH STINT START")
+            self.stint_active = driving_stint
             self.session_state.update_runtime(session_time=session_time, connected=True, on_track=on_track, on_pit_road=on_pit_road, in_garage=in_garage)
             payload = {
+                "appVersion": APP_VERSION,
                 "connected": True, "demo": False,
                 "header": {"car": car_label(player_driver), "track": weekend.get("TrackDisplayName", "Pista"),
                            "driver": player_driver.get("UserName", "Piloto"), "position": f"P{player['pos']}" if player else "P—",
@@ -266,7 +281,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach()
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False
 
     @staticmethod
     def track_metres(value):
@@ -390,15 +405,24 @@ class DashboardSource:
     def demo_payload(self):
         rows=[(3,"Ferrari 296 GT3","Alejandro Pérez",12.125,"1:32.184","+0.000"),(4,"Lamborghini Huracán GT3 EVO","R. Bell",10.870,"1:32.223","+0.031"),(5,"Porsche 911 GT3 R","Carlos Díaz",9.092,"1:32.122","+0.105"),(6,"Corvette Z06 GT3.R","J. Martin",6.442,"1:32.271","+0.216"),(7,"BMW M4 GT3","Lucas García",3.218,"1:32.441","+0.336"),(8,"McLaren 720S GT3 EVO","SANTIAGO",0,"1:32.481","+0.217"),(9,"Mercedes-AMG GT3","James Smith",-2.317,"1:32.612","+0.496"),(10,"Porsche 911 GT3 R","Tom Jones",-7.824,"1:32.921","+0.656"),(11,"Audi R8 LMS EVO II","M. Laurent",-11.203,"1:33.004","+0.719"),(12,"Ferrari 296 GT3","D. Werner",-14.614,"1:33.075","+0.796"),(13,"BMW M4 GT3","A. Kim",-17.202,"1:33.191","+0.838"),(14,"Acura NSX GT3 EVO","N. Rossi",-20.310,"1:33.300","+0.934")]
         standing=[{"idx":pos,"pos":pos,"classPos":pos,"classId":1,"className":"GT3","number":str(10+pos),"car":car,"brand":car_brand({"CarScreenName":car}),"driver":name,"gap":"TÚ" if gap==0 else self.gap_text(gap),"gapSeconds":gap,"lastLap":last,"pace":pace,"isPlayer":gap==0} for pos,car,name,gap,last,pace in rows]
-        return {"connected":True,"demo":True,
+        return {"appVersion":APP_VERSION,"connected":True,"demo":True,
                 "header":{"car":"McLaren 720S GT3 EVO","track":"Spa-Francorchamps","driver":"SANTIAGO","position":"P8","lap":"VUELTA 12","state":"CARRERA · DEMO"},
                 "self":{"fuel":"48.2 L","lastUse":"2.89 L/v","bestUse":"2.82 L/v","worstUse":"2.97 L/v","lastLap":"1:32.481","bestLap":"1:32.401","laps":[{"lap":10,"time":"1:32.401","delta":"—","consumption":"2.82 L/v"},{"lap":11,"time":"1:32.511","delta":"+0.110","consumption":"2.97 L/v"},{"lap":12,"time":"1:32.481","delta":"+0.080","consumption":"2.89 L/v"}],"wear":{"FL":"96%","FR":"95%","RL":"97%","RR":"96%"},"pit":"EN PISTA","pitWindow":"≈ 25 min","nextStop":"VUELTA 28"},
                 "lastLapSummary":{"lap":12,"time":"1:32.481","sessionBest":"1:32.401","delta":"+0.080","expiresAt":self.demo_flash_expires},
                 "relative":standing[3:10],"standing":standing[3:10],"capabilities":{"coachControls":True},
-                "coach":{"reference":"ÓPTIMA SESIÓN","bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapMessage":"T1: frenaste pronto. Retrasa ligeramente la frenada.","primary":{"zone":"T1 +0.31","title":"Frenada temprana","advice":"Retrasa ligeramente la frenada manteniendo la misma velocidad mínima."},"secondary":{"zone":"T7 +0.14","title":"Aceleración tardía","advice":"Prioriza la salida y vuelve al acelerador antes."},"pattern":"T1 · 6/8 vueltas","patternAdvice":"La frenada temprana se repite de forma consistente."},
+                "coach":{"reference":"ÓPTIMA SESIÓN","bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapMessage":"T1: frenaste pronto. Retrasa ligeramente la frenada.","primary":{"zone":"T1 +0.31","title":"Frenada temprana","advice":"Retrasa ligeramente la frenada manteniendo la misma velocidad mínima."},"secondary":{"zone":"T7 +0.14","title":"Aceleración tardía","advice":"Prioriza la salida y vuelve al acelerador antes."},"pattern":"T1 · 6/8 vueltas","patternAdvice":"La frenada temprana se repite de forma consistente.","trackMap":{"source":"ÚLTIMO STINT · 8 VUELTAS","points":[{"x":50+36*math.cos(i*2*math.pi/72),"y":50+30*math.sin(i*2*math.pi/72),"pct":i/72} for i in range(73)],"markers":[{"rank":1,"x":73,"y":28,"loss":.31,"label":"Primera frenada","cause":"Frenada temprana"},{"rank":2,"x":28,"y":66,"loss":.14,"label":"Cuarta frenada","cause":"Aceleración tardía"}]},
                 "strategy":{"consumption":"2.89 L/v","nextStop":"VUELTA 28","addFuel":"8.0 L","lapsRemaining":"6.2"},
                 "raceDirector":{"confidence":"MEDIA","rival":"#17 · Lucas García","status":"Parada completada · sigue siendo rival estratégico","gapBefore":"+1.8 s","netGap":"+0.7 s"},
                 "sessionSummary":{"active":False,"bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapCount":12,"priorities":[{"zone":"T1","title":"Frenada temprana recurrente","advice":"Apareció en 6 de las últimas 8 vueltas."},{"zone":"T7","title":"Aceleración tardía","advice":"La mayor oportunidad está en volver antes al acelerador."}]}}
+
+@web.middleware
+async def no_cache_middleware(request,handler):
+    response=await handler(request)
+    if request.path=="/" or request.path.startswith("/static/"):
+        response.headers["Cache-Control"]="no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"]="no-cache"
+        response.headers["Expires"]="0"
+    return response
 
 async def index(request):return web.FileResponse(WEB_ROOT/"index.html")
 async def websocket(request):
@@ -422,7 +446,7 @@ async def websocket(request):
 
 def main():
     parser=argparse.ArgumentParser(description="iRacing GT3 timing dashboard");parser.add_argument("--demo",action="store_true");parser.add_argument("--port",type=int,default=8765);args=parser.parse_args()
-    app=web.Application();app["source"]=DashboardSource(args.demo)
+    app=web.Application(middlewares=[no_cache_middleware]);app["source"]=DashboardSource(args.demo)
     if start_background_updater is not None:
         start_background_updater();print("ZRE Update: vigilancia automatica activa cada 2 minutos; nunca reinicia una carrera.")
     app.router.add_get("/",index);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
