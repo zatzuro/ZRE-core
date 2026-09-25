@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ZRE Core · iRacing Team Engineer</title>
+  <link rel="stylesheet" href="/static/style.css?v=2.1.7">
+</head>
+<body data-view="live">
+<main class="dashboard">
+  <header class="session-header">
+    <div class="brand-block">
+      <div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div>
+      <span class="build">v2.1.7</span>
+    </div>
+    <div class="session-info">
+      <strong id="car">CONECTANDO</strong>
+      <span id="track">iRacing Dashboard</span>
+    </div>
+    <div class="driver-header"><span>PILOTO</span><strong id="header-driver">—</strong></div>
+    <div class="driver-header compact"><span>POS</span><strong id="header-position">P—</strong></div>
+    <div class="driver-header compact"><span>VUELTA</span><strong id="header-lap">—</strong></div>
+    <div id="coach-controls" class="coach-controls" hidden>
+      <label>REFERENCIA<select id="reference-select"><option value="optimal">ÓPTIMA SESIÓN</option><option value="external" disabled>EXTERNA · PRÓXIMAMENTE</option></select></label>
+      <label>AUDIO<select id="audio-select"><option value="off">OFF</option><option value="lap">VUELTA</option><option value="corners" disabled>CURVAS · PRÓXIMAMENTE</option></select></label><button id="audio-test" class="audio-test" type="button">PROBAR VOZ</button>
+    </div>
+    <div class="state-stack">
+      <span id="view-badge" class="view-badge">PISTA</span>
+      <div class="session-state"><span id="status-dot"></span><strong id="state">INICIANDO</strong></div>
+    </div>
+  </header>
+
+  <aside id="lap-flash" class="lap-flash" hidden>
+    <span>ÚLTIMA VUELTA · VTA <b id="flash-lap">—</b></span>
+    <strong id="flash-time">—</strong>
+    <div><span>MI MEJOR ANTERIOR</span><b id="flash-best">—</b></div>
+    <div><span>DELTA</span><b id="flash-delta">—</b></div>
+    <section id="flash-map-card" class="flash-map-card" hidden><div class="flash-map-title"><span>DÓNDE PIERDES TIEMPO</span><b id="flash-map-location">—</b></div><svg id="flash-track-map" viewBox="0 0 100 100" role="img" aria-label="Mapa reconstruido del circuito"><polyline id="flash-track-line" points=""/><g id="flash-track-markers"></g></svg></section>
+    <p id="flash-coach" class="flash-coach" hidden></p>
+  </aside>
+
+  <section id="live-view" class="screen live-view">
+    <section class="boards-grid">
+      <article class="timing-card">
+        <div class="card-title"><h2>RELATIVO</h2><span>PISTA · LIVE</span></div>
+        <div class="table-head"><span>POS</span><span>#</span><span>COCHE / PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ MEJOR</span></div>
+        <div id="relative-rows"></div>
+      </article>
+      <article class="timing-card">
+        <div class="card-title"><h2>CLASIFICACIÓN</h2><span>SESIÓN</span></div>
+        <div class="table-head"><span>POS</span><span>#</span><span>COCHE / PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ MEJOR</span></div>
+        <div id="standing-rows"></div>
+      </article>
+      <article class="pace-card">
+        <div class="card-title"><h2>MI RITMO</h2><span>ÚLTIMAS 10</span></div>
+        <div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANTERIOR</span></div>
+        <div id="pace-rows"></div>
+      </article>
+    </section>
+
+    <section class="telemetry-grid">
+      <article class="data-card fuel-card"><h2>COMBUSTIBLE</h2><div><span>ACTUAL</span><strong id="fuel">—</strong></div><div><span>PROMEDIO / VTA</span><strong id="last-use">—</strong></div><div><span>MEJOR</span><strong id="best-use">—</strong></div><div><span>PEOR</span><strong id="worst-use">—</strong></div></article>
+      <article class="data-card lap-card"><h2>REFERENCIA PERSONAL</h2><div><span>ÚLTIMA</span><strong id="last-lap">—</strong></div><div><span>MEJOR REAL</span><strong id="best-lap">—</strong></div><div><span>ÓPTIMA</span><strong id="optimal-lap">—</strong></div></article>
+      <article class="data-card"><h2>NEUMÁTICOS</h2><div><span>FL</span><strong id="wear-fl">—</strong></div><div><span>FR</span><strong id="wear-fr">—</strong></div><div><span>RL</span><strong id="wear-rl">—</strong></div><div><span>RR</span><strong id="wear-rr">—</strong></div></article>
+      <article class="data-card pit"><h2>PARADA</h2><div><span>ESTADO</span><strong id="pit">—</strong></div><div><span>DENTRO DE</span><strong id="pit-window">—</strong></div><div><span>VUELTA EST.</span><strong id="next-stop">—</strong></div></article>
+    </section>
+  </section>
+
+  <section id="pit-view" class="screen pit-view" hidden>
+    <section class="pit-top-grid">
+      <article class="focus-card coach-card">
+        <div class="card-title"><h2>DRIVER COACH</h2><span id="coach-reference">ÓPTIMA SESIÓN</span></div>
+        <div class="coach-kpis">
+          <div><span>MEJOR REAL</span><strong id="pit-best-lap">—</strong></div>
+          <div><span>ÓPTIMA</span><strong id="pit-optimal-lap">—</strong></div>
+          <div><span>POTENCIAL</span><strong id="pit-potential">—</strong></div>
+        </div>
+        <div class="coach-priority primary"><span id="coach-primary-zone">REFERENCIA</span><strong id="coach-primary-title">Construyendo referencia</strong><p id="coach-primary-advice">El análisis aparecerá aquí cuando existan suficientes vueltas comparables.</p></div>
+        <div class="coach-priority"><span id="coach-secondary-zone">PATRÓN</span><strong id="coach-secondary-title">—</strong><p id="coach-secondary-advice">—</p></div>
+      </article>
+
+      <article class="focus-card strategy-card">
+        <div class="card-title"><h2>PIT ASSISTANT</h2><span id="pit-state-badge">GARAGE</span></div>
+        <div class="strategy-main"><span>COMBUSTIBLE ACTUAL</span><strong id="pit-fuel">—</strong></div>
+        <div class="strategy-grid">
+          <div><span>CONSUMO</span><strong id="pit-consumption">—</strong></div>
+          <div><span>PRÓXIMA PARADA</span><strong id="pit-next-stop">—</strong></div>
+          <div><span>AÑADIR</span><strong id="pit-add-fuel">—</strong></div>
+          <div><span>VUELTAS REST.</span><strong id="pit-laps-remaining">—</strong></div>
+        </div>
+      </article>
+
+      <article class="focus-card director-card">
+        <div class="card-title"><h2>RACE DIRECTOR</h2><span id="director-confidence">SIN DATOS</span></div>
+        <span class="eyebrow">RIVAL ESTRATÉGICO</span>
+        <strong id="director-rival" class="director-rival">—</strong>
+        <p id="director-status" class="director-status">Esperando contexto de carrera.</p>
+        <div class="director-grid"><div><span>GAP PRE-PIT</span><strong id="director-gap-before">—</strong></div><div><span>GAP NETO EST.</span><strong id="director-net-gap">—</strong></div></div>
+      </article>
+    </section>
+
+    <section class="pit-bottom-grid">
+      <article class="timing-card">
+        <div class="card-title"><h2>CLASIFICACIÓN</h2><span>SE MANTIENE EN GARAGE</span></div>
+        <div class="table-head"><span>POS</span><span>#</span><span>COCHE / PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ MEJOR</span></div>
+        <div id="pit-standing-rows"></div>
+      </article>
+      <article class="pace-card">
+        <div class="card-title"><h2>HISTORIAL DE VUELTAS</h2><span>SESIÓN ACTUAL</span></div>
+        <div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANTERIOR</span></div>
+        <div id="pit-pace-rows"></div>
+      </article>
+    </section>
+  </section>
+
+  <section id="summary-view" class="screen summary-view" hidden>
+    <section class="summary-kpis">
+      <article><span>MEJOR VUELTA</span><strong id="summary-best">—</strong></article>
+      <article><span>ÓPTIMA</span><strong id="summary-optimal">—</strong></article>
+      <article><span>POTENCIAL</span><strong id="summary-potential">—</strong></article>
+      <article><span>VUELTAS</span><strong id="summary-laps">—</strong></article>
+    </section>
+    <section class="summary-grid">
+      <article class="focus-card summary-focus"><div class="card-title"><h2>PRINCIPALES OPORTUNIDADES</h2><span>SESIÓN</span></div><div id="summary-priorities" class="summary-priorities"><p>El resumen detallado aparecerá al finalizar una sesión analizada.</p></div></article>
+      <article class="pace-card"><div class="card-title"><h2>HISTORIAL</h2><span>VUELTAS</span></div><div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANTERIOR</span></div><div id="summary-pace-rows"></div></article>
+    </section>
+  </section>
+
+  <aside id="debug-panel" class="debug-panel" hidden>
+    <div><strong>COACH DEBUG</strong><span>?debug=1</span></div>
+    <pre id="debug-content">Esperando telemetría…</pre>
+  </aside>
+
+  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.1.7</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
+</main>
+<script src="/static/app.js?v=2.1.7"></script>
+</body>
+</html>
