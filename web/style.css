@@ -13,3 +13,18 @@
 @media(min-width:1500px) and (min-height:900px){.row{height:clamp(58px,7.5vh,80px)}.driver{font-size:18px}.time,.gap{font-size:17px}.live-telemetry .data-card{padding-top:8px;padding-bottom:8px}.boards-grid .row{height:clamp(58px,6.5vh,70px)}}
 @media(max-height:760px){.dashboard{padding-top:10px}.session-header{min-height:58px}.session-info strong{font-size:22px}.row{height:clamp(42px,6.6vh,58px)}.pace-row{height:clamp(30px,4.2vh,38px);font-size:15px}.data-card strong{font-size:17px}.coach-kpis>div,.strategy-grid>div,.director-grid>div{padding:9px 11px}.coach-priority{padding:10px 14px}.flash-map-card{height:170px}.lap-flash{gap:12px;padding:4vh 9vw}.lap-flash>strong{font-size:clamp(80px,10vw,160px)}#live-track-map{min-height:190px}.live-telemetry .data-card{padding-top:6px;padding-bottom:6px}.boards-grid .row{height:clamp(38px,5.7vh,50px)}}
 @media(max-width:1100px){html,body{overflow:auto}.dashboard{height:auto;min-height:100dvh;display:block;padding:12px}.driver-header,.coach-controls{display:none!important}.session-header{gap:10px}.session-info strong{font-size:19px}.boards-grid,.telemetry-grid,.pit-top-grid,.pit-bottom-grid,.summary-grid,.summary-kpis{grid-template-columns:1fr;margin-top:10px}.screen{display:block}.timing-card,.pace-card,.data-card,.focus-card{margin-bottom:10px}.lap-flash{padding:8vh 7vw;grid-template-columns:1fr;gap:22px}.lap-flash>strong,.lap-flash>span,.flash-coach{grid-column:1}}
+
+
+/* v2.2.1 — bottom-anchored engineering boards and split car/driver columns */
+.live-view{display:flex;flex-direction:column;min-height:0;height:100%}
+.live-telemetry{flex:0 0 auto}
+.boards-grid{margin-top:auto;width:100%;grid-template-columns:minmax(0,.95fr) minmax(0,1.45fr) minmax(300px,.78fr);align-items:stretch}
+.telemetry-grid{grid-template-columns:.95fr .90fr 1.15fr 1.05fr}
+.table-head,.row{grid-template-columns:72px 150px minmax(120px,1fr) 82px 94px 78px;column-gap:7px}
+.car-cell{display:flex;align-items:center;gap:8px;min-width:0}
+.car-cell .brand-logo{flex:0 0 38px}
+.car-cell .car-model{font-size:10px;color:#c3cad2}
+.row>.driver{min-width:0}
+.loss-map-card .card-title>span{max-width:58%}
+@media(min-width:1500px) and (min-height:900px){.boards-grid .row{height:58px}.boards-grid .pace-row{height:43px}}
+@media(max-height:760px){.boards-grid .row{height:40px}.boards-grid .pace-row{height:31px}.table-head,.row{grid-template-columns:62px 125px minmax(100px,1fr) 72px 82px 70px}}
