@@ -61,9 +61,9 @@ def _archive_url(ref: str) -> str:
     return f"https://codeload.github.com/{REPO}/zip/refs/heads/{ref}"
 
 def _copy_program_tree(source: Path) -> None:
-    for item in source.iterdir():
-        if item.name in PROTECTED_TOP_LEVEL or item.name in PROTECTED_NAMES:
-            continue
+    items=[item for item in source.iterdir() if item.name not in PROTECTED_TOP_LEVEL and item.name not in PROTECTED_NAMES]
+    items.sort(key=lambda item:(item.name=="version.json",item.name))
+    for item in items:
         destination = ROOT / item.name
         if item.is_dir():
             destination.mkdir(parents=True, exist_ok=True)
