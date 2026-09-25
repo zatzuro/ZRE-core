@@ -1,20 +1,18 @@
 # ZRE Core — UI payload contract
 
-## v2.2.2 live screen
-- Top cards: Reference, Tyres, Fuel, Pit.
-- Bottom engineering boards: persistent stint loss map, one selectable Relative/Class Standings table, and lap pace/history.
-- Timing columns: `POS/NUM`, `COCHE`, `PILOTO`, `DIF.`, `ÚLT.`, `Δ MEJOR`.
-- `standing[]` is class-only and uses class position; `relative[]` remains spatial and may include other classes.
-- Lap rows may include `consumption`.
-- `coach.trackMap` contains `points`, up to three `markers`, and `source`. After a stint ends, markers remain frozen from that stint until the next stint summary replaces them.
-- `appVersion` identifies the running bridge build. The frontend reloads itself when the browser is serving an older build.
+## v2.3.0 live screen
+- Top: Reference, Tyres, Fuel, Pit.
+- Middle: Strategic Rival + Endurance Strategy/Stints.
+- Bottom: persistent stint loss map, selectable Relative/Class Standings, pace history.
+- Timing renders seven visual slots with the player in slot 4 when present.
 
-## Required payload
-- `appVersion`, `connected`, `demo`
-- `header.{car,track,driver,position,lap,state}`
-- `self.{fuel,lastUse,bestUse,worstUse,lastLap,bestLap,laps,wear,pit,pitWindow,nextStop}`
-- `lastLapSummary`
-- `relative[]`, `standing[]`
-- `coach.trackMap.{points,markers,source}` when a trace is available
+## raceDirector
+`mode`, `selectedIdx`, `candidates[]`, `rival`, `position`, `gap`, `lastLap`, `pit`, `lap`, `status`.
+AUTO is class-only; the UI may send `settings:rival` with a CarIdx.
 
-- `GET /version` returns `installedVersion` from disk and `runtimeVersion` from the active Python process. The browser checks it every 5 seconds only for update detection and reloads itself when the installed frontend changes.
+## enduranceStrategy
+`available`, `state`, `verdict`, `remainingTime`, `currentStint`, `currentDriver`, `boxLap`, `autonomy`, `stopsRemaining`, `lastStopAvoidable`, `extensionNeeded`, `extensionAvailable`, `extensionText`, `targetThisStint`.
+Also includes `base`, `extended`, `timeline[]` and `settings`.
+
+## Web update
+`appVersion` is read dynamically from installed `version.json`. The page also checks `GET /version` every five seconds. The updater writes `version.json` last, so a browser reload cannot observe a half-installed HTML/JS/CSS build.
