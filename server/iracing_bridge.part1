@@ -1,0 +1,144 @@
+                row["pos"] = row.get("classPos") or row.get("pos") or 0
+            category_rows.sort(key=lambda row: (row["pos"] == 0, row["pos"]))
+            player = next((row for row in category_rows if row["isPlayer"]), None)
+            relative_player = next((row for row in relative_candidates if row["isPlayer"]), None)
+            relative = self.relative_rows(relative_candidates, relative_player) if relative_player else []
+            if not relative:
+                previous = self.session_state.preserved_payload()
+                if previous:
+                    relative = previous.get("relative", [])
+            weekend = self.get("WeekendInfo", {})
+            lap_number = int(self.get("Lap", 0))
+            last_lap = seconds(self.get("LapLastLapTime"))
+            if last_lap is None and player_idx < len(live_last):
+                last_lap = seconds(live_last[player_idx])
+            fuel = float(self.get("FuelLevel", 0))
+            completed_raw = self.get("LapCompleted")
+            completed_laps = int(completed_raw) if completed_raw is not None else None
+            result = results.get(player_idx, {})
+            if completed_laps is not None:
+                self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
+            self.coach.capture(self.get("LapDistPct", player_pct), session_time,
+                               self.get("Speed"), self.get("Brake"), self.get("Throttle"),
+                               on_track=bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
+                               steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
+                               yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"))
+            if player:
+                player["lastLap"] = self.lap_text(last_lap)
+            if self.confirmed_session_best is not None:
+                session_best = min(session_best, self.confirmed_session_best) if session_best else self.confirmed_session_best
+            for row in standing_rows:
+                row["pace"] = self.delta_text(seconds(results.get(row["idx"], {}).get("FastestTime")), session_best)
+            for row in category_rows:
+                row["pace"] = self.delta_text(seconds(results.get(row["idx"], {}).get("FastestTime")), session_best)
+            for row in relative:
+                row["pace"] = self.delta_text(seconds(results.get(row["idx"], {}).get("FastestTime")), session_best)
+            best_lap = self.personal_session_best
+            average_lap = self.average_lap_time(seconds(last_lap))
+            stop_time, stop_lap = self.stop_estimate(fuel, lap_number, average_lap)
+            on_pit_road = bool(self.get("OnPitRoad", False))
+            explicit_on_track = self.get("IsOnTrack")
+            on_track = bool(explicit_on_track) if explicit_on_track is not None else player_pct is not None
+            in_garage = not on_track and not on_pit_road
+            self.session_state.update_runtime(session_time=session_time, connected=True, on_track=on_track, on_pit_road=on_pit_road, in_garage=in_garage)
+            payload = {
+                "connected": True, "demo": False,
+                "header": {"car": car_label(player_driver), "track": weekend.get("TrackDisplayName", "Pista"),
+                           "driver": player_driver.get("UserName", "Piloto"), "position": f"P{player['pos']}" if player else "P—",
+                           "lap": f"VUELTA {lap_number}", "state": self.session_type_text(session.get("SessionType", "EN SESIÓN"))},
+                "self": {"fuel": f"{fuel:.1f} L",
+                         "lastUse": self.use_text(sum(self.fuel_per_lap) / len(self.fuel_per_lap) if self.fuel_per_lap else None),
+                         "bestUse": self.use_text(min(self.fuel_per_lap) if self.fuel_per_lap else None),
+                         "worstUse": self.use_text(max(self.fuel_per_lap) if self.fuel_per_lap else None),
+                         "lastLap": self.lap_text(last_lap), "bestLap": self.lap_text(best_lap),
+                         "laps": self.lap_rows(self.personal_session_best), "wear": self.wear(),
+                         "pit": "EN BOXES" if on_pit_road else ("EN GARAGE" if in_garage else "EN PISTA"),
+                         "pitWindow": stop_time, "nextStop": stop_lap},
+                "lastLapSummary": self.last_lap_summary,
+                "relative": relative, "standing": self.position_window(category_rows, player),
+            }
+            coach = self.coach.payload(self.lap_text)
+            payload["capabilities"] = {"coachControls": True}
+            payload["coach"] = coach
+            payload["strategy"] = self.strategy_payload(fuel)
+            raw_session_state = self.get("SessionState")
+            try:
+                ended = int(raw_session_state) in (5, 6)
+            except (TypeError, ValueError):
+                ended = False
+            payload["sessionSummary"] = {"active": bool(ended and in_garage), "bestLap": coach["bestLap"],
+                                         "optimalLap": coach["optimalLap"], "potential": coach["potential"],
+                                         "lapCount": self.coach.completed, "priorities": self.coach.summary_priorities()}
+            return payload
+        finally:
+            self.ir.unfreeze_var_buffer_latest()
+
+    def reset_session_tracking(self):
+        self.last_lap_number=None; self.lap_history=[]; self.last_fuel=None; self.fuel_at_lap_start=None
+        self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
+        self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
+        self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach()
+
+    @staticmethod
+    def track_metres(value):
+        try:
+            number=float(str(value).replace("km","").replace("mi","").strip())
+            return number*(1609.344 if "mi" in str(value).lower() else 1000)
+        except ValueError:return 5000
+    @staticmethod
+    def gap_text(gap): return f"{gap:+.3f}" if abs(gap)<99 else ("+1 VUELTA" if gap>0 else "-1 VUELTA")
+    @staticmethod
+    def lap_text(value):
+        value=seconds(value)
+        if not value:return "—"
+        return f"{int(value//60)}:{value%60:06.3f}"
+    @staticmethod
+    def delta_text(value,reference): return f"{value-reference:+.3f}" if value and reference else "—"
+    def wear(self):
+        result={}
+        for corner,prefix in (("FL","LF"),("FR","RF"),("RL","LR"),("RR","RR")):
+            values=[seconds(self.get(f"{prefix}wear{zone}")) for zone in ("L","M","R")];values=[v for v in values if v]
+            result[corner]=f"{sum(values)/len(values)*100:.0f}%" if values else "—"
+        return result
+    @staticmethod
+    def relative_rows(rows,player):
+        if not player:return rows[:7]
+        ordered=sorted(rows,key=lambda row:row["gapSeconds"],reverse=True);player_index=next(i for i,row in enumerate(ordered) if row["isPlayer"])
+        return ordered[max(0,player_index-3):player_index+4]
+    @staticmethod
+    def position_window(rows,player):
+        if not player:return rows[:7]
+        index=next(i for i,row in enumerate(rows) if row["isPlayer"]);return rows[max(0,index-3):index+4]
+    @staticmethod
+    def use_text(value):return f"{value:.2f} L/v" if value is not None else "—"
+    def average_lap_time(self,fallback=None):
+        valid=[entry["time"] for entry in self.lap_history if entry.get("time")];return sum(valid)/len(valid) if valid else fallback
+    @staticmethod
+    def duration_text(seconds_left):
+        if not seconds_left or seconds_left<=0:return "—"
+        total_minutes=int(seconds_left//60);hours,minutes=divmod(total_minutes,60);return f"≈ {hours} h {minutes:02d} min" if hours else f"≈ {minutes} min"
+    def stop_estimate(self,fuel,current_lap,average_lap):
+        average_use=sum(self.fuel_per_lap)/len(self.fuel_per_lap) if self.fuel_per_lap else None
+        if not average_use or average_use<=0:return "—","—"
+        laps_left=fuel/average_use;full_laps=max(0,int(laps_left));time_left=laps_left*average_lap if average_lap else None
+        return self.duration_text(time_left),f"VUELTA {current_lap+full_laps}"
+    @staticmethod
+    def session_type_text(value):
+        text=str(value).strip().lower();translations={"race":"CARRERA","practice":"PRÁCTICA","open practice":"PRÁCTICA","qualify":"CLASIFICACIÓN","qualifying":"CLASIFICACIÓN","warmup":"CALENTAMIENTO","lone qualify":"CLASIFICACIÓN"}
+        return translations.get(text,str(value).upper())
+
+    def update_lap_tracking(self,lap_number,lap_pct,fuel,last_lap,session_best,result=None):
+        completed=seconds(last_lap);result=result or {};incidents=self.get("PlayerCarMyIncidentCount")
+        clean_now=(incidents is not None and self.get("PlayerTrackSurface")==3 and not self.get("OnPitRoad",False) and not self.get("PlayerCarTowTime",0))
+        self.personal_lap_clean=(self.personal_lap_clean and clean_now and incidents==self.personal_incidents)
+        if self.last_lap_number is None:
+            self.confirmed_session_best=None;prior_lap=result.get("FastestLap",0)
+            self.personal_session_best=seconds(result.get("FastestTime")) if 0<prior_lap<=lap_number else None
+            self.personal_lap_clean=False;self.personal_incidents=incidents;self.lap_history,self.fuel_per_lap=[],[]
+            self.last_lap_summary=self.pending_lap=None;self.last_lap_number=lap_number;self.last_recorded_lap_time=completed;self.fuel_at_lap_start=None;return
+        if lap_number<self.last_lap_number:return
+        if lap_number>self.last_lap_number:
+            usage=self.fuel_at_lap_start-fuel if self.fuel_at_lap_start is not None else None
+            self.pending_lap={"lap":lap_number,"usage":usage,"sectors":[],"previousTime":self.last_recorded_lap_time,"valid":self.personal_lap_clean}
+            self.personal_lap_clean=clean_now;self.personal_incidents=incidents;self.fuel_at_lap_start=fuel
