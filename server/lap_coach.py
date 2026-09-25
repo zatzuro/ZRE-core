@@ -20,7 +20,7 @@ def number(value):
 class LapCoach:
     def __init__(self):
         self.samples={};self.last_pct=None;self.dirty=False;self.completed_buffers=deque(maxlen=2)
-        self.recent=deque(maxlen=8);self.recent_advice=deque(maxlen=8);self.best_segments=[None]*ZONES
+        self.recent=deque(maxlen=8);self.recent_advice=deque(maxlen=8);self.stint_advice=[];self.map_advice=[];self.map_source='';self.best_segments=[None]*ZONES
         self.lap_segments=deque(maxlen=12);self.best_lap=None;self.advice=[];self.completed=0
         self.last_diagnostics={};self.last_lap_record=None;self.track_map=None
     def _snapshot_at_wrap(self):
@@ -74,7 +74,7 @@ class LapCoach:
                 zone,loss=max(losses,key=lambda item:item[1]);self.advice=[(zone,loss,'Pérdida localizada','Aquí perdiste más tiempo que en tu referencia, pero todavía no hay una causa única con suficiente confianza.')]
         self.last_diagnostics={'accepted':True,'sampleBins':len(points),'duration':round(duration,3),'zonesCompared':sum(1 for a,b in zip(segments,prior) if a is not None and b is not None),'adviceCount':len(self.advice),'advice':[{'zone':item[0],'loss':round(item[1],3),'cause':item[2],'tip':item[3]} for item in self.advice]}
         base_clock=points[keys[0]][0];self.last_lap_record={'duration':round(duration,4),'samples':[[k,round(points[k][0]-base_clock,4),round(points[k][1],3),round(points[k][2],3),round(points[k][3],3),round(points[k][4],4),points[k][5],round(points[k][6],4),round(points[k][7],4)] for k in keys]}
-        self.recent.append(segments);self.recent_advice.append(list(self.advice));self.lap_segments.append((duration,segments));self.best_lap=min(self.best_lap,duration) if self.best_lap else duration;self.best_segments=self._competitive_reference(include_all_if_empty=True);return True
+        self.recent.append(segments);self.recent_advice.append(list(self.advice));self.stint_advice.append(list(self.advice));self.lap_segments.append((duration,segments));self.best_lap=min(self.best_lap,duration) if self.best_lap else duration;self.best_segments=self._competitive_reference(include_all_if_empty=True);return True
     def _competitive_reference(self,include_all_if_empty=False):
         if not self.lap_segments:return [None]*ZONES
         window_best=min(duration for duration,_ in self.lap_segments);eligible=[segments for duration,segments in self.lap_segments if duration<=window_best*1.02]
@@ -108,6 +108,29 @@ class LapCoach:
         return f'Tramo {zone}'
     @property
     def optimal(self):return sum(s[0] for s in self.best_segments) if all(self.best_segments) else None
+    @staticmethod
+    def _aggregate_advice(advice_laps,limit=3):
+        totals={}
+        for lap_advice in advice_laps:
+            for zone,loss,title,tip in lap_advice:
+                key=(zone,title,tip);record=totals.setdefault(key,[0,0.0]);record[0]+=1;record[1]+=loss
+        ranked=sorted(totals.items(),key=lambda item:(item[1][0],item[1][1]),reverse=True)[:limit]
+        return [(zone,total/count,title,tip,count) for (zone,title,tip),(count,total) in ranked]
+    def start_stint(self):
+        self.stint_advice=[]
+    def freeze_stint_summary(self):
+        ranked=self._aggregate_advice(self.stint_advice,limit=3)
+        if ranked:
+            self.map_advice=[(zone,avg_loss,title,tip) for zone,avg_loss,title,tip,_ in ranked]
+            self.map_source=f'ÚLTIMO STINT · {len(self.stint_advice)} VUELTAS'
+        self.stint_advice=[]
+        return self.map_advice
+    def general_map_advice(self):
+        if self.map_advice:return list(self.map_advice),self.map_source or 'ÚLTIMO STINT'
+        ranked=self._aggregate_advice(self.stint_advice,limit=3)
+        current=[(zone,avg_loss,title,tip) for zone,avg_loss,title,tip,_ in ranked]
+        if not current and self.advice:current=list(self.advice[:3])
+        return current,(f'STINT ACTUAL · {len(self.stint_advice)} VUELTAS' if self.stint_advice else 'CONSTRUYENDO STINT')
     def _pattern(self):
         counts={}
         for lap_advice in self.recent_advice:
@@ -118,12 +141,8 @@ class LapCoach:
         if count<2:return '',''
         average=total_loss/count;return f'{self.location_label(zone)} · {count}/{len(self.recent_advice)} vueltas · +{average:.2f}s',f'{title}. {tip}'
     def summary_priorities(self,limit=3):
-        totals={}
-        for lap_advice in self.recent_advice:
-            for zone,loss,title,tip in lap_advice:
-                key=(zone,title,tip);record=totals.setdefault(key,[0,0.0]);record[0]+=1;record[1]+=loss
-        ranked=sorted(totals.items(),key=lambda item:(item[1][1],item[1][0]),reverse=True)[:limit]
-        return [{'zone':self.location_label(zone),'title':title,'advice':f'{tip} · {count}/{len(self.recent_advice)} vueltas · pérdida media +{total/count:.2f}s'} for (zone,title,tip),(count,total) in ranked]
+        ranked=self._aggregate_advice(self.recent_advice,limit=limit)
+        return [{'zone':self.location_label(zone),'title':title,'advice':f'{tip} · {count}/{len(self.recent_advice)} vueltas · pérdida media +{avg_loss:.2f}s'} for zone,avg_loss,title,tip,count in ranked]
     def _track_map_payload(self):
         record=self.last_lap_record or {};rows=record.get('samples') or []
         if len(rows)<40:return self.track_map
@@ -139,10 +158,10 @@ class LapCoach:
         scale=min(88/dx,88/dy);cx=(max(xs)+min(xs))/2;cy=(max(ys)+min(ys))/2
         points=[{'x':round(50+(px-cx)*scale,2),'y':round(50-(py-cy)*scale,2),'pct':round(pct,4)} for px,py,pct in corrected];step=max(1,len(points)//180);slim=points[::step]
         if slim[-1]!=points[-1]:slim.append(points[-1])
-        markers=[]
-        for rank,item in enumerate(self.advice[:2],1):
+        general_advice,source=self.general_map_advice();markers=[]
+        for rank,item in enumerate(general_advice[:3],1):
             pct=(item[0]-.5)/ZONES;point=min(points,key=lambda q:abs(q['pct']-pct));markers.append({'rank':rank,'x':point['x'],'y':point['y'],'loss':round(item[1],3),'label':self.location_label(item[0]),'cause':item[2]})
-        self.track_map={'points':slim,'markers':markers};return self.track_map
+        self.track_map={'points':slim,'markers':markers,'source':source};return self.track_map
     def payload(self,format_lap):
         best,optimal=self.best_lap,self.optimal
         def priority(item):return {'zone':f'{self.location_label(item[0])} +{item[1]:.2f}','title':item[2],'advice':item[3]}
