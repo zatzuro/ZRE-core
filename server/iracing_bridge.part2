@@ -1,0 +1,100 @@
+            self.last_lap_number=lap_number
+        if self.pending_lap and completed:
+            numbered_confirmation=(result.get("LapsComplete")==self.pending_lap["lap"] and seconds(result.get("LastTime")) is not None and abs(float(result["LastTime"])-completed)<.001)
+            if completed!=self.pending_lap["previousTime"] or numbered_confirmation:
+                sdk_best=seconds(self.get("LapBestLapTime"))
+                if self.get("LapBestLap")==self.pending_lap["lap"] and sdk_best is not None and abs(sdk_best-completed)<.001:
+                    self.pending_lap["valid"]=True
+                self.finalize_lap(self.pending_lap,completed,session_best)
+                logger.info("LAP COMPLETED %s valid=%s time=%.3f",self.pending_lap["lap"],self.pending_lap["valid"],completed)
+                self.pending_lap=None
+
+    def finalize_lap(self,pending,completed,session_best):
+        usage=pending["usage"]
+        if usage and 0<usage<30:
+            self.fuel_per_lap.append(usage);self.fuel_per_lap=self.fuel_per_lap[-10:]
+        sectors=pending["sectors"];prior_best=self.personal_session_best
+        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage})
+        self.lap_history=self.lap_history[-10:]
+        for index,value in enumerate(sectors if pending.get("valid") else []):
+            if self.best_sectors[index] is None or value<self.best_sectors[index]:self.best_sectors[index]=value
+        self.confirmed_session_best=min(self.confirmed_session_best,completed) if self.confirmed_session_best else completed
+        self.last_lap_summary={"lap":pending["lap"],"time":self.lap_text(completed),"sessionBest":self.lap_text(prior_best),"delta":self.delta_text(completed,prior_best),"expiresAt":time.time()+6}
+        if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
+        coach_ok=self.coach.finish(completed,pending.get("valid"))
+        self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"telemetry":self.coach.last_lap_record})
+        if coach_ok:
+            logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
+            if self.audio_mode=="lap":
+                if self.coach.advice:
+                    item=self.coach.advice[0];label=self.coach.location_label(item[0]);logger.info("AUDIO PLAY location=%s zone=%s loss=%.3f",label,item[0],item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
+                else:self.audio_coach.say(f"Vuelta {pending['lap']}. Sin una pérdida clara para corregir.")
+        else:logger.info("COACH SKIPPED lap=%s valid=%s",pending["lap"],pending.get("valid"))
+        self.last_recorded_lap_time=completed
+
+    def strategy_payload(self,fuel):
+        uses=sorted(v for v in self.fuel_per_lap[-8:] if 0<v<30)
+        if not uses:return {}
+        representative=uses[len(uses)//2];remain=number(self.get("SessionLapsRemainEx"))
+        if remain is None:remain=number(self.get("SessionLapsRemain"))
+        if remain is not None and (remain<0 or remain>=32767):remain=None
+        if remain is None:
+            seconds_left=number(self.get("SessionTimeRemain"));pace=self.average_lap_time()
+            if seconds_left is not None and (seconds_left<=0 or seconds_left>=604800):seconds_left=None
+            if seconds_left and pace:remain=seconds_left/pace
+        needed=(remain+1)*representative if remain is not None else None
+        return {"consumption":f"{representative:.2f} L/v","lapsRemaining":f"{fuel/representative:.1f}",
+                "nextStop":f"VUELTA {self.last_lap_number+int(fuel/representative)}" if self.last_lap_number is not None else "—",
+                "addFuel":f"{max(0,needed-fuel):.1f} L" if needed is not None else "—"}
+
+    def lap_rows(self,session_best):
+        return [{"lap":e["lap"],"time":self.lap_text(e["time"]),"delta":self.delta_text(e["time"],e["priorBest"]),"consumption":self.use_text(e.get("fuelUse"))} for e in self.lap_history]
+
+    def disconnected_payload(self,message):
+        self.session_state.connected=False;payload=self.session_state.preserved_payload()
+        if payload is None:payload=self.demo_payload()
+        payload["connected"]=False;payload["demo"]=False;payload["header"]["state"]=message.upper();return payload
+
+    def demo_payload(self):
+        rows=[(3,"Ferrari 296 GT3","Alejandro Pérez",12.125,"1:32.184","+0.000"),(4,"Lamborghini Huracán GT3 EVO","R. Bell",10.870,"1:32.223","+0.031"),(5,"Porsche 911 GT3 R","Carlos Díaz",9.092,"1:32.122","+0.105"),(6,"Corvette Z06 GT3.R","J. Martin",6.442,"1:32.271","+0.216"),(7,"BMW M4 GT3","Lucas García",3.218,"1:32.441","+0.336"),(8,"McLaren 720S GT3 EVO","SANTIAGO",0,"1:32.481","+0.217"),(9,"Mercedes-AMG GT3","James Smith",-2.317,"1:32.612","+0.496"),(10,"Porsche 911 GT3 R","Tom Jones",-7.824,"1:32.921","+0.656"),(11,"Audi R8 LMS EVO II","M. Laurent",-11.203,"1:33.004","+0.719"),(12,"Ferrari 296 GT3","D. Werner",-14.614,"1:33.075","+0.796"),(13,"BMW M4 GT3","A. Kim",-17.202,"1:33.191","+0.838"),(14,"Acura NSX GT3 EVO","N. Rossi",-20.310,"1:33.300","+0.934")]
+        standing=[{"idx":pos,"pos":pos,"classPos":pos,"classId":1,"className":"GT3","number":str(10+pos),"car":car,"brand":car_brand({"CarScreenName":car}),"driver":name,"gap":"TÚ" if gap==0 else self.gap_text(gap),"gapSeconds":gap,"lastLap":last,"pace":pace,"isPlayer":gap==0} for pos,car,name,gap,last,pace in rows]
+        return {"connected":True,"demo":True,
+                "header":{"car":"McLaren 720S GT3 EVO","track":"Spa-Francorchamps","driver":"SANTIAGO","position":"P8","lap":"VUELTA 12","state":"CARRERA · DEMO"},
+                "self":{"fuel":"48.2 L","lastUse":"2.89 L/v","bestUse":"2.82 L/v","worstUse":"2.97 L/v","lastLap":"1:32.481","bestLap":"1:32.401","laps":[{"lap":10,"time":"1:32.401","delta":"—","consumption":"2.82 L/v"},{"lap":11,"time":"1:32.511","delta":"+0.110","consumption":"2.97 L/v"},{"lap":12,"time":"1:32.481","delta":"+0.080","consumption":"2.89 L/v"}],"wear":{"FL":"96%","FR":"95%","RL":"97%","RR":"96%"},"pit":"EN PISTA","pitWindow":"≈ 25 min","nextStop":"VUELTA 28"},
+                "lastLapSummary":{"lap":12,"time":"1:32.481","sessionBest":"1:32.401","delta":"+0.080","expiresAt":self.demo_flash_expires},
+                "relative":standing[3:10],"standing":standing[3:10],"capabilities":{"coachControls":True},
+                "coach":{"reference":"ÓPTIMA SESIÓN","bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapMessage":"T1: frenaste pronto. Retrasa ligeramente la frenada.","primary":{"zone":"T1 +0.31","title":"Frenada temprana","advice":"Retrasa ligeramente la frenada manteniendo la misma velocidad mínima."},"secondary":{"zone":"T7 +0.14","title":"Aceleración tardía","advice":"Prioriza la salida y vuelve al acelerador antes."},"pattern":"T1 · 6/8 vueltas","patternAdvice":"La frenada temprana se repite de forma consistente."},
+                "strategy":{"consumption":"2.89 L/v","nextStop":"VUELTA 28","addFuel":"8.0 L","lapsRemaining":"6.2"},
+                "raceDirector":{"confidence":"MEDIA","rival":"#17 · Lucas García","status":"Parada completada · sigue siendo rival estratégico","gapBefore":"+1.8 s","netGap":"+0.7 s"},
+                "sessionSummary":{"active":False,"bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapCount":12,"priorities":[{"zone":"T1","title":"Frenada temprana recurrente","advice":"Apareció en 6 de las últimas 8 vueltas."},{"zone":"T7","title":"Aceleración tardía","advice":"La mayor oportunidad está en volver antes al acelerador."}]}}
+
+async def index(request):return web.FileResponse(WEB_ROOT/"index.html")
+async def websocket(request):
+    ws=web.WebSocketResponse(heartbeat=20);await ws.prepare(request);source=request.app["source"]
+    async def receive():
+        async for message in ws:
+            if message.type==web.WSMsgType.TEXT:
+                try:
+                    import json
+                    setting=json.loads(message.data)
+                    if setting.get("type")=="settings" and setting.get("key")=="audio" and setting.get("value") in ("off","lap","corners"):source.audio_mode=setting["value"]
+                    elif setting.get("type")=="action" and setting.get("action")=="audio_test":source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
+                except (ValueError,TypeError):pass
+    task=asyncio.create_task(receive())
+    try:
+        while not ws.closed:
+            await ws.send_json(source.sample());await asyncio.sleep(.10)
+    except (ConnectionResetError,asyncio.CancelledError):pass
+    finally:task.cancel()
+    return ws
+
+def main():
+    parser=argparse.ArgumentParser(description="iRacing GT3 timing dashboard");parser.add_argument("--demo",action="store_true");parser.add_argument("--port",type=int,default=8765);args=parser.parse_args()
+    app=web.Application();app["source"]=DashboardSource(args.demo)
+    if start_background_updater is not None:
+        start_background_updater();print("ZRE Update: vigilancia automatica activa cada 2 minutos; nunca reinicia una carrera.")
+    app.router.add_get("/",index);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
+    print(f"Dashboard ready at http://localhost:{args.port} ({'demo' if args.demo else 'iRacing SDK'})")
+    web.run_app(app,host="127.0.0.1",port=args.port,print=None)
+
+if __name__=="__main__":main()
