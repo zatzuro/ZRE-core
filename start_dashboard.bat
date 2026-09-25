@@ -26,6 +26,6 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-start "iRacing GT3 Timing" http://localhost:8765
+start "ZRE Browser" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:8765/?fresh=%RANDOM%%RANDOM%'"
 echo Iniciando el puente local. Cierra esta ventana para detenerlo.
 ".venv\Scripts\python.exe" server\iracing_bridge.py %*
