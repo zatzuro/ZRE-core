@@ -2,15 +2,19 @@
 
 **Zatzuro Race Engineering — iRacing Team Engineer**
 
-Current stable baseline: **v2.2.2**
+Current stable baseline: **v2.3.0**
 
-## v2.2.2
-- Loss map keeps the last frozen end-of-stint coaching summary, prioritizing recurring problems instead of jumping to the latest lap.
-- Timing table separates **COCHE** and **PILOTO** while keeping **POS/NUM** combined.
-- The three engineering boards (map, Relative/Standings, pace) are anchored to the bottom of the live screen.
-- Top cards are ordered: **Referencia personal → Neumáticos → Combustible → Parada**.
-- Browser cache is disabled for the local dashboard; the page checks the installed ZRE build every 5 seconds and reloads itself automatically when a background update installs a newer frontend. No F5 is required.
-- Updater v2 uses a unique release branch per version, validates the ZIP and installed version, preserves local data, and checks every two minutes while ZRE is running without restarting a race.
+## v2.3.0 — Endurance Strategy
+- Live **Rival Estratégico**: AUTO follows the closest meaningful same-class rival; the driver can pin another class rival.
+- Pure-math endurance strategy engine recalculates from remaining race time, live pace, fuel, consumption, current stint and completed stops.
+- Base vs extended autonomy comparison (default 37 vs 38), stops remaining, final stint and last-stop elimination.
+- Cumulative extension target and remaining stint distribution.
+- Stint timeline with manual driver assignment and double-stint indication.
+- Relative/Class Standings reserve three rows above and below the player, keeping the player on the middle row.
+- Web auto-update fix: assets install first and `version.json` is copied last. The open page reloads only after the complete web build is on disk.
+
+## Strategy inputs
+Live iRacing data is preferred. Manual overrides are available for base/extended stint length, effective pit loss, race-duration fallback, pace, consumption, tank capacity and driver names.
 
 ## Protected local data
 The updater never replaces `.venv/`, `data/`, `dashboard.log` or `session_replay.jsonl`.
