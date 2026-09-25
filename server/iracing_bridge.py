@@ -424,6 +424,11 @@ async def no_cache_middleware(request,handler):
         response.headers["Expires"]="0"
     return response
 
+def installed_version():
+    try:return str(json.loads((ROOT/"version.json").read_text(encoding="utf-8"))["version"])
+    except Exception:return APP_VERSION
+
+async def version_status(request):return web.json_response({"installedVersion":installed_version(),"runtimeVersion":APP_VERSION})
 async def index(request):return web.FileResponse(WEB_ROOT/"index.html")
 async def websocket(request):
     ws=web.WebSocketResponse(heartbeat=20);await ws.prepare(request);source=request.app["source"]
@@ -449,7 +454,7 @@ def main():
     app=web.Application(middlewares=[no_cache_middleware]);app["source"]=DashboardSource(args.demo)
     if start_background_updater is not None:
         start_background_updater();print("ZRE Update: vigilancia automatica activa cada 2 minutos; nunca reinicia una carrera.")
-    app.router.add_get("/",index);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
+    app.router.add_get("/",index);app.router.add_get("/version",version_status);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
     print(f"Dashboard ready at http://localhost:{args.port} ({'demo' if args.demo else 'iRacing SDK'})")
     web.run_app(app,host="127.0.0.1",port=args.port,print=None)
 
