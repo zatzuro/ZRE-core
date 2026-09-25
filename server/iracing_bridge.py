@@ -468,7 +468,7 @@ class DashboardSource:
                 "self":{"fuel":"48.2 L","lastUse":"2.89 L/v","bestUse":"2.82 L/v","worstUse":"2.97 L/v","lastLap":"1:32.481","bestLap":"1:32.401","laps":[{"lap":10,"time":"1:32.401","delta":"—","consumption":"2.82 L/v"},{"lap":11,"time":"1:32.511","delta":"+0.110","consumption":"2.97 L/v"},{"lap":12,"time":"1:32.481","delta":"+0.080","consumption":"2.89 L/v"}],"wear":{"FL":"96%","FR":"95%","RL":"97%","RR":"96%"},"pit":"EN PISTA","pitWindow":"≈ 25 min","nextStop":"VUELTA 28"},
                 "lastLapSummary":{"lap":12,"time":"1:32.481","sessionBest":"1:32.401","delta":"+0.080","expiresAt":self.demo_flash_expires},
                 "relative":standing[3:10],"standing":standing[3:10],"capabilities":{"coachControls":True},
-                "coach":{"reference":"ÓPTIMA SESIÓN","bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapMessage":"T1: frenaste pronto. Retrasa ligeramente la frenada.","primary":{"zone":"T1 +0.31","title":"Frenada temprana","advice":"Retrasa ligeramente la frenada manteniendo la misma velocidad mínima."},"secondary":{"zone":"T7 +0.14","title":"Aceleración tardía","advice":"Prioriza la salida y vuelve al acelerador antes."},"pattern":"T1 · 6/8 vueltas","patternAdvice":"La frenada temprana se repite de forma consistente.","trackMap":{"source":"ÚLTIMO STINT · 8 VUELTAS","points":[{"x":50+36*math.cos(i*2*math.pi/72),"y":50+30*math.sin(i*2*math.pi/72),"pct":i/72} for i in range(73)],"markers":[{"rank":1,"x":73,"y":28,"loss":.31,"label":"Primera frenada","cause":"Frenada temprana"},{"rank":2,"x":28,"y":66,"loss":.14,"label":"Cuarta frenada","cause":"Aceleración tardía"}]},
+                "coach":{"reference":"ÓPTIMA SESIÓN","bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapMessage":"T1: frenaste pronto. Retrasa ligeramente la frenada.","primary":{"zone":"T1 +0.31","title":"Frenada temprana","advice":"Retrasa ligeramente la frenada manteniendo la misma velocidad mínima."},"secondary":{"zone":"T7 +0.14","title":"Aceleración tardía","advice":"Prioriza la salida y vuelve al acelerador antes."},"pattern":"T1 · 6/8 vueltas","patternAdvice":"La frenada temprana se repite de forma consistente.","trackMap":{"source":"ÚLTIMO STINT · 8 VUELTAS","points":[{"x":50+36*math.cos(i*2*math.pi/72),"y":50+30*math.sin(i*2*math.pi/72),"pct":i/72} for i in range(73)],"markers":[{"rank":1,"x":73,"y":28,"loss":.31,"label":"Primera frenada","cause":"Frenada temprana"},{"rank":2,"x":28,"y":66,"loss":.14,"label":"Cuarta frenada","cause":"Aceleración tardía"}]}},
                 "strategy":{"consumption":"2.89 L/v","nextStop":"VUELTA 28","addFuel":"8.0 L","lapsRemaining":"6.2"},
                 "raceDirector":{"mode":"auto","selectedIdx":7,"confidence":"AUTO","rival":"#17 · Lucas García","position":"P7","gap":"+3.218","lastLap":"1:32.441","pit":"EN PISTA","lap":"V12","status":"EN PISTA · +3.218","gapBefore":"—","netGap":"+3.218","candidates":[{"idx":7,"label":"#17 · Lucas García","position":"P7"},{"idx":9,"label":"#19 · James Smith","position":"P9"}]},
                 "enduranceStrategy":{"available":True,"state":"yellow","verdict":"AHORRO NECESARIO","remainingTime":"9:43:00","currentStint":"S1 / 12","currentDriver":"SANTIAGO","boxLap":"VUELTA 28","autonomy":"16 vueltas","stopsRemaining":11,"lastStopAvoidable":True,"extensionNeeded":10,"extensionAvailable":11,"targetThisStint":"16 vueltas","base":{"stintLaps":37,"stints":13,"stops":12,"lastStintLaps":9,"projectedLaps":432},"extended":{"stintLaps":38,"stints":12,"stops":11,"lastStintLaps":37,"projectedLaps":433},"timeline":[{"number":1,"laps":16,"driver":"SANTIAGO","double":False,"status":"current","endLap":28},{"number":2,"laps":38,"driver":None,"double":False,"status":"future","endLap":66}],"settings":{"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30,"manualRaceSeconds":36000,"driverNames":["Santiago","David","Herney"],"driverAssignments":{}}},
@@ -504,10 +504,13 @@ async def websocket(request):
                 except (ValueError,TypeError):pass
     task=asyncio.create_task(receive())
     try:
-        while not ws.closed:
+        while not ws.closed and not task.done():
             await ws.send_json(source.sample());await asyncio.sleep(.10)
-    except (ConnectionResetError,asyncio.CancelledError):pass
-    finally:task.cancel()
+    except (ConnectionResetError,ConnectionAbortedError,BrokenPipeError,asyncio.CancelledError):pass
+    finally:
+        task.cancel()
+        try:await task
+        except (asyncio.CancelledError,ConnectionResetError,OSError):pass
     return ws
 
 def main():

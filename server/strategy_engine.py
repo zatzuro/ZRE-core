@@ -40,6 +40,9 @@ def _fuel_autonomy(i):
 def _current_remaining(i,target):
     planned=max(0,int(target)-max(0,int(i.current_stint_laps_completed)));fuel=_fuel_autonomy(i)
     return planned if fuel is None else min(planned,fuel)
+def _future_capacity(i,target):
+    if i.tank_capacity_liters is None or i.consumption_liters_per_lap is None:return target
+    return min(target,max(0,floor(float(i.tank_capacity_liters)/_positive(i.consumption_liters_per_lap,"consumption_liters_per_lap")+1e-9)))
 def _minimal_stops_plan(remaining,lap_time,pit_loss,current_remaining,future_stint):
     candidates=[]
     for stops in range(max(0,ceil(remaining/lap_time))+2):
@@ -61,7 +64,7 @@ def _build_stints(i,projected,stops,current_remaining,future_stint,lap_time,pit_
         laps_before+=lengths[n-1];eta=laps_before*lap_time+(n-1)*pit_loss;estimates.append(StopEstimate(n,int(i.current_lap)+laps_before,eta,eta+pit_loss))
     return tuple(estimates),tuple(stints)
 def _scenario(i,stint_laps):
-    remaining=_non_negative(i.remaining_time_seconds,"remaining_time_seconds");lap_time=_positive(i.average_lap_seconds,"average_lap_seconds");pit=_non_negative(i.pit_loss_seconds,"pit_loss_seconds");stint_laps=max(1,int(stint_laps));current=_current_remaining(i,stint_laps)
+    remaining=_non_negative(i.remaining_time_seconds,"remaining_time_seconds");lap_time=_positive(i.average_lap_seconds,"average_lap_seconds");pit=_non_negative(i.pit_loss_seconds,"pit_loss_seconds");stint_laps=max(1,int(stint_laps));current=_current_remaining(i,stint_laps);stint_laps=_future_capacity(i,stint_laps)
     projected,stops=_minimal_stops_plan(remaining,lap_time,pit,current,stint_laps);stop_estimates,stints=_build_stints(i,projected,stops,current,stint_laps,lap_time,pit);last=stints[-1].laps if stints else 0;cons=i.consumption_liters_per_lap;total=projected*float(cons) if cons is not None and cons>0 else None;margin=None
     if cons is not None and cons>0 and stints:
         capacity=current if len(stints)==1 else stint_laps;margin=max(0.0,(capacity-last)*float(cons))
@@ -69,8 +72,8 @@ def _scenario(i,stint_laps):
     return StrategyScenario(stint_laps,projected,stops,len(stints),last,last*lap_time,current,stop_estimates,stints,total,margin,max(0.0,remaining-used))
 def _extension_plan(i,base,extended):
     lap=_positive(i.average_lap_seconds,"average_lap_seconds");pit=_non_negative(i.pit_loss_seconds,"pit_loss_seconds");remaining=_non_negative(i.remaining_time_seconds,"remaining_time_seconds")
-    target_total=max(i.stops_completed,i.stops_completed+base.stops_remaining-1) if i.target_total_stops is None else max(i.stops_completed,int(i.target_total_stops));target_remaining=max(0,target_total-int(i.stops_completed));target_laps=max(0,floor((remaining-target_remaining*pit)/lap+1e-9))
-    base_current=_current_remaining(i,i.base_stint_laps);ext_current=_current_remaining(i,i.extended_stint_laps);base_capacity=base_current+target_remaining*max(1,int(i.base_stint_laps));ext_capacity=ext_current+target_remaining*max(1,int(i.extended_stint_laps));needed=max(0,target_laps-base_capacity);available=max(0,ext_capacity-base_capacity);avoidable=needed<=available;current_extra=min(needed,max(0,ext_current-base_current));remaining_extra=max(0,needed-current_extra);per_future=max(0,int(i.extended_stint_laps)-int(i.base_stint_laps));future_extended=0 if remaining_extra==0 else (ceil(remaining_extra/per_future) if per_future else 0);future_extended=min(target_remaining,future_extended);future_base=max(0,target_remaining-future_extended)
+    target_total=max(i.stops_completed,i.stops_completed+base.stops_remaining-(1 if extended.stops_remaining<base.stops_remaining else 0)) if i.target_total_stops is None else max(i.stops_completed,int(i.target_total_stops));target_remaining=max(0,target_total-int(i.stops_completed));target_laps=max(0,floor((remaining-target_remaining*pit)/lap+1e-9))
+    base_current=_current_remaining(i,i.base_stint_laps);ext_current=_current_remaining(i,i.extended_stint_laps);base_future=_future_capacity(i,max(1,int(i.base_stint_laps)));ext_future=_future_capacity(i,max(1,int(i.extended_stint_laps)));base_capacity=base_current+target_remaining*base_future;ext_capacity=ext_current+target_remaining*ext_future;needed=max(0,target_laps-base_capacity);available=max(0,ext_capacity-base_capacity);avoidable=needed<=available;current_extra=min(needed,max(0,ext_current-base_current));remaining_extra=max(0,needed-current_extra);per_future=max(0,ext_future-base_future);future_extended=0 if remaining_extra==0 else (ceil(remaining_extra/per_future) if per_future else 0);future_extended=min(target_remaining,future_extended);future_base=max(0,target_remaining-future_extended)
     if needed==0:text="Objetivo ya alcanzado: no faltan vueltas extra."
     elif not avoidable:text=f"Faltan +{needed} vueltas; la extensión configurada sólo aporta +{available}."
     else:
