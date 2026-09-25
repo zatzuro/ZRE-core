@@ -28,11 +28,15 @@ try:
     from server.lap_coach import LapCoach, number
     from server.audio_coach import AudioCoach
     from server.session_recorder import SessionRecorder
+    from server.race_director import RaceDirector
+    from server.strategy_runtime import strategy_payload as endurance_strategy_payload
 except ModuleNotFoundError:
     from session_state import SessionIdentity, SessionState
     from lap_coach import LapCoach, number
     from audio_coach import AudioCoach
     from session_recorder import SessionRecorder
+    from race_director import RaceDirector
+    from strategy_runtime import strategy_payload as endurance_strategy_payload
 
 from aiohttp import web
 try:
@@ -106,6 +110,7 @@ class DashboardSource:
         self.audio_coach = AudioCoach()
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
         self.stint_active = False
+        self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
 
     def get(self,key,default=None):
         try:
@@ -139,7 +144,7 @@ class DashboardSource:
     def live_payload(self):
         self.ir.freeze_var_buffer_latest()
         try:
-            drivers=self.get("DriverInfo",{}).get("Drivers",[])
+            driver_info=self.get("DriverInfo",{});drivers=driver_info.get("Drivers",[])
             session_num=int(self.get("SessionNum",0))
             sessions=self.get("SessionInfo",{}).get("Sessions",[])
             session=sessions[session_num] if 0<=session_num<len(sessions) else {}
@@ -185,7 +190,7 @@ class DashboardSource:
                      "gap":"TÚ" if idx==player_idx else (self.gap_text(gap) if gap is not None else "—"),
                      "gapSeconds":gap if gap is not None else 0.0,
                      "lastLap":self.lap_text(live_last[idx] if idx<len(live_last) else result.get("LastTime")),
-                     "pace":self.delta_text(seconds(result.get("FastestTime")),session_best),"isPlayer":idx==player_idx}
+                     "pace":self.delta_text(seconds(result.get("FastestTime")),session_best),"completedLaps":result.get("LapsComplete"),"isPlayer":idx==player_idx}
                 standing_rows.append(row)
                 if valid_live_pct:relative_candidates.append(row.copy())
             standing_rows.sort(key=lambda row:(row["pos"]==0,row["pos"]))
@@ -242,9 +247,18 @@ class DashboardSource:
                 self.coach.start_stint()
                 logger.info("COACH STINT START")
             self.stint_active = driving_stint
+            completed_for_strategy=completed_laps if completed_laps is not None else max(0,lap_number-1)
+            if driving_stint and self.strategy_stint_start_lap is None:self.strategy_stint_start_lap=completed_for_strategy
+            if on_pit_road and not self.strategy_last_on_pit and self.strategy_stint_start_lap is not None:
+                stint_laps=max(0,completed_for_strategy-self.strategy_stint_start_lap)
+                if stint_laps>0:
+                    previous_driver=self.strategy_completed_stints[-1].get("driver") if self.strategy_completed_stints else None;current_driver=player_driver.get("UserName","Piloto")
+                    self.strategy_completed_stints.append({"number":self.strategy_stops_completed+1,"laps":stint_laps,"driver":current_driver,"double":bool(previous_driver==current_driver),"endLap":completed_for_strategy});self.strategy_stops_completed+=1
+                self.strategy_stint_start_lap=None
+            self.strategy_last_on_pit=on_pit_road
             self.session_state.update_runtime(session_time=session_time, connected=True, on_track=on_track, on_pit_road=on_pit_road, in_garage=in_garage)
             payload = {
-                "appVersion": APP_VERSION,
+                "appVersion": installed_version(),
                 "connected": True, "demo": False,
                 "header": {"car": car_label(player_driver), "track": weekend.get("TrackDisplayName", "Pista"),
                            "driver": player_driver.get("UserName", "Piloto"), "position": f"P{player['pos']}" if player else "P—",
@@ -264,6 +278,9 @@ class DashboardSource:
             payload["capabilities"] = {"coachControls": True}
             payload["coach"] = coach
             payload["strategy"] = self.strategy_payload(fuel)
+            pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
+            payload["raceDirector"]=self.race_director.payload(category_rows,player_idx,pit_by_idx,lap_by_idx)
+            payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             raw_session_state = self.get("SessionState")
             try:
                 ended = int(raw_session_state) in (5, 6)
@@ -281,7 +298,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None
 
     @staticmethod
     def track_metres(value):
@@ -394,6 +411,47 @@ class DashboardSource:
                 "nextStop":f"VUELTA {self.last_lap_number+int(fuel/representative)}" if self.last_lap_number is not None else "—",
                 "addFuel":f"{max(0,needed-fuel):.1f} L" if needed is not None else "—"}
 
+    def apply_strategy_settings(self,values):
+        if not isinstance(values,dict):return
+        numeric={"baseStintLaps":int,"extendedStintLaps":int,"pitLossSeconds":float,"manualRaceSeconds":float,"averageLapSeconds":float,"consumptionLiters":float,"tankCapacityLiters":float};reset_target=False
+        for key,cast in numeric.items():
+            if key not in values:continue
+            raw=values.get(key)
+            if raw in (None,"",0,"0") and key in ("averageLapSeconds","consumptionLiters","tankCapacityLiters"):self.strategy_settings[key]=None;continue
+            try:value=cast(raw)
+            except (TypeError,ValueError):continue
+            if key in ("baseStintLaps","extendedStintLaps"):value=max(1,value)
+            elif value<0:continue
+            if self.strategy_settings.get(key)!=value and key in ("baseStintLaps","extendedStintLaps","pitLossSeconds"):reset_target=True
+            self.strategy_settings[key]=value
+        names=values.get("driverNames")
+        if isinstance(names,list):
+            cleaned=[str(name).strip() for name in names if str(name).strip()]
+            if cleaned:self.strategy_settings["driverNames"]=cleaned[:6]
+        assignments=values.get("driverAssignments")
+        if isinstance(assignments,dict):
+            cleaned={}
+            for key,value in assignments.items():
+                try:stint=int(key)
+                except (TypeError,ValueError):continue
+                name=str(value).strip() if value is not None else ""
+                if stint>0 and name:cleaned[stint]=name
+            self.strategy_driver_assignments=cleaned
+        if self.strategy_settings["extendedStintLaps"]<self.strategy_settings["baseStintLaps"]:self.strategy_settings["extendedStintLaps"]=self.strategy_settings["baseStintLaps"]
+        if reset_target:self.strategy_target_total_stops=None
+
+    def endurance_strategy_payload(self,fuel,lap_number,completed_laps,average_lap,session_time,driver_info,current_driver):
+        settings=self.strategy_settings;remaining=number(self.get("SessionTimeRemain"))
+        if remaining is not None and (remaining<=0 or remaining>=604800):remaining=None
+        if remaining is None:
+            manual_total=settings.get("manualRaceSeconds");current_time=number(session_time) or 0
+            if manual_total:remaining=max(0.0,float(manual_total)-current_time)
+        pace=settings.get("averageLapSeconds") or average_lap;uses=sorted(v for v in self.fuel_per_lap[-8:] if 0<v<30);consumption=settings.get("consumptionLiters") or (uses[len(uses)//2] if uses else None);tank=settings.get("tankCapacityLiters")
+        if tank is None:tank=number(driver_info.get("DriverCarFuelMaxLtr"))
+        stint_completed=max(0,int(completed_laps)-int(self.strategy_stint_start_lap)) if self.strategy_stint_start_lap is not None else 0
+        payload,target=endurance_strategy_payload(remaining_time_seconds=remaining,average_lap_seconds=pace,pit_loss_seconds=settings.get("pitLossSeconds",30.0),current_lap=completed_laps,current_fuel_liters=fuel,consumption_liters_per_lap=consumption,tank_capacity_liters=tank,base_stint_laps=settings.get("baseStintLaps",37),extended_stint_laps=settings.get("extendedStintLaps",38),current_stint_laps_completed=stint_completed,stops_completed=self.strategy_stops_completed,target_total_stops=self.strategy_target_total_stops,driver_assignments=self.strategy_driver_assignments,completed_stints=self.strategy_completed_stints,current_driver=current_driver)
+        self.strategy_target_total_stops=target;payload["settings"]=dict(payload.get("settings") or {},manualRaceSeconds=settings.get("manualRaceSeconds"),averageLapSeconds=settings.get("averageLapSeconds"),consumptionLiters=settings.get("consumptionLiters"),tankCapacityLiters=settings.get("tankCapacityLiters"),driverNames=settings.get("driverNames",[]),driverAssignments={str(k):v for k,v in self.strategy_driver_assignments.items()});return payload
+
     def lap_rows(self,session_best):
         return [{"lap":e["lap"],"time":self.lap_text(e["time"]),"delta":self.delta_text(e["time"],e["priorBest"]),"consumption":self.use_text(e.get("fuelUse"))} for e in self.lap_history]
 
@@ -410,9 +468,10 @@ class DashboardSource:
                 "self":{"fuel":"48.2 L","lastUse":"2.89 L/v","bestUse":"2.82 L/v","worstUse":"2.97 L/v","lastLap":"1:32.481","bestLap":"1:32.401","laps":[{"lap":10,"time":"1:32.401","delta":"—","consumption":"2.82 L/v"},{"lap":11,"time":"1:32.511","delta":"+0.110","consumption":"2.97 L/v"},{"lap":12,"time":"1:32.481","delta":"+0.080","consumption":"2.89 L/v"}],"wear":{"FL":"96%","FR":"95%","RL":"97%","RR":"96%"},"pit":"EN PISTA","pitWindow":"≈ 25 min","nextStop":"VUELTA 28"},
                 "lastLapSummary":{"lap":12,"time":"1:32.481","sessionBest":"1:32.401","delta":"+0.080","expiresAt":self.demo_flash_expires},
                 "relative":standing[3:10],"standing":standing[3:10],"capabilities":{"coachControls":True},
-                "coach":{"reference":"ÓPTIMA SESIÓN","bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapMessage":"T1: frenaste pronto. Retrasa ligeramente la frenada.","primary":{"zone":"T1 +0.31","title":"Frenada temprana","advice":"Retrasa ligeramente la frenada manteniendo la misma velocidad mínima."},"secondary":{"zone":"T7 +0.14","title":"Aceleración tardía","advice":"Prioriza la salida y vuelve al acelerador antes."},"pattern":"T1 · 6/8 vueltas","patternAdvice":"La frenada temprana se repite de forma consistente.","trackMap":{"source":"ÚLTIMO STINT · 8 VUELTAS","points":[{"x":50+36*math.cos(i*2*math.pi/72),"y":50+30*math.sin(i*2*math.pi/72),"pct":i/72} for i in range(73)],"markers":[{"rank":1,"x":73,"y":28,"loss":.31,"label":"Primera frenada","cause":"Frenada temprana"},{"rank":2,"x":28,"y":66,"loss":.14,"label":"Cuarta frenada","cause":"Aceleración tardía"}]},
+                "coach":{"reference":"ÓPTIMA SESIÓN","bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapMessage":"T1: frenaste pronto. Retrasa ligeramente la frenada.","primary":{"zone":"T1 +0.31","title":"Frenada temprana","advice":"Retrasa ligeramente la frenada manteniendo la misma velocidad mínima."},"secondary":{"zone":"T7 +0.14","title":"Aceleración tardía","advice":"Prioriza la salida y vuelve al acelerador antes."},"pattern":"T1 · 6/8 vueltas","patternAdvice":"La frenada temprana se repite de forma consistente.","trackMap":{"source":"ÚLTIMO STINT · 8 VUELTAS","points":[{"x":50+36*math.cos(i*2*math.pi/72),"y":50+30*math.sin(i*2*math.pi/72),"pct":i/72} for i in range(73)],"markers":[{"rank":1,"x":73,"y":28,"loss":.31,"label":"Primera frenada","cause":"Frenada temprana"},{"rank":2,"x":28,"y":66,"loss":.14,"label":"Cuarta frenada","cause":"Aceleración tardía"}]}},
                 "strategy":{"consumption":"2.89 L/v","nextStop":"VUELTA 28","addFuel":"8.0 L","lapsRemaining":"6.2"},
-                "raceDirector":{"confidence":"MEDIA","rival":"#17 · Lucas García","status":"Parada completada · sigue siendo rival estratégico","gapBefore":"+1.8 s","netGap":"+0.7 s"},
+                "raceDirector":{"mode":"auto","selectedIdx":7,"confidence":"AUTO","rival":"#17 · Lucas García","position":"P7","gap":"+3.218","lastLap":"1:32.441","pit":"EN PISTA","lap":"V12","status":"EN PISTA · +3.218","gapBefore":"—","netGap":"+3.218","candidates":[{"idx":7,"label":"#17 · Lucas García","position":"P7"},{"idx":9,"label":"#19 · James Smith","position":"P9"}]},
+                "enduranceStrategy":{"available":True,"state":"yellow","verdict":"AHORRO NECESARIO","remainingTime":"9:43:00","currentStint":"S1 / 12","currentDriver":"SANTIAGO","boxLap":"VUELTA 28","autonomy":"16 vueltas","stopsRemaining":11,"lastStopAvoidable":True,"extensionNeeded":10,"extensionAvailable":11,"targetThisStint":"16 vueltas","base":{"stintLaps":37,"stints":13,"stops":12,"lastStintLaps":9,"projectedLaps":432},"extended":{"stintLaps":38,"stints":12,"stops":11,"lastStintLaps":37,"projectedLaps":433},"timeline":[{"number":1,"laps":16,"driver":"SANTIAGO","double":False,"status":"current","endLap":28},{"number":2,"laps":38,"driver":None,"double":False,"status":"future","endLap":66}],"settings":{"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30,"manualRaceSeconds":36000,"driverNames":["Santiago","David","Herney"],"driverAssignments":{}}},
                 "sessionSummary":{"active":False,"bestLap":"1:32.401","optimalLap":"1:31.940","potential":"0.461","lapCount":12,"priorities":[{"zone":"T1","title":"Frenada temprana recurrente","advice":"Apareció en 6 de las últimas 8 vueltas."},{"zone":"T7","title":"Aceleración tardía","advice":"La mayor oportunidad está en volver antes al acelerador."}]}}
 
 @web.middleware
@@ -439,14 +498,19 @@ async def websocket(request):
                     import json
                     setting=json.loads(message.data)
                     if setting.get("type")=="settings" and setting.get("key")=="audio" and setting.get("value") in ("off","lap","corners"):source.audio_mode=setting["value"]
+                    elif setting.get("type")=="settings" and setting.get("key")=="rival":source.race_director.set_selected(setting.get("value"))
+                    elif setting.get("type")=="settings" and setting.get("key")=="strategy":source.apply_strategy_settings(setting.get("value"))
                     elif setting.get("type")=="action" and setting.get("action")=="audio_test":source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
                 except (ValueError,TypeError):pass
     task=asyncio.create_task(receive())
     try:
-        while not ws.closed:
+        while not ws.closed and not task.done():
             await ws.send_json(source.sample());await asyncio.sleep(.10)
-    except (ConnectionResetError,asyncio.CancelledError):pass
-    finally:task.cancel()
+    except (ConnectionResetError,ConnectionAbortedError,BrokenPipeError,asyncio.CancelledError):pass
+    finally:
+        task.cancel()
+        try:await task
+        except (asyncio.CancelledError,ConnectionResetError,OSError):pass
     return ws
 
 def main():
