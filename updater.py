@@ -5,9 +5,13 @@ GitHub repository and never removes local runtime data. If GitHub is unavailable
 the dashboard starts normally with the installed version.
 """
 from __future__ import annotations
+
 import json
 import shutil
+import socket
 import tempfile
+import threading
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -17,6 +21,7 @@ REPO = "zatzuro/ZRE-core"
 BRANCH = "main"
 REMOTE_VERSION_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json"
 ARCHIVE_URL = f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip"
+CHECK_INTERVAL_SECONDS = 300
 PROTECTED_TOP_LEVEL = {".venv", ".git", ".zre-backup", "data"}
 PROTECTED_NAMES = {"dashboard.log", "session_replay.jsonl"}
 
@@ -52,7 +57,7 @@ def _copy_program_tree(source: Path) -> None:
         else:
             shutil.copy2(item, destination)
 
-def update_if_available() -> bool:
+def update_if_available(*, background: bool = False) -> bool:
     local = _read_local_version()
     try:
         remote_meta = _fetch_json(REMOTE_VERSION_URL)
@@ -63,7 +68,8 @@ def update_if_available() -> bool:
     if _version_tuple(remote) <= _version_tuple(local):
         print(f"ZRE Update: v{local} al dia.")
         return False
-    print(f"ZRE Update: v{local} -> v{remote}. Actualizando antes de iniciar...")
+    where = "en segundo plano" if background else "antes de iniciar"
+    print(f"ZRE Update: v{local} -> v{remote}. Actualizando {where}...")
     try:
         with tempfile.TemporaryDirectory(prefix="zre_update_") as temp_dir:
             temp = Path(temp_dir)
@@ -78,11 +84,72 @@ def update_if_available() -> bool:
             if str(package_meta.get("version")) != remote:
                 raise RuntimeError("version del paquete no coincide")
             _copy_program_tree(roots[0])
-        print(f"ZRE Update: actualizado correctamente a v{remote}.")
+        suffix = " La carrera sigue con el codigo ya cargado; la nueva version queda activa al proximo inicio." if background else ""
+        print(f"ZRE Update: actualizado correctamente a v{remote}.{suffix}")
         return True
     except Exception as exc:
         print(f"ZRE Update: no se pudo actualizar; se conserva v{local} ({type(exc).__name__}: {exc}).")
         return False
 
+def start_background_updater(interval: int = CHECK_INTERVAL_SECONDS):
+    interval = max(60, int(interval))
+    def worker():
+        while True:
+            time.sleep(interval)
+            try:
+                update_if_available(background=True)
+            except Exception:
+                pass
+    thread = threading.Thread(target=worker, name="zre-auto-update", daemon=True)
+    thread.start()
+    return thread
+
+def _dashboard_alive(port: int = 8765) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+def watch_for_updates(interval: int = CHECK_INTERVAL_SECONDS) -> None:
+    interval = max(60, int(interval))
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline and not _dashboard_alive():
+        time.sleep(2)
+    if not _dashboard_alive():
+        return
+    while _dashboard_alive():
+        time.sleep(interval)
+        if not _dashboard_alive():
+            return
+        try:
+            update_if_available(background=True)
+        except Exception:
+            pass
+
+def _spawn_watcher() -> None:
+    import os
+    import subprocess
+    import sys
+    try:
+        flags = 0x00000008 | 0x08000000 if os.name == "nt" else 0
+        subprocess.Popen(
+            [sys.executable, str(ROOT / "updater.py"), "--watch"],
+            cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, creationflags=flags,
+            close_fds=(os.name != "nt"),
+        )
+    except Exception:
+        pass
+
 if __name__ == "__main__":
-    update_if_available()
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--interval", type=int, default=CHECK_INTERVAL_SECONDS)
+    args, _ = parser.parse_known_args()
+    if args.watch:
+        watch_for_updates(args.interval)
+    else:
+        update_if_available()
+        _spawn_watcher()
