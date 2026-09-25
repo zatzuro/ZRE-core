@@ -1,14 +1,13 @@
 """ZRE Core self-updater.
 
-Runs before the dashboard starts. It only updates program files from the stable
-GitHub repository and never removes local runtime data. If GitHub is unavailable,
-the dashboard starts normally with the installed version.
+The updater checks a tiny version manifest on GitHub and downloads an immutable
+release branch for each published version. Runtime/user data is never replaced.
+If a download or install fails, ZRE keeps the installed version and starts.
 """
 from __future__ import annotations
 
 import json
 import shutil
-import socket
 import tempfile
 import threading
 import time
@@ -20,7 +19,6 @@ ROOT = Path(__file__).resolve().parent
 REPO = "zatzuro/ZRE-core"
 BRANCH = "main"
 REMOTE_VERSION_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json"
-ARCHIVE_URL = f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip"
 CHECK_INTERVAL_SECONDS = 120
 PROTECTED_TOP_LEVEL = {".venv", ".git", ".zre-backup", "data"}
 PROTECTED_NAMES = {"dashboard.log", "session_replay.jsonl"}
@@ -37,19 +35,30 @@ def _read_local_version() -> str:
     except Exception:
         return "0.0.0"
 
-def _fetch_json(url: str, timeout: float = 2.5) -> dict:
+def _request(url: str, timeout: float):
     sep = "&" if "?" in url else "?"
     fresh_url = f"{url}{sep}_zre={time.time_ns()}"
-    req = urllib.request.Request(fresh_url, headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
+    req = urllib.request.Request(
+        fresh_url,
+        headers={
+            "User-Agent": "ZRE-Core-Updater/2",
+            "Accept": "application/octet-stream, application/json;q=0.9, */*;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+        },
+    )
+    return urllib.request.urlopen(req, timeout=timeout)
+
+def _fetch_json(url: str, timeout: float = 5.0) -> dict:
+    with _request(url, timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
-def _download(url: str, target: Path, timeout: float = 12.0) -> None:
-    sep = "&" if "?" in url else "?"
-    fresh_url = f"{url}{sep}_zre={time.time_ns()}"
-    req = urllib.request.Request(fresh_url, headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"})
-    with urllib.request.urlopen(req, timeout=timeout) as response, target.open("wb") as out:
+def _download(url: str, target: Path, timeout: float = 30.0) -> None:
+    with _request(url, timeout) as response, target.open("wb") as out:
         shutil.copyfileobj(response, out)
+
+def _archive_url(ref: str) -> str:
+    return f"https://codeload.github.com/{REPO}/zip/refs/heads/{ref}"
 
 def _copy_program_tree(source: Path) -> None:
     for item in source.iterdir():
@@ -57,55 +66,67 @@ def _copy_program_tree(source: Path) -> None:
             continue
         destination = ROOT / item.name
         if item.is_dir():
-            shutil.copytree(item, destination, dirs_exist_ok=True)
+            destination.mkdir(parents=True, exist_ok=True)
+            for src in item.rglob("*"):
+                if src.is_dir():
+                    continue
+                rel = src.relative_to(item)
+                if rel.parts and rel.parts[0] in PROTECTED_TOP_LEVEL:
+                    continue
+                dst = destination / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                tmp = dst.with_name(dst.name + ".zre-new")
+                shutil.copy2(src, tmp)
+                tmp.replace(dst)
         else:
-            shutil.copy2(item, destination)
-
-
-def _rebuild_source_parts() -> None:
-    """Rebuild large runtime files shipped as text parts in the update channel."""
-    server = ROOT / "server"
-    parts = sorted(server.glob("iracing_bridge.part*"))
-    if len(parts) >= 3:
-        content = "".join(part.read_text(encoding="utf-8") for part in parts)
-        target = server / "iracing_bridge.py"
-        if not target.exists() or target.read_text(encoding="utf-8") != content:
-            target.write_text(content, encoding="utf-8")
+            tmp = destination.with_name(destination.name + ".zre-new")
+            shutil.copy2(item, tmp)
+            tmp.replace(destination)
 
 def update_if_available(*, background: bool = False) -> bool:
-    _rebuild_source_parts()
     local = _read_local_version()
     try:
         remote_meta = _fetch_json(REMOTE_VERSION_URL)
         remote = str(remote_meta.get("version", "0.0.0"))
+        archive_ref = str(remote_meta.get("archive_ref") or BRANCH)
     except Exception as exc:
-        print(f"ZRE Update: sin conexion al canal estable; inicio normal ({type(exc).__name__}).")
+        print(f"ZRE Update: no pude consultar GitHub; sigo con v{local} ({type(exc).__name__}).")
         return False
+
     if _version_tuple(remote) <= _version_tuple(local):
         print(f"ZRE Update: v{local} al dia.")
         return False
+
     where = "en segundo plano" if background else "antes de iniciar"
-    print(f"ZRE Update: v{local} -> v{remote}. Actualizando {where}...")
+    print(f"ZRE Update: v{local} -> v{remote}. Descargando {archive_ref} {where}...")
     try:
         with tempfile.TemporaryDirectory(prefix="zre_update_") as temp_dir:
             temp = Path(temp_dir)
             archive = temp / "zre.zip"
-            _download(ARCHIVE_URL, archive)
+            _download(_archive_url(archive_ref), archive)
+            if archive.stat().st_size < 5_000:
+                raise RuntimeError("descarga incompleta")
             with zipfile.ZipFile(archive) as zf:
+                bad = zf.testzip()
+                if bad:
+                    raise RuntimeError(f"ZIP dañado: {bad}")
                 zf.extractall(temp / "unpacked")
             roots = [p for p in (temp / "unpacked").iterdir() if p.is_dir()]
             if len(roots) != 1 or not (roots[0] / "version.json").exists():
-                raise RuntimeError("paquete de actualizacion invalido")
+                raise RuntimeError("paquete de actualización inválido")
             package_meta = json.loads((roots[0] / "version.json").read_text(encoding="utf-8"))
             if str(package_meta.get("version")) != remote:
-                raise RuntimeError("version del paquete no coincide")
+                raise RuntimeError(f"el paquete trae v{package_meta.get('version')} y esperaba v{remote}")
             _copy_program_tree(roots[0])
-            _rebuild_source_parts()
-        suffix = " La carrera sigue con el codigo ya cargado; la nueva version queda activa al proximo inicio." if background else ""
-        print(f"ZRE Update: actualizado correctamente a v{remote}.{suffix}")
+
+        installed = _read_local_version()
+        if installed != remote:
+            raise RuntimeError(f"verificación final falló: quedó v{installed}")
+        suffix = " Queda instalada; no reinicio ZRE durante una carrera." if background else ""
+        print(f"ZRE Update: OK. v{remote} instalada.{suffix}")
         return True
     except Exception as exc:
-        print(f"ZRE Update: no se pudo actualizar; se conserva v{local} ({type(exc).__name__}: {exc}).")
+        print(f"ZRE Update: FALLO. Se conserva v{local} ({type(exc).__name__}: {exc}).")
         return False
 
 def start_background_updater(interval: int = CHECK_INTERVAL_SECONDS):
@@ -115,58 +136,11 @@ def start_background_updater(interval: int = CHECK_INTERVAL_SECONDS):
             try:
                 update_if_available(background=True)
             except Exception as exc:
-                print(f"ZRE Update: comprobacion en segundo plano omitida ({type(exc).__name__}).")
+                print(f"ZRE Update: comprobacion omitida ({type(exc).__name__}).")
             time.sleep(interval)
     thread = threading.Thread(target=worker, name="zre-auto-update", daemon=True)
     thread.start()
     return thread
 
-def _dashboard_alive(port: int = 8765) -> bool:
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-            return True
-    except OSError:
-        return False
-
-def watch_for_updates(interval: int = CHECK_INTERVAL_SECONDS) -> None:
-    interval = max(60, int(interval))
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline and not _dashboard_alive():
-        time.sleep(2)
-    if not _dashboard_alive():
-        return
-    while _dashboard_alive():
-        time.sleep(interval)
-        if not _dashboard_alive():
-            return
-        try:
-            update_if_available(background=True)
-        except Exception:
-            pass
-
-def _spawn_watcher() -> None:
-    import os
-    import subprocess
-    import sys
-    try:
-        flags = 0
-        if os.name == "nt":
-            flags = 0x00000008 | 0x08000000
-        subprocess.Popen(
-            [sys.executable, str(ROOT / "updater.py"), "--watch"],
-            cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, creationflags=flags, close_fds=(os.name != "nt"),
-        )
-    except Exception as exc:
-        print(f"ZRE Update: no se pudo iniciar vigilancia automatica ({type(exc).__name__}).")
-
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--watch", action="store_true")
-    parser.add_argument("--interval", type=int, default=CHECK_INTERVAL_SECONDS)
-    args, _ = parser.parse_known_args()
-    if args.watch:
-        watch_for_updates(args.interval)
-    else:
-        update_if_available()
+    update_if_available()
