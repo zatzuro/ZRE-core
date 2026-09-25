@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="zre-build" content="2.2.2">
+  <meta name="zre-build" content="2.3.0">
   <title>ZRE Core · iRacing Team Engineer</title>
-  <link rel="stylesheet" href="/static/style.css?v=2.2.2">
+  <link rel="stylesheet" href="/static/style.css?v=2.3.0">
 </head>
 <body data-view="live">
 <main class="dashboard">
   <header class="session-header">
-    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.2.2</span></div>
+    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.3.0</span></div>
     <div class="session-info"><strong id="car">CONECTANDO</strong><span id="track">iRacing Dashboard</span></div>
     <div class="driver-header"><span>PILOTO</span><strong id="header-driver">—</strong></div>
     <div class="driver-header compact"><span>POS</span><strong id="header-position">P—</strong></div>
@@ -36,6 +36,20 @@
       <article class="data-card fuel-card"><h2>COMBUSTIBLE</h2><div><span>ACTUAL</span><strong id="fuel">—</strong></div><div><span>PROMEDIO / VTA</span><strong id="last-use">—</strong></div><div><span>MEJOR</span><strong id="best-use">—</strong></div><div><span>PEOR</span><strong id="worst-use">—</strong></div></article>
       <article class="data-card pit"><h2>PARADA</h2><div><span>ESTADO</span><strong id="pit">—</strong></div><div><span>DENTRO DE</span><strong id="pit-window">—</strong></div><div><span>VUELTA EST.</span><strong id="next-stop">—</strong></div></article>
     </section>
+    <section class="race-tools-grid">
+      <article class="focus-card live-rival-card">
+        <div class="card-title rival-title"><h2>RIVAL ESTRATÉGICO</h2><select id="rival-select"><option value="auto">AUTO</option></select></div>
+        <div class="rival-main"><span id="rival-mode">AUTO</span><strong id="rival-name">—</strong><b id="rival-status">Esperando rivales de clase</b></div>
+        <div class="rival-kpis"><div><span>POSICIÓN</span><strong id="rival-position">—</strong></div><div><span>GAP</span><strong id="rival-gap">—</strong></div><div><span>ÚLTIMA</span><strong id="rival-last">—</strong></div><div><span>VUELTA</span><strong id="rival-lap">—</strong></div></div>
+      </article>
+      <article id="endurance-strategy-card" class="focus-card endurance-strategy-card" data-state="idle">
+        <div class="card-title strategy-title"><h2>ESTRATEGIA / STINTS</h2><span id="strategy-verdict">ESPERANDO DATOS</span></div>
+        <div class="strategy-live-kpis"><div><span>STINT ACTUAL</span><strong id="strategy-current-stint">—</strong></div><div><span>PILOTO</span><strong id="strategy-driver">—</strong></div><div><span>BOX EST.</span><strong id="strategy-box-lap">—</strong></div><div><span>AUTONOMÍA</span><strong id="strategy-autonomy">—</strong></div><div><span>PARADAS REST.</span><strong id="strategy-stops">—</strong></div><div><span>ÚLTIMA PARADA</span><strong id="strategy-avoidable">—</strong></div><div><span>EXTENSIÓN</span><strong id="strategy-extension">—</strong></div><div><span>OBJETIVO</span><strong id="strategy-target">—</strong></div></div>
+        <div class="strategy-bottom"><div class="strategy-compare"><span id="strategy-base">BASE —</span><span id="strategy-extended">EXT. —</span><b id="strategy-remaining-time">—</b></div><div id="strategy-timeline" class="strategy-timeline"><span class="timeline-empty">Esperando proyección…</span></div>
+          <details class="strategy-config"><summary>AJUSTAR</summary><div class="strategy-config-grid"><label>BASE<input id="strategy-base-input" type="number" min="1" value="37"></label><label>EXT.<input id="strategy-extended-input" type="number" min="1" value="38"></label><label>PÉRDIDA BOX (s)<input id="strategy-pit-loss-input" type="number" min="0" value="30"></label><label>DURACIÓN (h)<input id="strategy-race-hours-input" type="number" min=".1" step=".5" value="10"></label><label>RITMO (s, 0=AUTO)<input id="strategy-lap-input" type="number" min="0" step=".001" value="0"></label><label>CONSUMO (0=AUTO)<input id="strategy-consumption-input" type="number" min="0" step=".01" value="0"></label><label>TANQUE L (0=AUTO)<input id="strategy-tank-input" type="number" min="0" step=".1" value="0"></label><label class="drivers-input">PILOTOS<input id="strategy-drivers-input" type="text" value="Santiago, David, Herney"></label></div><p>Haz clic en un stint de la línea para asignar/cambiar piloto.</p></details>
+        </div>
+      </article>
+    </section>
     <section class="boards-grid">
       <article class="timing-card loss-map-card"><div class="card-title"><h2>MAPA · RECOMENDACIONES GENERALES</h2><span id="live-map-location">CONSTRUYENDO STINT</span></div><div class="live-map-wrap"><svg id="live-track-map" viewBox="0 0 100 100"><polyline id="live-track-line" points=""/><g id="live-track-markers"></g></svg><p id="live-map-empty">Completa vueltas válidas para construir el mapa y localizar dónde estás perdiendo tiempo.</p></div></article>
       <article class="timing-card switchable-timing"><div class="card-title timing-switch-title"><h2 id="timing-title">RELATIVO</h2><select id="timing-mode"><option value="relative">RELATIVO</option><option value="standing">CLASIFICACIÓN</option></select></div><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ MEJOR</span></div><div id="timing-rows"></div></article>
@@ -58,8 +72,8 @@
   </section>
 
   <aside id="debug-panel" class="debug-panel" hidden><div><strong>COACH DEBUG</strong><span>?debug=1</span></div><pre id="debug-content">Esperando telemetría…</pre></aside>
-  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.2.2</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
+  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.3.0</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
 </main>
-<script src="/static/app.js?v=2.2.2"></script>
+<script src="/static/app.js?v=2.3.0"></script>
 </body>
 </html>
