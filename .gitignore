@@ -1,0 +1,24 @@
+# Local Python environment
+.venv/
+venv/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Test / tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE / OS generated files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local logs / temporary files
+*.log
+*.tmp
+*.bak
