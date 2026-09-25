@@ -38,14 +38,26 @@ def _read_local_version() -> str:
         return "0.0.0"
 
 def _fetch_json(url: str, timeout: float = 2.5) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "ZRE-Core-Updater"})
+    sep = "&" if "?" in url else "?"
+    fresh_url = f"{url}{sep}_zre={time.time_ns()}"
+    req = urllib.request.Request(
+        fresh_url,
+        headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"},
+    )
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
+
 def _download(url: str, target: Path, timeout: float = 12.0) -> None:
-    req = urllib.request.Request(url, headers={"User-Agent": "ZRE-Core-Updater"})
+    sep = "&" if "?" in url else "?"
+    fresh_url = f"{url}{sep}_zre={time.time_ns()}"
+    req = urllib.request.Request(
+        fresh_url,
+        headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"},
+    )
     with urllib.request.urlopen(req, timeout=timeout) as response, target.open("wb") as out:
         shutil.copyfileobj(response, out)
+
 
 def _copy_program_tree(source: Path) -> None:
     for item in source.iterdir():
