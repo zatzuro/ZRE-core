@@ -21,7 +21,7 @@ REPO = "zatzuro/ZRE-core"
 BRANCH = "main"
 REMOTE_VERSION_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json"
 ARCHIVE_URL = f"https://github.com/{REPO}/archive/refs/heads/{BRANCH}.zip"
-CHECK_INTERVAL_SECONDS = 300
+CHECK_INTERVAL_SECONDS = 120
 PROTECTED_TOP_LEVEL = {".venv", ".git", ".zre-backup", "data"}
 PROTECTED_NAMES = {"dashboard.log", "session_replay.jsonl"}
 
@@ -40,24 +40,16 @@ def _read_local_version() -> str:
 def _fetch_json(url: str, timeout: float = 2.5) -> dict:
     sep = "&" if "?" in url else "?"
     fresh_url = f"{url}{sep}_zre={time.time_ns()}"
-    req = urllib.request.Request(
-        fresh_url,
-        headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"},
-    )
+    req = urllib.request.Request(fresh_url, headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"})
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
-
 
 def _download(url: str, target: Path, timeout: float = 12.0) -> None:
     sep = "&" if "?" in url else "?"
     fresh_url = f"{url}{sep}_zre={time.time_ns()}"
-    req = urllib.request.Request(
-        fresh_url,
-        headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"},
-    )
+    req = urllib.request.Request(fresh_url, headers={"User-Agent": "ZRE-Core-Updater", "Cache-Control": "no-cache", "Pragma": "no-cache"})
     with urllib.request.urlopen(req, timeout=timeout) as response, target.open("wb") as out:
         shutil.copyfileobj(response, out)
-
 
 def _copy_program_tree(source: Path) -> None:
     for item in source.iterdir():
@@ -107,11 +99,11 @@ def start_background_updater(interval: int = CHECK_INTERVAL_SECONDS):
     interval = max(60, int(interval))
     def worker():
         while True:
-            time.sleep(interval)
             try:
                 update_if_available(background=True)
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"ZRE Update: comprobacion en segundo plano omitida ({type(exc).__name__}).")
+            time.sleep(interval)
     thread = threading.Thread(target=worker, name="zre-auto-update", daemon=True)
     thread.start()
     return thread
@@ -144,15 +136,16 @@ def _spawn_watcher() -> None:
     import subprocess
     import sys
     try:
-        flags = 0x00000008 | 0x08000000 if os.name == "nt" else 0
+        flags = 0
+        if os.name == "nt":
+            flags = 0x00000008 | 0x08000000
         subprocess.Popen(
             [sys.executable, str(ROOT / "updater.py"), "--watch"],
             cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, creationflags=flags,
-            close_fds=(os.name != "nt"),
+            stderr=subprocess.DEVNULL, creationflags=flags, close_fds=(os.name != "nt"),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"ZRE Update: no se pudo iniciar vigilancia automatica ({type(exc).__name__}).")
 
 if __name__ == "__main__":
     import argparse
@@ -164,4 +157,3 @@ if __name__ == "__main__":
         watch_for_updates(args.interval)
     else:
         update_if_available()
-        _spawn_watcher()
