@@ -29,7 +29,7 @@ class RaceEngineerTests(unittest.TestCase):
         self.assertIn(40,[r['idx'] for r in packet['relative']])
         self.assertEqual(len(packet['relative']),7)
         self.assertEqual(packet['teamContext']['driver'],'AUTO · no confirmado')
-        self.assertEqual(packet['self']['fuel'],'—')
+        self.assertEqual(packet['self']['fuel'],'80.0 L · SDK OBSERVADO')
         self.assertTrue(all(r['classId']==1 for r in packet['standingAll']))
         self.assertTrue(all(c['idx']<40 for c in packet['raceDirector']['candidates']))
 

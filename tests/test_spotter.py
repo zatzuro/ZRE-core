@@ -108,7 +108,7 @@ class RealTeamSessionCases(unittest.TestCase):
         rows=[relative_position(100,.40,n,p,80)[0] for n,p in [(100,.6),(99,.20),(101,.60)]]
         self.assertEqual(sorted(rows,reverse=True),[rows[0],rows[2],rows[1]])
 
-    def test_fuel_never_reads_local_value_and_uses_snapshot(self):
+    def test_valid_sdk_fuel_observed_without_local_driving(self):
         self.assertAlmostEqual(estimated_team_fuel(50,100,104,2.5),40)
         self.assertIsNone(estimated_team_fuel(None,100,104,2.5))
         self.assertIsNone(estimated_team_fuel(50,100,99,2.5))
@@ -123,11 +123,11 @@ class RealTeamSessionCases(unittest.TestCase):
         context=TeamCarContext.resolve(TEAM,8,False,8,None,101,'Santiago',10)
         packet=source.spotter_payload(context,[dict(TEAM['Drivers'][0],CarNumber='8')],{},
                                       {8:{'ClassPosition':0}}, {},200,TEAM)
-        self.assertIn('40.0 L · ESTIMADO',packet['self']['fuel'])
+        self.assertEqual(packet['self']['fuel'],'88.0 L · SDK OBSERVADO')
         self.assertEqual(packet['teamDebug']['FuelLevelLocal'],88)
         self.assertEqual(packet['teamDebug']['CarIdxLap'],105)
         self.assertEqual(packet['teamDebug']['CarIdxLapCompleted'],104)
-        self.assertEqual(source.team_fuel_reference,(50,100))
+        self.assertEqual(source.team_fuel_reference,(88,104))
 
     def test_swap_does_not_reset_strategy_or_car_laps(self):
         source=bridge.DashboardSource(force_demo=True)
