@@ -15,7 +15,8 @@ class TeamContextTests(unittest.TestCase):
         swapped=TeamCarContext.resolve(TEAM,8,False,8)
         self.assertEqual((swapped.car_idx,swapped.current_driver,swapped.auto_mode),(8,'David','spotter'))
         self.assertEqual(TeamCarContext.resolve(TEAM,8,False,8,8).auto_mode,'spotter')
-        self.assertIsNone(TeamCarContext.resolve(TEAM,8,False).car_idx)
+        self.assertEqual(TeamCarContext.resolve(TEAM,8,False).car_idx,8)
+        self.assertEqual(TeamCarContext.resolve(TEAM,8,False).source,'sdk-car-provisional')
 
     def test_ui_one_socket_no_reload_on_role_change(self):
         js=(Path(__file__).resolve().parents[1]/'web/app.js').read_text()

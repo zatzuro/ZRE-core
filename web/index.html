@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="zre-build" content="2.4.1">
+  <meta name="zre-build" content="2.4.2">
   <title>ZRE Core · iRacing Team Engineer</title>
-  <link rel="stylesheet" href="/static/style.css?v=2.4.1">
+  <link rel="stylesheet" href="/static/style.css?v=2.4.2">
 </head>
 <body data-view="live">
 <main class="dashboard">
   <header class="session-header">
-    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.4.1</span></div>
+    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.4.2</span></div>
     <div class="session-info"><strong id="car">CONECTANDO</strong><span id="track">iRacing Dashboard</span></div>
     <div class="driver-header"><span>PILOTO</span><strong id="header-driver">—</strong></div>
     <div class="driver-header compact"><span>POS</span><strong id="header-position">P—</strong></div>
     <div class="driver-header compact"><span>VUELTA</span><strong id="header-lap">—</strong></div>
-    <button id="team-debug-toggle" type="button" aria-pressed="false">DEBUG EQUIPO</button><label class="role-control">MODO<select id="role-select"><option value="auto">AUTO</option><option value="driver">PILOTO</option><option value="spotter">SPOTTER</option></select></label>
+    <label id="driver-view-control">VISTA<select id="driver-view-select"><option value="auto">AUTO</option><option value="live">PISTA</option><option value="pit">PIT</option><option value="summary">RESUMEN</option></select></label><button id="team-debug-toggle" type="button" aria-pressed="false">DEBUG EQUIPO</button><label class="role-control">MODO<select id="role-select"><option value="auto">AUTO</option><option value="driver">PILOTO</option><option value="spotter">SPOTTER</option></select></label>
     <label id="demo-role-control" class="role-control" hidden>SIMULAR<select id="demo-role-select"><option value="driver">PILOTO</option><option value="spotter">SPOTTER</option></select></label>
     <div id="coach-controls" class="coach-controls" hidden>
       <label>REFERENCIA<select id="reference-select"><option value="optimal">ÓPTIMA SESIÓN</option><option value="external" disabled>EXTERNA · PRÓXIMAMENTE</option></select></label>
@@ -32,11 +32,6 @@
   </aside>
 
   <section id="live-view" class="screen live-view">
-    <section id="spotter-summary" class="spotter-summary" hidden>
-      <div><span>PILOTO ACTUAL</span><strong id="spotter-driver">—</strong></div><div><span>TIEMPO RESTANTE</span><strong id="spotter-time">—</strong></div><div><span>DELANTE · EST.</span><strong id="spotter-ahead">—</strong></div><div><span>DETRÁS · EST.</span><strong id="spotter-behind">—</strong></div><div><span>VUELTAS STINT</span><strong id="spotter-stint-laps">—</strong></div>
-      <label>COCHE EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label>
-      <label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label>
-    </section>
     <section class="telemetry-grid live-telemetry">
       <article class="data-card lap-card"><h2>REFERENCIA PERSONAL</h2><div><span>ÚLTIMA</span><strong id="last-lap">—</strong></div><div><span>MEJOR REAL</span><strong id="best-lap">—</strong></div><div><span>ÓPTIMA</span><strong id="optimal-lap">—</strong></div></article>
       <article class="data-card"><h2>NEUMÁTICOS</h2><div><span>FL</span><strong id="wear-fl">—</strong></div><div><span>FR</span><strong id="wear-fr">—</strong></div><div><span>RL</span><strong id="wear-rl">—</strong></div><div><span>RR</span><strong id="wear-rr">—</strong></div></article>
@@ -64,6 +59,15 @@
     </section>
   </section>
 
+  <section id="spotter-view" class="screen spotter-screen" hidden>
+    <div class="spotter-kpis"><div><small>COCHE DEL EQUIPO · SDK</small><strong id="spotter-car">—</strong></div><div><small>PILOTO ACTUAL · SDK/MANUAL</small><strong id="spotter-driver">—</strong></div><div><small>POSICIÓN CLASE · SDK</small><strong id="spotter-position">—</strong></div><div><small>VUELTA · SDK</small><strong id="spotter-lap">—</strong></div><div><small>COMPLETADAS · SDK</small><strong id="spotter-completed">—</strong></div><div><small>TIEMPO RESTANTE · SDK</small><strong id="spotter-time">—</strong></div><div><small>PISTA / BOX · SDK</small><strong id="spotter-pit">—</strong></div><div><small>PROGRESO · SDK</small><strong id="spotter-progress">—</strong></div><div><small>ÚLTIMA VUELTA · SDK</small><strong id="spotter-last-lap">—</strong></div><div><small>FUEL · EST./MANUAL</small><strong id="spotter-fuel">—</strong></div><div><small>GAP DELANTE · EST.</small><strong id="spotter-ahead">—</strong></div><div><small>GAP DETRÁS · EST.</small><strong id="spotter-behind">—</strong></div></div>
+    <div class="spotter-choice"><label>COCHE DEL EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label><label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label><span id="spotter-identity-warning">Selecciona el coche si ZRE no lo identifica.</span></div>
+    <div class="spotter-panels"><article class="focus-card"><h2>RELATIVE · COCHE EQUIPO</h2><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ</span></div><div id="spotter-relative-rows"></div></article><article class="focus-card"><h2>CLASS STANDINGS</h2><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ</span></div><div id="spotter-standing-rows"></div></article></div>
+    <div class="spotter-panels"><article class="focus-card"><h2>RIVAL ESTRATÉGICO</h2><label>RIVAL<select id="spotter-rival-select"><option value="auto">AUTO</option></select></label><div class="spotter-kpis"><div><small>RIVAL</small><strong id="spotter-rival-name">—</strong></div><div><small>POSICIÓN</small><strong id="spotter-rival-pos">—</strong></div><div><small>GAP</small><strong id="spotter-rival-gap">—</strong></div><div><small>ÚLTIMA</small><strong id="spotter-rival-last">—</strong></div><div><small>VUELTA</small><strong id="spotter-rival-lap">—</strong></div><div><small>ESTADO</small><strong id="spotter-rival-pit">—</strong></div></div></article>
+    <article class="focus-card"><h2>ESTRATEGIA · SDK / EST. / MANUAL</h2><div class="spotter-kpis"><div><small>STINT</small><strong id="spotter-stint">—</strong></div><div><small>VUELTAS STINT</small><strong id="spotter-stint-laps">—</strong></div><div><small>ÚLTIMA PARADA</small><strong id="spotter-last-stop">—</strong></div><div><small>PRÓXIMA PARADA</small><strong id="spotter-next-stop">—</strong></div><div><small>PARADAS RESTANTES</small><strong id="spotter-stops">—</strong></div><div><small>ÚLTIMA EVITABLE</small><strong id="spotter-avoidable">—</strong></div></div><p id="spotter-strategy-base">BASE —</p><p id="spotter-strategy-extended">EXT. —</p><div id="spotter-timeline" class="strategy-timeline"></div></article></div>
+    <article class="focus-card spotter-controls"><h2>CONTROL DE STINT · MANUAL</h2><p id="spotter-control-status">Sin eventos manuales</p><button type="button" data-spotter-action="stop">REGISTRAR PARADA</button><label>COMBUSTIBLE<select id="spotter-fuel-action"><option value="no_fuel">SIN REPOSTAR</option><option value="fill">LLENAR TANQUE</option><option value="add_fuel">+ LITROS</option></select></label><input id="spotter-added-liters" type="number" min="0.1" max="300" step="0.1" placeholder="Litros añadidos"><button type="button" id="spotter-fuel-submit">REGISTRAR COMBUSTIBLE</button><label>PILOTO<select id="spotter-driver-select"></select></label><button type="button" data-spotter-action="driver">CAMBIO DE PILOTO</button><button type="button" data-spotter-action="new_stint">INICIAR NUEVO STINT</button><p>Para LLENAR, configura TANQUE L en Estrategia desde PISTA cuando estés en PILOTO; también puedes usar la configuración de estrategia aquí:</p><label>TANQUE L · MANUAL<input id="spotter-tank-input" type="number" min="1" step="0.1" placeholder="Capacidad en litros"></label><label>CONSUMO L/V · MANUAL<input id="spotter-consumption-input" type="number" min="0.01" step="0.01" placeholder="Consumo medio"></label></article>
+  </section>
+
   <section id="pit-view" class="screen pit-view" hidden>
     <section class="pit-top-grid">
       <article class="focus-card coach-card"><div class="card-title"><h2>DRIVER COACH</h2><span id="coach-reference">ÓPTIMA SESIÓN</span></div><div class="coach-kpis"><div><span>MEJOR REAL</span><strong id="pit-best-lap">—</strong></div><div><span>ÓPTIMA</span><strong id="pit-optimal-lap">—</strong></div><div><span>POTENCIAL</span><strong id="pit-potential">—</strong></div></div><div class="coach-priority primary"><span id="coach-primary-zone">REFERENCIA</span><strong id="coach-primary-title">Construyendo referencia</strong><p id="coach-primary-advice">El análisis aparecerá aquí cuando existan suficientes vueltas comparables.</p></div><div class="coach-priority"><span id="coach-secondary-zone">PATRÓN</span><strong id="coach-secondary-title">—</strong><p id="coach-secondary-advice">—</p></div></article>
@@ -79,8 +83,8 @@
   </section>
 
   <aside id="debug-panel" class="debug-panel" hidden><div><strong>COACH DEBUG</strong><span>?debug=1</span></div><pre id="debug-content">Esperando telemetría…</pre></aside>
-  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.4.1</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
+  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.4.2</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
 </main>
-<script src="/static/app.js?v=2.4.1"></script>
+<script src="/static/app.js?v=2.4.2"></script>
 </body>
 </html>

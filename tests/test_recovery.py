@@ -53,7 +53,7 @@ class AssetAndUpdaterTests(unittest.TestCase):
             target.mkdir()
             (source / 'web').mkdir()
             (source / 'web' / 'index.html').write_text('new', encoding='utf-8')
-            (source / 'version.json').write_text('{"version":"2.4.1"}', encoding='utf-8')
+            (source / 'version.json').write_text('{"version":"2.4.2"}', encoding='utf-8')
             for name in ('data', '.venv', '.git'):
                 (target / name).mkdir()
                 (target / name / 'retain').write_text('yes', encoding='utf-8')
@@ -71,7 +71,7 @@ class AssetAndUpdaterTests(unittest.TestCase):
             finally:
                 updater.ROOT = original
             self.assertEqual((target / 'web' / 'index.html').read_text(), 'new')
-            self.assertEqual((target / 'version.json').read_text(), '{"version":"2.4.1"}')
+            self.assertEqual((target / 'version.json').read_text(), '{"version":"2.4.2"}')
             for name in ('data', '.venv', '.git'):
                 self.assertEqual((target / name / 'retain').read_text(), 'yes')
             for name in ('dashboard.log', 'session_replay.jsonl'):
