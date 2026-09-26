@@ -1,7 +1,8 @@
-"""Resolve a team car independently of the local SDK client entry.
+"""One resolved car identity per SDK frame; keep the local user's identity across swaps.
 
-DriverInfo.Drivers represents the current driver of a team car after a swap.
-Unknown identity is left unknown; a spectator entry is never treated as a car.
+DriverInfo.Drivers is a roster of current car drivers, not a persistent roster of
+all team members. DriverCarIdx and PlayerCarIdx describe the local client view and
+must not identify the local *person* after another team member takes the car.
 """
 from dataclasses import dataclass
 
@@ -24,56 +25,59 @@ class TeamCarContext:
     local_driving: bool
     auto_mode: str
     source: str
+    local_user_id: int | str | None = None
+    local_driver_name: str | None = None
+    observed_driver_car_idx: int | None = None
+    sdk_driver_user_id: int | str | None = None
 
     @classmethod
     def resolve(cls, driver_info, player_idx, is_on_track_car=None,
-                last_team_idx=None, manual_car_idx=None):
+                last_team_idx=None, manual_car_idx=None, local_user_id=None,
+                local_driver_name=None, last_team_id=None):
         info = driver_info or {}
-        drivers = [d for d in (info.get('Drivers') or []) if isinstance(d, dict)]
-        local_idx = valid_index(player_idx)
-        client_idx = valid_index(info.get('DriverCarIdx'))
-        local_user = info.get('DriverUserID')
-        local = next((d for d in drivers if local_user not in (None, 0, '')
-                      and d.get('UserID') == local_user), None)
-        if local is None and local_user in (None, 0, '') and is_on_track_car:
-            local = next((d for d in drivers if valid_index(d.get('CarIdx')) == client_idx), None)
-        team_id = local.get('TeamID') if local else None
-        if team_id in (None, '', 0):
+        drivers = [d for d in info.get('Drivers', []) if isinstance(d, dict)]
+        player_idx = valid_index(player_idx)
+        driver_idx = valid_index(info.get('DriverCarIdx'))
+        sdk_user = info.get('DriverUserID')
+        cars = {valid_index(d.get('CarIdx')): d for d in drivers
+                if not d.get('IsSpectator') and valid_index(d.get('CarIdx')) is not None}
+        observed = cars.get(player_idx)
+        # Learn the local PERSON only while physically driving. Some team clients
+        # keep their PlayerCarIdx and DriverUserID pointed at the team car at swaps.
+        if is_on_track_car and observed and (local_user_id is None or str(local_user_id) == str(observed.get('UserID'))):
+            local_user_id = observed.get('UserID') or local_user_id
+            local_driver_name = observed.get('UserName') or local_driver_name
+        team_id = last_team_id
+        if team_id in (None, '', 0) and sdk_user not in (None, 0, ''):
+            spectator = next((d for d in drivers if d.get('IsSpectator') and str(d.get('UserID')) == str(sdk_user)), None)
+            if spectator:team_id = spectator.get('TeamID')
+        if team_id in (None, '', 0) and local_user_id is not None:
+            match = next((d for d in cars.values() if d.get('UserID') == local_user_id), None)
+            team_id = match.get('TeamID') if match else None
+        if team_id in ('', 0):
             team_id = None
-        candidates = [d for d in drivers if not d.get('IsSpectator')
-                      and valid_index(d.get('CarIdx')) is not None
-                      and (team_id is None or d.get('TeamID') == team_id)]
-        team_candidates = candidates if team_id is not None else []
-        if team_id is None and valid_index(last_team_idx) is not None:
-            team_candidates = [d for d in candidates if valid_index(d.get('CarIdx')) == valid_index(last_team_idx)]
-        car = None
+        candidates = [d for d in cars.values() if team_id is not None and d.get('TeamID') == team_id]
+        selected = None
         source = 'unknown'
-        for idx, kind in ((manual_car_idx, 'manual'), (last_team_idx, 'previous')):
-            pool = candidates if kind == 'manual' else team_candidates
-            match = next((d for d in pool
-                          if valid_index(d.get('CarIdx')) == valid_index(idx)), None)
-            if idx is not None and match is not None:
-                car, source = match, kind
+        for idx, label in ((manual_car_idx, 'manual'), (last_team_idx, 'previous')):
+            candidate = cars.get(valid_index(idx))
+            if candidate and (label == 'manual' or team_id is None or candidate.get('TeamID') == team_id):
+                selected, source = candidate, label
                 break
-        if car is None and len(team_candidates) == 1:
-            car, source = team_candidates[0], 'team-id'
-        if car is None and local is not None and not local.get('IsSpectator'):
-            idx = valid_index(local.get('CarIdx'))
-            car = next((d for d in candidates if valid_index(d.get('CarIdx')) == idx), None)
-            if car is not None:
-                source = 'local-driver'
-        if car is None and local is None and is_on_track_car and local_idx is not None:
-            car = next((d for d in candidates if valid_index(d.get('CarIdx')) == local_idx), None)
-            if car is not None:
-                source = 'local-track'
-        idx = valid_index(car.get('CarIdx')) if car else None
-        current_user = car.get('UserID') if car else None
-        same_user = local_user not in (None, 0, '') and local_user == current_user
-        local_driving = bool(car and not (local or {}).get('IsSpectator')
-                             and idx == local_idx and (same_user or
-                             (local_user in (None, 0, '') and is_on_track_car)))
-        # Off track with the same driver is still the driver view (garage/pit).
-        same_driver = same_user or (car is local and local is not None)
-        mode = 'spotter' if car and not same_driver else 'driver'
-        return cls(idx, local_idx, team_id, car.get('UserName') if car else None,
-                   current_user, local_driving, mode, source)
+        if selected is None and team_id is not None and len(candidates) == 1:
+            selected, source = candidates[0], 'team-id'
+        if selected is None and is_on_track_car and observed:
+            selected, source = observed, 'local-driving'
+        car_idx = valid_index(selected.get('CarIdx')) if selected else None
+        if selected and team_id is None:
+            team_id = selected.get('TeamID') or None
+        current_user = selected.get('UserID') if selected else None
+        # An SDK user ID without an independently observed local identity is not
+        # evidence that the current driver is the user of this local client.
+        same_person = (local_user_id is not None and current_user is not None
+                       and str(local_user_id) == str(current_user))
+        driving = bool(selected and is_on_track_car and car_idx == player_idx and same_person)
+        mode = 'driver' if same_person or (local_user_id is None and selected and is_on_track_car and car_idx == player_idx) else 'spotter' if selected else 'driver'
+        return cls(car_idx, player_idx, team_id, selected.get('UserName') if selected else None,
+                   current_user, driving, mode, source, local_user_id, local_driver_name,
+                   driver_idx, sdk_user)
