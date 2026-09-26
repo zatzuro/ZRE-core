@@ -68,8 +68,12 @@ class TeamCarContext:
             selected, source = candidates[0], 'team-id'
         if selected is None and is_on_track_car and observed:
             selected, source = observed, 'local-driving'
+        if selected is None and driver_idx is not None and driver_idx == player_idx and observed:
+            # A cold spectator session has no prior local driving snapshot. Two SDK
+            # pointers agree on an entered race car; expose this as provisional.
+            selected, source = observed, 'sdk-car-provisional'
         car_idx = valid_index(selected.get('CarIdx')) if selected else None
-        if selected and team_id is None:
+        if selected and (team_id is None or source == 'manual'):
             team_id = selected.get('TeamID') or None
         current_user = selected.get('UserID') if selected else None
         # An SDK user ID without an independently observed local identity is not
