@@ -3,18 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="zre-build" content="2.3.4">
+  <meta name="zre-build" content="2.4.0">
   <title>ZRE Core · iRacing Team Engineer</title>
-  <link rel="stylesheet" href="/static/style.css?v=2.3.4">
+  <link rel="stylesheet" href="/static/style.css?v=2.4.0">
 </head>
 <body data-view="live">
 <main class="dashboard">
   <header class="session-header">
-    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.3.4</span></div>
+    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.4.0</span></div>
     <div class="session-info"><strong id="car">CONECTANDO</strong><span id="track">iRacing Dashboard</span></div>
     <div class="driver-header"><span>PILOTO</span><strong id="header-driver">—</strong></div>
     <div class="driver-header compact"><span>POS</span><strong id="header-position">P—</strong></div>
     <div class="driver-header compact"><span>VUELTA</span><strong id="header-lap">—</strong></div>
+    <label class="role-control">MODO<select id="role-select"><option value="auto">AUTO</option><option value="driver">PILOTO</option><option value="spotter">SPOTTER</option></select></label>
+    <label id="demo-role-control" class="role-control" hidden>SIMULAR<select id="demo-role-select"><option value="driver">PILOTO</option><option value="spotter">SPOTTER</option></select></label>
     <div id="coach-controls" class="coach-controls" hidden>
       <label>REFERENCIA<select id="reference-select"><option value="optimal">ÓPTIMA SESIÓN</option><option value="external" disabled>EXTERNA · PRÓXIMAMENTE</option></select></label>
       <label>AUDIO<select id="audio-select"><option value="off">OFF</option><option value="lap">VUELTA</option><option value="corners" disabled>CURVAS · PRÓXIMAMENTE</option></select></label><button id="audio-test" class="audio-test" type="button">PROBAR VOZ</button>
@@ -30,6 +32,11 @@
   </aside>
 
   <section id="live-view" class="screen live-view">
+    <section id="spotter-summary" class="spotter-summary" hidden>
+      <div><span>PILOTO ACTUAL</span><strong id="spotter-driver">—</strong></div><div><span>TIEMPO RESTANTE</span><strong id="spotter-time">—</strong></div><div><span>DELANTE · EST.</span><strong id="spotter-ahead">—</strong></div><div><span>DETRÁS · EST.</span><strong id="spotter-behind">—</strong></div><div><span>VUELTAS STINT</span><strong id="spotter-stint-laps">—</strong></div>
+      <label>COCHE EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label>
+      <label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label>
+    </section>
     <section class="telemetry-grid live-telemetry">
       <article class="data-card lap-card"><h2>REFERENCIA PERSONAL</h2><div><span>ÚLTIMA</span><strong id="last-lap">—</strong></div><div><span>MEJOR REAL</span><strong id="best-lap">—</strong></div><div><span>ÓPTIMA</span><strong id="optimal-lap">—</strong></div></article>
       <article class="data-card"><h2>NEUMÁTICOS</h2><div><span>FL</span><strong id="wear-fl">—</strong></div><div><span>FR</span><strong id="wear-fr">—</strong></div><div><span>RL</span><strong id="wear-rl">—</strong></div><div><span>RR</span><strong id="wear-rr">—</strong></div></article>
@@ -72,8 +79,8 @@
   </section>
 
   <aside id="debug-panel" class="debug-panel" hidden><div><strong>COACH DEBUG</strong><span>?debug=1</span></div><pre id="debug-content">Esperando telemetría…</pre></aside>
-  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.3.4</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
+  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.4.0</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
 </main>
-<script src="/static/app.js?v=2.3.4"></script>
+<script src="/static/app.js?v=2.4.0"></script>
 </body>
 </html>
