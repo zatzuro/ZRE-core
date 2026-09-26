@@ -5,6 +5,33 @@ Overrides are per stop and per field; nothing is projected from race start.
 from math import floor
 
 
+def race_plan(*, remaining_seconds, current_lap, lap_seconds, pit_seconds,
+              current_fuel=None, consumption=None, tank=None, stops_completed=0,
+              current_driver=None, driver_assignments=None, overrides=None,
+              completed=None):
+    """Forward-only race plan; completed stops are immutable input history."""
+    pace=float(lap_seconds) if lap_seconds and lap_seconds>0 else None
+    use=float(consumption) if consumption and consumption>0 else None
+    capacity=float(tank) if tank and tank>0 else None
+    fuel=float(current_fuel) if current_fuel is not None else None
+    projected=floor(float(remaining_seconds)/pace) if remaining_seconds is not None and pace else None
+    autonomy=floor(max(0,fuel)/use) if fuel is not None and use else None
+    stint=floor(capacity/use) if capacity is not None and use else None
+    if fuel is None or use is None or capacity is None:
+        return {'available':False,'stops':[],'stopsRemaining':None,'finishLap':None,
+                'projectedLaps':projected,'autonomyLaps':autonomy,'minimumStops':None,
+                'completed':list(completed or []),'warnings':['Configura fuel, consumo y capacidad para proyectar paradas']}
+    plan=build_stop_plan(remaining_seconds=remaining_seconds,current_lap=current_lap,
+        lap_seconds=lap_seconds,pit_seconds=pit_seconds,stint_laps=stint or 38,
+        current_fuel=current_fuel,consumption=consumption,tank=tank,
+        stops_completed=stops_completed,current_driver=current_driver,
+        driver_assignments=driver_assignments,overrides=overrides)
+    plan.update(projectedLaps=projected,autonomyLaps=autonomy,
+                minimumStops=plan['stopsRemaining'] if fuel is not None and use and capacity else None,
+                completed=list(completed or []))
+    return plan
+
+
 def build_stop_plan(*,remaining_seconds,current_lap,lap_seconds,pit_seconds,stint_laps,
                     current_fuel=None,consumption=None,tank=None,stops_completed=0,
                     current_driver=None,driver_assignments=None,overrides=None):

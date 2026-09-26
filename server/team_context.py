@@ -29,11 +29,14 @@ class TeamCarContext:
     local_driver_name: str | None = None
     observed_driver_car_idx: int | None = None
     sdk_driver_user_id: int | str | None = None
+    car_number: str | None = None
+    car_class_id: int | str | None = None
+    team_name: str | None = None
 
     @classmethod
     def resolve(cls, driver_info, player_idx, is_on_track_car=None,
                 last_team_idx=None, manual_car_idx=None, local_user_id=None,
-                local_driver_name=None, last_team_id=None):
+                local_driver_name=None, last_team_id=None, manual_car_number=None, last_car_number=None):
         info = driver_info or {}
         drivers = [d for d in info.get('Drivers', []) if isinstance(d, dict)]
         player_idx = valid_index(player_idx)
@@ -59,11 +62,19 @@ class TeamCarContext:
         candidates = [d for d in cars.values() if team_id is not None and d.get('TeamID') == team_id]
         selected = None
         source = 'unknown'
-        for idx, label in ((manual_car_idx, 'manual'), (last_team_idx, 'previous')):
-            candidate = cars.get(valid_index(idx))
-            if candidate and (label == 'manual' or team_id is None or candidate.get('TeamID') == team_id):
-                selected, source = candidate, label
+        for number,label in ((manual_car_number,'manual-number'),(last_car_number,'previous-number')):
+            if number in (None,''):continue
+            matches=[d for d in cars.values() if str(d.get('CarNumber','')).strip()==str(number).strip()
+                     and (label=='manual-number' or team_id is None or d.get('TeamID')==team_id)]
+            if len(matches)==1:
+                selected,source=matches[0],label
                 break
+        if selected is None:
+            for idx,label in ((manual_car_idx,'manual'),(last_team_idx,'previous')):
+                candidate=cars.get(valid_index(idx))
+                if candidate and (label=='manual' or team_id is None or candidate.get('TeamID')==team_id):
+                    selected,source=candidate,label
+                    break
         if selected is None and team_id is not None and len(candidates) == 1:
             selected, source = candidates[0], 'team-id'
         if selected is None and is_on_track_car and observed:
@@ -73,7 +84,7 @@ class TeamCarContext:
             # pointers agree on an entered race car; expose this as provisional.
             selected, source = observed, 'sdk-car-provisional'
         car_idx = valid_index(selected.get('CarIdx')) if selected else None
-        if selected and (team_id is None or source == 'manual'):
+        if selected and (team_id is None or source in ('manual','manual-number')):
             team_id = selected.get('TeamID') or None
         current_user = selected.get('UserID') if selected else None
         # An SDK user ID without an independently observed local identity is not
@@ -81,7 +92,8 @@ class TeamCarContext:
         same_person = (local_user_id is not None and current_user is not None
                        and str(local_user_id) == str(current_user))
         driving = bool(selected and is_on_track_car and car_idx == player_idx and same_person)
-        mode = 'driver' if same_person or (local_user_id is None and selected and is_on_track_car and car_idx == player_idx) else 'spotter' if selected else 'driver'
+        mode = 'driver' if driving or (local_user_id is None and selected and is_on_track_car and car_idx == player_idx) else 'spotter' if selected else 'driver'
         return cls(car_idx, player_idx, team_id, selected.get('UserName') if selected else None,
                    current_user, driving, mode, source, local_user_id, local_driver_name,
-                   driver_idx, sdk_user)
+                   driver_idx, sdk_user, str(selected.get('CarNumber')) if selected and selected.get('CarNumber') is not None else None,
+                   selected.get('CarClassID') if selected else None, selected.get('TeamName') if selected else None)

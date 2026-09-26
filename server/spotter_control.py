@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 @dataclass
 class SpotterControl:
     events: list = field(default_factory=list)
+    stops: list = field(default_factory=list)
     seen: set = field(default_factory=set)
     pit_pending: bool = False
     last_stop_lap: int | None = None
@@ -15,9 +16,14 @@ class SpotterControl:
 
     def pit_transition(self, entered, lap):
         if entered:
+            if not self.pit_pending:
+                self.stops.append({'number':len(self.stops)+1,'lap':lap,'status':'detected','fuel':'PENDIENTE','driver':None})
             self.pit_pending=True
             self.last_stop_lap=lap
             self.fuel_source='PENDIENTE' # Preserve the reference; no refuel is assumed.
+        elif self.stops and self.stops[-1]['status']=='detected':
+            self.stops[-1]['status']='completed'
+            self.stops[-1]['exitLap']=lap
 
     def apply(self, event, *, lap, tank_capacity=None, projected_fuel=None):
         kind=event.get('action')
@@ -32,7 +38,7 @@ class SpotterControl:
             if not 0<added<=300:return 'Introduce litros válidos'
             if projected_fuel is None:return 'No hay referencia de fuel: usa LLENAR o configura una lectura'
         if kind=='stop':
-            self.pit_pending=True;self.last_stop_lap=lap;self.fuel_source='PENDIENTE'
+            self.pit_transition(True,lap)
         elif kind=='fill':
             self.fuel_liters=float(tank_capacity);self.fuel_lap=lap;self.fuel_source='MANUAL · ESTIMADO';self.pit_pending=False
         elif kind=='add_fuel':
@@ -50,6 +56,9 @@ class SpotterControl:
             self.stint_started_lap=lap;self.pit_pending=False
             name=str(event.get('driver') or '').strip()[:60]
             if name:self.manual_driver=name
+        if kind in ('fill','add_fuel','no_fuel') and self.stops:
+            self.stops[-1]['fuel']={'fill':'LLENAR','add_fuel':f"+{event.get('liters')} L",'no_fuel':'SIN REPOSTAR'}[kind]
+        if kind in ('driver','new_stint') and self.stops:self.stops[-1]['driver']=self.manual_driver
         self.seen.add(event_id)
         self.events.append({'id':event_id,'action':kind,'lap':lap,'liters':event.get('liters'), 'driver':event.get('driver')})
         return None

@@ -31,8 +31,10 @@ class SessionState:
         self.in_garage = False
         self.last_valid_payload = None
 
-    def observe_identity(self, identity):
+    def observe_identity(self, identity, ignore_car_idx=False):
         changed = self.identity is not None and identity != self.identity
+        if ignore_car_idx and self.identity is not None:
+            changed = (self.identity.session_id,self.identity.subsession_id,self.identity.track_id,self.identity.session_num) != (identity.session_id,identity.subsession_id,identity.track_id,identity.session_num)
         self.identity = identity
         if changed:
             self.last_valid_payload = None
