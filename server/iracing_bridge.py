@@ -31,8 +31,9 @@ try:
     from server.race_director import RaceDirector
     from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text
     from server.team_context import TeamCarContext
-    from server.team_timing import relative_position,estimated_team_fuel
+    from server.team_timing import relative_position,relative_window,estimated_team_fuel
     from server.spotter_control import SpotterControl
+    from server.stop_plan import build_stop_plan
 except ModuleNotFoundError:
     from session_state import SessionIdentity, SessionState
     from lap_coach import LapCoach, number
@@ -41,8 +42,9 @@ except ModuleNotFoundError:
     from race_director import RaceDirector
     from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text
     from team_context import TeamCarContext
-    from team_timing import relative_position,estimated_team_fuel
+    from team_timing import relative_position,relative_window,estimated_team_fuel
     from spotter_control import SpotterControl
+    from stop_plan import build_stop_plan
 
 from aiohttp import web
 try:
@@ -117,7 +119,7 @@ class DashboardSource:
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
         self.stint_active = False
         self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
-        self.team_car_idx=None;self.manual_team_car_idx=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None
+        self.team_car_idx=None;self.manual_team_car_idx=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     def get(self,key,default=None):
         try:
@@ -321,6 +323,32 @@ class DashboardSource:
         finally:
             self.ir.unfreeze_var_buffer_latest()
 
+    def apply_stop_override(self,event):
+        try:number=int(event.get('number'))
+        except (TypeError,ValueError):return 'Número de parada inválido'
+        if number<=self.strategy_stops_completed or number>self.strategy_stops_completed+64:
+            return 'Selecciona una parada futura'
+        field=event.get('field');value=event.get('value')
+        if field not in ('lap','driver','fuel','liters'):return 'Campo no válido'
+        if value in ('',None,'auto'):
+            self.stop_overrides.setdefault(number,{}).pop(field,None)
+            if not self.stop_overrides[number]:self.stop_overrides.pop(number,None)
+            return None
+        if field=='lap':
+            try:value=int(value)
+            except (TypeError,ValueError):return 'Vuelta inválida'
+            if value<=int(self.team_completed_now or 0):return 'La parada debe estar en una vuelta futura'
+        elif field=='driver':
+            if value not in self.strategy_settings.get('driverNames',[]):return 'Piloto fuera del equipo configurado'
+        elif field=='fuel':
+            if value not in ('fill','add','none'):return 'Fuel inválido'
+        else:
+            try:value=float(value)
+            except (TypeError,ValueError):return 'Litros inválidos'
+            if not 0<value<=300:return 'Litros inválidos'
+        self.stop_overrides.setdefault(number,{})[field]=value
+        return None
+
     def apply_spotter_event(self,event):
         if not isinstance(event,dict):return 'Evento inválido'
         consumption=self.strategy_settings.get('consumptionLiters') or (sum(self.fuel_per_lap[-8:])/len(self.fuel_per_lap[-8:]) if self.fuel_per_lap else None)
@@ -328,8 +356,13 @@ class DashboardSource:
         fuel=self.spotter_control.fuel_at(completed,consumption)
         if fuel is None and self.team_fuel_reference_valid and self.team_fuel_reference and completed is not None:
             fuel=estimated_team_fuel(*self.team_fuel_reference,completed,consumption)
-        if fuel is None and self.spotter_control.pit_pending:fuel=self.spotter_pre_pit_fuel
-        error=self.spotter_control.apply(event,lap=completed,tank_capacity=self.strategy_settings.get('tankCapacityLiters'),projected_fuel=fuel)
+        kind=event.get('action')
+        if kind=='stop':self.spotter_pre_pit_fuel=fuel
+        event_lap=completed
+        if kind in ('fill','add_fuel','no_fuel') and self.spotter_control.pit_pending and self.spotter_control.last_stop_lap is not None:
+            event_lap=self.spotter_control.last_stop_lap
+            fuel=self.spotter_pre_pit_fuel
+        error=self.spotter_control.apply(event,lap=event_lap,tank_capacity=self.strategy_settings.get('tankCapacityLiters'),projected_fuel=fuel)
         if error:
             self.spotter_event_error=error
             return error
@@ -406,7 +439,7 @@ class DashboardSource:
                 self.strategy_stint_start_lap=completed
                 self.active_stint_driver=current_name
             if pit is True and not self.strategy_last_on_pit:
-                self.team_fuel_reference_valid=False # Refueling amount is not exposed to the remote client.
+                # Keep the pre-pit reference for SIN REPOSTAR and +XX L.
                 estimated_fuel=None
             if pit is True and not self.strategy_last_on_pit and self.strategy_stint_start_lap is not None:
                 stint_laps=max(0,completed-self.strategy_stint_start_lap)
@@ -423,7 +456,7 @@ class DashboardSource:
         class_rows=[];live=[]
         for driver in drivers:
             other=driver.get('CarIdx')
-            if other is None or other<0 or driver.get('IsSpectator') or (class_id is not None and driver.get('CarClassID')!=class_id):
+            if other is None or other<0 or driver.get('IsSpectator'):
                 continue
             race=results.get(other,{})
             position=race.get('ClassPosition')
@@ -439,19 +472,18 @@ class DashboardSource:
             row={'idx':other,'pos':position,'classPos':position,'classId':driver.get('CarClassID'),
                  'className':driver.get('CarClassShortName') or '', 'number':str(driver.get('CarNumber','—')),
                  'car':car_label(driver),'brand':car_brand(driver),'driver':driver.get('UserName') or '—',
-                 'gap':label,'gapSeconds':gap,'lastLap':self.lap_text(at('CarIdxLastLapTime',other) or race.get('LastTime')),
+                 'gap':label,'gapSeconds':gap*pace if gap is not None and pace else None,'relativeDelta':gap,'lastLap':self.lap_text(at('CarIdxLastLapTime',other) or race.get('LastTime')),
                  'pace':'—','isPlayer':other==idx}
-            class_rows.append(row)
+            if class_id is None or driver.get('CarClassID')==class_id:class_rows.append(row)
             if other_pct is not None and other_pct>=0 and (other==idx or gap is not None):live.append(row.copy())
         class_rows.sort(key=lambda row:(not row['pos'],row['pos'] if row['pos'] else results.get(row['idx'],{}).get('Position',999)))
         for rank,row in enumerate(class_rows,1):
             if not row['pos']:row['pos']=rank;row['classPos']=rank
         own=next((row for row in class_rows if row['isPlayer']),None)
-        live_own=next((row for row in live if row['isPlayer']),None)
-        relative=self.relative_rows(live,live_own) if live_own else []
+        relative=relative_window(live,idx) if idx is not None else []
         standing=self.position_window(class_rows,own) if own else []
-        ahead=min((row for row in relative if row.get('gapSeconds') is not None and row['gapSeconds']>0),key=lambda row:row['gapSeconds'],default=None)
-        behind=max((row for row in relative if row.get('gapSeconds') is not None and row['gapSeconds']<0),key=lambda row:row['gapSeconds'],default=None)
+        ahead=min((row for row in relative if row.get('relativeDelta') is not None and row['relativeDelta']>0),key=lambda row:row['relativeDelta'],default=None)
+        behind=max((row for row in relative if row.get('relativeDelta') is not None and row['relativeDelta']<0),key=lambda row:row['relativeDelta'],default=None)
         driver=self.manual_team_driver or context.current_driver or '—'
         team_choices=[{'idx':d.get('CarIdx'),'label':f"#{d.get('CarNumber','—')} · {d.get('TeamName') or d.get('UserName') or '—'}"}
                       for d in drivers if isinstance(d,dict) and d.get('CarIdx') is not None
@@ -493,7 +525,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_car_idx=None;self.team_id=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_car_idx=None;self.team_id=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -645,7 +677,22 @@ class DashboardSource:
         if tank is None and not spotter:tank=number(driver_info.get("DriverCarFuelMaxLtr"))
         stint_completed=max(0,int(completed_laps)-int(self.strategy_stint_start_lap)) if self.strategy_stint_start_lap is not None else 0
         payload,target=endurance_strategy_payload(remaining_time_seconds=remaining,average_lap_seconds=pace,pit_loss_seconds=settings.get("pitLossSeconds",30.0),current_lap=completed_laps,current_fuel_liters=fuel,consumption_liters_per_lap=consumption,tank_capacity_liters=tank,base_stint_laps=settings.get("baseStintLaps",37),extended_stint_laps=settings.get("extendedStintLaps",38),current_stint_laps_completed=stint_completed,stops_completed=self.strategy_stops_completed,target_total_stops=self.strategy_target_total_stops,driver_assignments=self.strategy_driver_assignments,completed_stints=self.strategy_completed_stints,current_driver=current_driver)
-        self.strategy_target_total_stops=target;payload["settings"]=dict(payload.get("settings") or {},manualRaceSeconds=settings.get("manualRaceSeconds"),averageLapSeconds=settings.get("averageLapSeconds"),consumptionLiters=settings.get("consumptionLiters"),tankCapacityLiters=settings.get("tankCapacityLiters"),driverNames=settings.get("driverNames",[]),driverAssignments={str(k):v for k,v in self.strategy_driver_assignments.items()});
+        self.strategy_target_total_stops=target
+        if payload.get('available'):
+            scenario=payload.get('extended') or {};objective_laps=scenario.get('stintLaps') or settings.get('extendedStintLaps',38)
+            plan=build_stop_plan(remaining_seconds=remaining,current_lap=completed_laps,lap_seconds=pace,
+                pit_seconds=settings.get('pitLossSeconds',30),stint_laps=objective_laps,
+                current_fuel=fuel,consumption=consumption,tank=tank,stops_completed=self.strategy_stops_completed,
+                current_driver=current_driver,driver_assignments=self.strategy_driver_assignments,
+                overrides=self.stop_overrides)
+            plan['completed']=[{'number':item.get('number'),'lap':item.get('endLap'),
+                'driver':item.get('driver'),'status':'completed'} for item in self.strategy_completed_stints[-8:]]
+            payload['stopPlan']=plan
+            if plan['stops']:
+                payload['boxLap']=f"VUELTA {plan['stops'][0]['lap']}" + (' · MANUAL' if plan['stops'][0]['manualLap'] is not None else ' · AUTO')
+            payload['stopsRemaining']=plan['stopsRemaining']
+            payload['lastStopAvoidable']=plan['stopsRemaining']<payload.get('base',{}).get('stops',plan['stopsRemaining'])
+        payload["settings"]=dict(payload.get("settings") or {},manualRaceSeconds=settings.get("manualRaceSeconds"),averageLapSeconds=settings.get("averageLapSeconds"),consumptionLiters=settings.get("consumptionLiters"),tankCapacityLiters=settings.get("tankCapacityLiters"),driverNames=settings.get("driverNames",[]),driverAssignments={str(k):v for k,v in self.strategy_driver_assignments.items()});
         if spotter:
             payload['fuelDataAvailable']=False
             if fuel is not None:
@@ -738,6 +785,8 @@ async def websocket(request):
                         source.manual_team_car_idx=int(value) if value not in (None,'','auto') and str(value).isdigit() else None
                     elif setting.get('type')=='spotterEvent':
                         source.apply_spotter_event(setting)
+                    elif setting.get('type')=='stopOverride':
+                        source.spotter_event_error=source.apply_stop_override(setting)
                     elif setting.get("type")=="settings" and setting.get("key")=="teamDriver":
                         source.manual_team_driver=str(setting.get('value') or '').strip()[:60] or None
                     elif setting.get("type")=="settings" and setting.get("key")=="demoRole" and source.force_demo:

@@ -17,9 +17,7 @@ class SpotterControl:
         if entered:
             self.pit_pending=True
             self.last_stop_lap=lap
-            self.fuel_source='PENDIENTE' # Pit road never implies refueling.
-            self.fuel_liters=None
-            self.fuel_lap=None
+            self.fuel_source='PENDIENTE' # Preserve the reference; no refuel is assumed.
 
     def apply(self, event, *, lap, tank_capacity=None, projected_fuel=None):
         kind=event.get('action')
