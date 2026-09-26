@@ -103,10 +103,10 @@ class RealTeamSessionCases(unittest.TestCase):
 
     def test_relative_laps_and_estimated_time(self):
         self.assertEqual(relative_position(100,.40,100,.60,80)[1],'≈ +16.0 s · EST.')
-        self.assertEqual(relative_position(100,.40,99,.20,80)[1],'-1 VUELTA')
-        self.assertEqual(relative_position(100,.40,101,.60,80)[1],'+1 VUELTA')
+        self.assertEqual(relative_position(100,.40,99,.20,80)[1],'-1 LAP')
+        self.assertEqual(relative_position(100,.40,101,.60,80)[1],'+1 LAP')
         rows=[relative_position(100,.40,n,p,80)[0] for n,p in [(100,.6),(99,.20),(101,.60)]]
-        self.assertEqual(sorted(rows,reverse=True),[rows[2],rows[0],rows[1]])
+        self.assertEqual(sorted(rows,reverse=True),[rows[0],rows[2],rows[1]])
 
     def test_fuel_never_reads_local_value_and_uses_snapshot(self):
         self.assertAlmostEqual(estimated_team_fuel(50,100,104,2.5),40)
