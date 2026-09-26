@@ -1,0 +1,45 @@
+{
+  "source": "session_replay(2).jsonl; recorded completed laps, no SDK roster or ResultsPositions",
+  "laps": [
+    {
+      "lap": 9,
+      "paceSeconds": 103.4439,
+      "consumptionLiters": 2.694
+    },
+    {
+      "lap": 10,
+      "paceSeconds": 100.4996,
+      "consumptionLiters": 2.504
+    },
+    {
+      "lap": 11,
+      "paceSeconds": 101.0809,
+      "consumptionLiters": 2.579
+    },
+    {
+      "lap": 13,
+      "paceSeconds": 98.0798,
+      "consumptionLiters": 2.492
+    },
+    {
+      "lap": 14,
+      "paceSeconds": 96.9212,
+      "consumptionLiters": 2.569
+    },
+    {
+      "lap": 15,
+      "paceSeconds": 96.9762,
+      "consumptionLiters": 2.564
+    },
+    {
+      "lap": 16,
+      "paceSeconds": 97.3507,
+      "consumptionLiters": 2.568
+    },
+    {
+      "lap": 17,
+      "paceSeconds": 95.9353,
+      "consumptionLiters": 2.556
+    }
+  ]
+}

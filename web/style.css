@@ -62,3 +62,8 @@
 #spotter-standing-all .row{min-height:34px}
 #spotter-driver{display:block;white-space:normal;letter-spacing:0;color:#d4e3e9}
 #spotter-stop-history{line-height:1.7;color:#c6dce8}
+.race-plan-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.race-plan-metrics>div{display:flex;justify-content:space-between;gap:8px;padding:6px;border-bottom:1px solid #354a59;color:#b7cbd8;font-size:11px}
+.race-plan-metrics strong{color:#fff;text-align:right}
+
+#capture-sdk{background:#334c58;color:#fff;border:1px solid #8db6c7;border-radius:4px;padding:7px;cursor:pointer;font-weight:700;white-space:nowrap}#capture-status{font-size:11px;color:#d8e6eb;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
