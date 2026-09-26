@@ -166,7 +166,7 @@ class DashboardSource:
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
         self.stint_active = False
         self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
-        self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.debug_team_enabled=False;self.capture_status='Listo para capturar'
+        self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.debug_team_enabled=False;self.capture_status='Listo para capturar'
 
     def capture_sdk_once(self):
         """Save one SDK frame without starting another connection or polling loop."""
@@ -281,7 +281,7 @@ class DashboardSource:
                 levels=self.get('CarIdxLapCompleted',[]) or []
                 reading=valid_fuel(self.get('FuelLevel'))
                 if context.car_idx<len(levels) and levels[context.car_idx] is not None and levels[context.car_idx]>=0 and reading is not None:
-                    self.team_fuel_reference=(reading,int(levels[context.car_idx]));self.team_fuel_reference_valid=True
+                    self.team_fuel_reference=(reading,int(levels[context.car_idx]));self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             if context.auto_mode=='spotter' or force_spotter:
                 return self.spotter_payload(context,drivers,session,results,weekend,session_time,driver_info)
             live_last=self.get("CarIdxLastLapTime",[])
@@ -339,7 +339,7 @@ class DashboardSource:
             team_completed=car_completed[context.car_idx] if context.car_idx is not None and context.car_idx<len(car_completed) else None
             if fuel is not None and context.local_driving and team_completed is not None and team_completed>=0:
                 self.team_fuel_reference=(fuel,int(team_completed))
-                self.team_fuel_reference_valid=True
+                self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             if completed_laps is not None and fuel is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
             self.coach.capture(self.get("LapDistPct", player_pct), session_time,
@@ -388,7 +388,8 @@ class DashboardSource:
                 "header": {"car": car_label(player_driver), "track": weekend.get("TrackDisplayName", "Pista"),
                            "driver": player_driver.get("UserName", "Piloto"), "position": f"P{player['pos']}" if player else "P—",
                            "lap": f"VUELTA {lap_number}", "state": self.session_type_text(session.get("SessionType", "EN SESIÓN"))},
-                "self": {"fuel": f"{fuel:.1f} L" if fuel is not None else "—",
+                "self": {"fuel": f"{fuel:.1f} L · {'REAL LOCAL' if context.local_driving else 'SDK OBSERVADO'}" if fuel is not None else "—",
+                         "fuelValue":fuel,"fuelSource":('REAL LOCAL' if context.local_driving else 'SDK OBSERVADO') if fuel is not None else 'SIN DATO',
                          "lastUse": self.use_text(sum(self.fuel_per_lap) / len(self.fuel_per_lap) if self.fuel_per_lap else None),
                          "bestUse": self.use_text(min(self.fuel_per_lap) if self.fuel_per_lap else None),
                          "worstUse": self.use_text(max(self.fuel_per_lap) if self.fuel_per_lap else None),
@@ -413,7 +414,10 @@ class DashboardSource:
                 "behind":behind['gap'] if behind else '—',"remainingTime":clock_text(self.get('SessionTimeRemain')),
                 "stintLaps":max(0,completed_for_strategy-(self.strategy_stint_start_lap if self.strategy_stint_start_lap is not None else completed_for_strategy)),
                 "teamChoices":[{'idx':context.car_idx,'label':f"#{player_driver.get('CarNumber','—')} · {player_driver.get('TeamName') or player_driver.get('UserName') or '—'}"}] if context.car_idx is not None else []}
-            pilot_debug=self.team_diagnostics(context)
+            pilot_debug=dict(self.team_diagnostics(context),FuelLevelRaw=self.get('FuelLevel'),
+                FuelLevelValidated=valid_fuel(self.get('FuelLevel')),fuelValueUsed=fuel,
+                fuelSource=('REAL LOCAL' if context.local_driving else 'SDK OBSERVADO') if fuel is not None else 'SIN DATO',
+                localDriving=context.local_driving)
             if self.debug_team_enabled:pilot_debug.update(rosterConflicts=sorted(roster_conflicts),relativeRoster=[{'carIdx':r['idx'],'sdkUserName':cars.get(r['idx'],{}).get('UserName'),'shownDriver':r['driver']} for r in relative],classResultPositions=[{'carIdx':r['idx'],'classPositionRaw':results.get(r['idx'],{}).get('ClassPosition'),'shownPosition':r['pos'],'overallPosition':results.get(r['idx'],{}).get('Position')} for r in category_rows])
             payload['teamDebug']=pilot_debug
             raw_session_state = self.get("SessionState")
@@ -517,23 +521,29 @@ class DashboardSource:
         last_lap=seconds(at('CarIdxLastLapTime',idx)) or seconds(result.get('LastTime'))
         pace=self.strategy_settings.get('averageLapSeconds') or last_lap or seconds(result.get('FastestTime'))
         consumption=self.strategy_settings.get('consumptionLiters') or (sum(self.fuel_per_lap[-8:])/len(self.fuel_per_lap[-8:]) if self.fuel_per_lap else None)
-        estimated_fuel=estimated_team_fuel(*self.team_fuel_reference,completed,consumption) if self.team_fuel_reference_valid and self.team_fuel_reference and completed is not None else None
-        real_fuel=valid_fuel(self.get('FuelLevel')) if context.local_driving else None
-        if real_fuel is not None:estimated_fuel=real_fuel
+        fuel_raw=self.get('FuelLevel')
+        fuel_validated=valid_fuel(fuel_raw)
+        reference_fuel=estimated_team_fuel(*self.team_fuel_reference,completed,consumption) if self.team_fuel_reference_valid and self.team_fuel_reference and completed is not None else None
+        if reference_fuel is None and self.team_fuel_reference_valid and self.team_fuel_reference and completed==self.team_fuel_reference[1]:
+            reference_fuel=self.team_fuel_reference[0]
+        if fuel_validated is not None and idx is not None and completed is not None:
+            self.team_fuel_reference=(fuel_validated,completed)
+            self.team_fuel_reference_valid=True
+            self.team_fuel_reference_source='REAL LOCAL' if context.local_driving else 'SDK OBSERVADO'
         pct=at('CarIdxLapDistPct',idx)
         pit=at('CarIdxOnPitRoad',idx)
         self.team_completed_now=completed
         if pit is True and not self.strategy_last_on_pit:
             self.spotter_pre_pit_fuel=self.spotter_control.fuel_at(completed,consumption)
-            if self.spotter_pre_pit_fuel is None:self.spotter_pre_pit_fuel=estimated_fuel
+            if self.spotter_pre_pit_fuel is None:self.spotter_pre_pit_fuel=fuel_validated if fuel_validated is not None else reference_fuel
             self.spotter_control.pit_transition(True,completed)
             self.manual_stop_counted=True
         elif pit is False and self.strategy_last_on_pit:
             self.spotter_control.pit_transition(False,completed)
         manual_fuel=self.spotter_control.fuel_at(completed,consumption)
-        if real_fuel is None:
-            if self.spotter_control.fuel_source=='PENDIENTE':estimated_fuel=None
-            elif manual_fuel is not None:estimated_fuel=manual_fuel
+        fuel_used=(fuel_validated if fuel_validated is not None else
+                   manual_fuel if manual_fuel is not None else reference_fuel)
+        fuel_source=('REAL LOCAL' if context.local_driving else 'SDK OBSERVADO') if fuel_validated is not None else 'ESTIMADO' if fuel_used is not None else 'SIN DATO'
         if idx is not None and completed is not None:
             if self.strategy_stint_start_lap is None and pit is False:
                 self.strategy_stint_start_lap=completed
@@ -594,16 +604,18 @@ class DashboardSource:
                       and (context.team_id is None or d.get('TeamID')==context.team_id)]
         if idx is not None:
             try:
-                strategy=self.endurance_strategy_payload(estimated_fuel,lap or 0,completed or 0,pace,session_time,
+                strategy=self.endurance_strategy_payload(fuel_used,lap or 0,completed or 0,pace,session_time,
                                                          driver_info,driver,spotter=True)
             except (ValueError,TypeError,OverflowError,ZeroDivisionError):
                 logger.exception('LEGACY STRATEGY FAILED carIdx=%s',idx)
                 strategy={'available':False,'reason':'Error de cálculo en estrategia anterior.'}
         else:strategy={'available':False,'reason':'No se identificó el coche del equipo.'}
+        strategy['fuelSource']=fuel_source
+        strategy['fuelDataAvailable']=fuel_validated is not None
         remaining=number(self.get('SessionTimeRemain'))
         if remaining is not None and (remaining<=0 or remaining>=604800):remaining=None
         plan=race_plan(remaining_seconds=remaining,current_lap=completed or 0,lap_seconds=pace,
-            pit_seconds=self.strategy_settings.get('pitLossSeconds',30),current_fuel=estimated_fuel,
+            pit_seconds=self.strategy_settings.get('pitLossSeconds',30),current_fuel=fuel_used,
             consumption=consumption,tank=self.strategy_settings.get('tankCapacityLiters'),
             stops_completed=max(self.strategy_stops_completed,len(self.spotter_control.stops)),current_driver=driver,
             driver_assignments=self.strategy_driver_assignments,overrides=self.stop_overrides,
@@ -613,22 +625,24 @@ class DashboardSource:
         strategy['stopPlan']=plan
         strategy['boxLap']=f"VUELTA {plan['stops'][0]['lap']}" if plan['stops'] else '—'
         strategy['stopsRemaining']=plan['stopsRemaining']
-        strategy['autonomy']=f"{plan['autonomyLaps']} vueltas · EST." if plan['autonomyLaps'] is not None else '—'
+        strategy['autonomy']=f"{plan['autonomyLaps']} vueltas · {fuel_source}" if plan['autonomyLaps'] is not None else '—'
         pit_flags=arrays['CarIdxOnPitRoad'];lap_array=arrays['CarIdxLap']
         race_director=self.race_director.payload(class_rows,idx,
             {i:bool(flag) for i,flag in enumerate(pit_flags)},
             {i:value for i,value in enumerate(lap_array)}) if own else {'rival':'—','status':'Esperando coche del equipo.'}
         self.session_state.update_runtime(session_time=session_time,connected=True,
             on_track=bool(pct is not None and pct>=0),on_pit_road=bool(pit),in_garage=False)
-        team_debug=dict(self.team_diagnostics(context),racePlanState=plan['state'],racePlanMissing=plan['missing'],racePlanInputs={'remainingSeconds':remaining,'paceSeconds':pace,'fuelLiters':estimated_fuel,'consumptionLiters':consumption,'tankCapacityLiters':self.strategy_settings.get('tankCapacityLiters'),'completedLap':completed},totalDrivers=len(drivers),totalResults=len(results),carsWithLapDistPct=sum(v is not None and 0<=v<=1 for v in arrays['CarIdxLapDistPct']),carsWithLap=sum(v is not None and v>=0 for v in arrays['CarIdxLap']),carsWithCompletedLap=sum(v is not None and v>=0 for v in arrays['CarIdxLapCompleted']),classCarsInResults=len(class_rows),relativeAvailableCars=len(live),spotterPayloadReady=bool(idx is not None),relativeRows=len(relative),standingRows=len(standing),classId=class_id,lap=lap,completedLap=completed,lapDistPct=pct,onPitRoad=pit,fuelState=self.spotter_control.fuel_source,fuelSource='MANUAL' if manual_fuel is not None else 'ESTIMADO' if estimated_fuel is not None else 'NO DISPONIBLE',strategySource='SDK + MANUAL' if self.spotter_control.events else 'SDK + ESTIMACIÓN')
+        team_debug=dict(self.team_diagnostics(context),FuelLevelRaw=fuel_raw,FuelLevelValidated=fuel_validated,
+            fuelValueUsed=fuel_used,fuelSource=fuel_source,localDriving=context.local_driving,
+            racePlanState=plan['state'],racePlanMissing=plan['missing'],racePlanInputs={'remainingSeconds':remaining,'paceSeconds':pace,'fuelLiters':fuel_used,'consumptionLiters':consumption,'tankCapacityLiters':self.strategy_settings.get('tankCapacityLiters'),'completedLap':completed},totalDrivers=len(drivers),totalResults=len(results),carsWithLapDistPct=sum(v is not None and 0<=v<=1 for v in arrays['CarIdxLapDistPct']),carsWithLap=sum(v is not None and v>=0 for v in arrays['CarIdxLap']),carsWithCompletedLap=sum(v is not None and v>=0 for v in arrays['CarIdxLapCompleted']),classCarsInResults=len(class_rows),relativeAvailableCars=len(live),spotterPayloadReady=bool(idx is not None),relativeRows=len(relative),standingRows=len(standing),classId=class_id,lap=lap,completedLap=completed,lapDistPct=pct,onPitRoad=pit,fuelState=self.spotter_control.fuel_source,strategySource='SDK + MANUAL' if self.spotter_control.events else 'SDK + ESTIMACIÓN')
         if self.debug_team_enabled:
             team_debug.update(rosterConflicts=sorted(roster_conflicts),relativeRoster=[{'carIdx':r['idx'],'number':r['number'],'sdkUserName':by_idx.get(r['idx'],{}).get('UserName'),'sdkTeamName':by_idx.get(r['idx'],{}).get('TeamName'),'sdkUserID':by_idx.get(r['idx'],{}).get('UserID'),'shownDriver':r['driver']} for r in relative],classResultPositions=[{'carIdx':r['idx'],'classPositionRaw':results.get(r['idx'],{}).get('ClassPosition'),'shownPosition':r['pos'],'overallPosition':results.get(r['idx'],{}).get('Position'),'sdkUserName':by_idx.get(r['idx'],{}).get('UserName'),'sdkUserID':by_idx.get(r['idx'],{}).get('UserID')} for r in class_rows])
         return {'appVersion':installed_version(),'connected':True,'demo':False,
             'teamContext':{'autoMode':'spotter','carIdx':idx,'carNumber':context.car_number,'teamID':context.team_id,'classId':class_id,'teamName':context.team_name,'driver':driver,'driverSource':'MANUAL' if self.manual_team_driver else 'SDK' if self.confirmed_driver_name else 'NO CONFIRMADO','source':context.source,'teamChoices':team_choices,
-                           'fuelSource':'real' if real_fuel is not None else 'estimated' if estimated_fuel is not None else 'unavailable','gapSource':'estimated-car-progress',
+                           'fuelSource':fuel_source,'gapSource':'estimated-car-progress',
                            'ahead':ahead['gap'] if ahead else '—','behind':behind['gap'] if behind else '—',
                            'remainingTime':clock_text(self.get('SessionTimeRemain')),'completedLaps':completed,
-                           'lapDistPct':pct,'onPitRoad':pit,'fuelState':self.spotter_control.fuel_source if self.spotter_control.events or self.spotter_control.pit_pending else ('ESTIMADO' if estimated_fuel is not None else 'NO DISPONIBLE'),
+                           'lapDistPct':pct,'onPitRoad':pit,'fuelState':fuel_source,
                            'lastStopLap':self.spotter_control.last_stop_lap,'manualEvents':self.spotter_control.events[-12:],'controlError':self.spotter_event_error,
                            'stintLaps':max(0,(completed or 0)-(self.strategy_stint_start_lap if self.strategy_stint_start_lap is not None else (completed or 0)))},
             'header':{'car':car_label(car) if car else 'COCHE DEL EQUIPO SIN IDENTIFICAR',
@@ -636,7 +650,8 @@ class DashboardSource:
                       'position':f"P{own['pos']}" if own else 'P—',
                       'lap':f'VUELTA {lap}' if lap is not None else 'VUELTA —',
                       'state':self.session_type_text(session.get('SessionType','EN SESIÓN'))},
-            'self':{'fuel':f'{real_fuel:.1f} L · REAL' if real_fuel is not None else f'≈ {estimated_fuel:.1f} L · ESTIMADO' if estimated_fuel is not None else '—','lastUse':f'{consumption:.2f} L/v · EST.' if consumption else '—',
+            'self':{'fuel':f'{fuel_used:.1f} L · {fuel_source}' if fuel_validated is not None else f'≈ {fuel_used:.1f} L · ESTIMADO' if fuel_used is not None else '—',
+                    'fuelValue':fuel_used,'fuelSource':fuel_source,'lastUse':f'{consumption:.2f} L/v · EST.' if consumption else '—',
                     'bestUse':'—','worstUse':'—','lastLap':self.lap_text(last_lap),
                     'bestLap':'—','laps':[],'wear':{'FL':'—','FR':'—','RL':'—','RR':'—'},
                     'pit':'EN BOXES' if pit else 'EN PISTA' if pct is not None and pct>=0 else 'SIN DATOS',
@@ -651,7 +666,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):

@@ -79,8 +79,58 @@ class LiveAutoRacePlanTests(unittest.TestCase):
                                        {22:{'ClassPosition':2,'LapsComplete':247}},
                                        {},1000,info)
         self.assertIn('40.6 L · ESTIMADO',packet['self']['fuel'])
+        self.assertEqual(packet['teamDebug']['FuelLevelRaw'],0)
+        self.assertIsNone(packet['teamDebug']['FuelLevelValidated'])
+        self.assertAlmostEqual(packet['teamDebug']['fuelValueUsed'],40.6)
+        self.assertEqual(packet['teamDebug']['fuelSource'],'ESTIMADO')
+        self.assertEqual(packet['racePlan']['autonomyLaps'],int(packet['self']['fuelValue']/2.5))
+        self.assertEqual(packet['teamDebug']['racePlanInputs']['fuelLiters'],packet['self']['fuelValue'])
         self.assertEqual(source.team_fuel_reference,(50.6,243))
         self.assertEqual(packet['racePlan']['state'],'PLAN DISPONIBLE')
+
+    def test_observed_sdk_334_reaches_ui_and_plan_with_both_auto_states(self):
+        roster=[{'CarIdx':22,'UserID':1285290,'UserName':'David',
+                 'CarNumber':'95','TeamID':228623,'CarClassID':4011}]
+        info={'DriverUserID':531145,'DriverCarIdx':22,'Drivers':roster}
+        for driving in (False,True):
+            with self.subTest(driving=driving):
+                source=DashboardSource(force_demo=True)
+                source.strategy_settings.update(consumptionLiters=2.5,tankCapacityLiters=110)
+                source.get=lambda key,default=None:{'FuelLevel':33.4,'SessionTimeRemain':3878,
+                    'CarIdxLap':[0]*22+[388],'CarIdxLapCompleted':[0]*22+[387],
+                    'CarIdxLapDistPct':[None]*22+[.4],
+                    'CarIdxLastLapTime':[None]*22+[80.74],
+                    'CarIdxOnPitRoad':[False]*23}.get(key,default)
+                context=TeamCarContext.resolve(info,22,False,22,local_car_active=False)
+                context=type(context)(**{**vars(context),'local_driving':driving})
+                packet=source.spotter_payload(context,roster,{},
+                    {22:{'ClassPosition':2,'LapsComplete':387}}, {},1000,info)
+                label='REAL LOCAL' if driving else 'SDK OBSERVADO'
+                self.assertEqual(packet['self']['fuel'],f'33.4 L · {label}')
+                self.assertEqual(packet['self']['fuelValue'],33.4)
+                self.assertEqual(packet['teamDebug']['FuelLevelRaw'],33.4)
+                self.assertEqual(packet['teamDebug']['FuelLevelValidated'],33.4)
+                self.assertEqual(packet['teamDebug']['fuelSource'],label)
+                self.assertEqual(packet['teamDebug']['racePlanInputs']['fuelLiters'],33.4)
+                self.assertEqual(packet['racePlan']['autonomyLaps'],13)
+
+    def test_absent_sdk_fuel_is_not_converted_to_zero(self):
+        source=DashboardSource(force_demo=True)
+        roster=[{'CarIdx':22,'UserID':1285290,'UserName':'David',
+                 'CarNumber':'95','TeamID':228623,'CarClassID':4011}]
+        info={'DriverUserID':531145,'DriverCarIdx':22,'Drivers':roster}
+        source.get=lambda key,default=None:{'FuelLevel':None,'SessionTimeRemain':3878,
+            'CarIdxLap':[0]*22+[388],'CarIdxLapCompleted':[0]*22+[387],
+            'CarIdxLapDistPct':[None]*22+[.4],
+            'CarIdxLastLapTime':[None]*22+[80.74],
+            'CarIdxOnPitRoad':[False]*23}.get(key,default)
+        context=TeamCarContext.resolve(info,22,False,22)
+        packet=source.spotter_payload(context,roster,{},
+            {22:{'ClassPosition':2,'LapsComplete':387}}, {},1000,info)
+        self.assertEqual(packet['self']['fuel'],'—')
+        self.assertIsNone(packet['self']['fuelValue'])
+        self.assertIsNone(packet['teamDebug']['fuelValueUsed'])
+        self.assertIsNone(packet['teamDebug']['racePlanInputs']['fuelLiters'])
 
 
 if __name__=='__main__':unittest.main()
