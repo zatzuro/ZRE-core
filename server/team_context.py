@@ -36,7 +36,8 @@ class TeamCarContext:
     @classmethod
     def resolve(cls, driver_info, player_idx, is_on_track_car=None,
                 last_team_idx=None, manual_car_idx=None, local_user_id=None,
-                local_driver_name=None, last_team_id=None, manual_car_number=None, last_car_number=None):
+                local_driver_name=None, last_team_id=None, manual_car_number=None, last_car_number=None,
+                local_car_active=None):
         info = driver_info or {}
         drivers = [d for d in info.get('Drivers', []) if isinstance(d, dict)]
         player_idx = valid_index(player_idx)
@@ -45,9 +46,13 @@ class TeamCarContext:
         cars = {valid_index(d.get('CarIdx')): d for d in drivers
                 if not d.get('IsSpectator') and valid_index(d.get('CarIdx')) is not None}
         observed = cars.get(player_idx)
-        # Learn the local PERSON only while physically driving. Some team clients
-        # keep their PlayerCarIdx and DriverUserID pointed at the team car at swaps.
-        if is_on_track_car and observed and (local_user_id is None or str(local_user_id) == str(observed.get('UserID'))):
+        # The real team capture keeps DriverUserID on the local account while
+        # DriverInfo.Drivers[PlayerCarIdx].UserID changes with the teammate.
+        if sdk_user not in (None, 0, '') and local_user_id is None:
+            local_user_id = sdk_user
+        if observed and local_user_id is not None and str(local_user_id) == str(observed.get('UserID')):
+            local_driver_name = observed.get('UserName') or local_driver_name
+        elif is_on_track_car and observed and local_user_id is None:
             local_user_id = observed.get('UserID') or local_user_id
             local_driver_name = observed.get('UserName') or local_driver_name
         team_id = last_team_id
@@ -91,8 +96,11 @@ class TeamCarContext:
         # evidence that the current driver is the user of this local client.
         same_person = (local_user_id is not None and current_user is not None
                        and str(local_user_id) == str(current_user))
-        driving = bool(selected and is_on_track_car and car_idx == player_idx and same_person)
-        mode = 'driver' if driving or (local_user_id is None and selected and is_on_track_car and car_idx == player_idx) else 'spotter' if selected else 'driver'
+        # IsOnTrack can be false in pit lane; IsOnTrackCar and live local
+        # lap/fuel readings provide independent evidence of the local car.
+        local_active = bool(is_on_track_car or local_car_active)
+        driving = bool(selected and local_active and car_idx == player_idx and same_person)
+        mode = 'driver' if driving else 'spotter' if selected else 'driver'
         return cls(car_idx, player_idx, team_id, selected.get('UserName') if selected else None,
                    current_user, driving, mode, source, local_user_id, local_driver_name,
                    driver_idx, sdk_user, str(selected.get('CarNumber')) if selected and selected.get('CarNumber') is not None else None,
