@@ -1,8 +1,8 @@
 {
   "product": "ZRE Core",
   "name": "Zatzuro Race Engineering",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "channel": "stable",
   "repository": "zatzuro/ZRE-core",
-  "archive_ref": "release-2.4.2"
+  "archive_ref": "release-2.4.3"
 }
