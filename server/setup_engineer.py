@@ -143,6 +143,8 @@ class SetupEngineer:
         self.store = StintStore(self.root / "data" / "setup_engineer")
         self.current = None
         self.last_saved = None
+        self.last_report_path = None
+        self.status = "Esperando stint"
 
     def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None):
         self.current = {
@@ -154,6 +156,8 @@ class SetupEngineer:
             "startSessionTime": session_time,
             "driverFeedback": {},
         }
+        setup_name=(setup_snapshot or {}).get("metadata",{}).get("setupName")
+        self.status=f"Stint en curso · {setup_name or (setup_snapshot or {}).get('fingerprint') or 'setup sin identificar'}"
         return self.current
 
     def set_feedback(self, entry=None, mid=None, exit=None, comment=None):
@@ -231,6 +235,8 @@ class SetupEngineer:
         saved = self.store._read_json(path, record)
         self.current = None
         self.last_saved = saved
+        self.last_report_path = None
+        self.status=f"Stint {saved.get('stintNumber')} guardado · feedback pendiente"
         return saved
 
     def update_feedback(self, stint, entry=None, mid=None, exit=None, comment=None):
@@ -246,6 +252,7 @@ class SetupEngineer:
         session = stint.get("session") or {}
         path = self.store.save_stint(stint)
         self.last_saved = self.store._read_json(path, stint)
+        self.status=f"Stint {self.last_saved.get('stintNumber')} · feedback guardado"
         return self.last_saved
 
     def export_report(self, stint=None):
@@ -264,4 +271,7 @@ class SetupEngineer:
             session.get("car"), session.get("track"), session.get("layout"),
             before_number=number,
         )
-        return write_setup_report(path, record, previous, record.get("setupChanges"))
+        result=write_setup_report(path, record, previous, record.get("setupChanges"))
+        self.last_report_path=result
+        self.status=f"Reporte exportado · {result.name}"
+        return result
