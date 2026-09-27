@@ -226,6 +226,7 @@ class SetupEngineer:
             record["comparison"] = compare_stint_performance(previous, record)
 
         self.store.save_setup(session.get("car"), session.get("track"), session.get("layout"), setup)
+        self.store.save_track_profile(session.get("car"), session.get("track"), session.get("layout"), record["trackProfile"])
         path = self.store.save_stint(record)
         saved = self.store._read_json(path, record)
         self.current = None
