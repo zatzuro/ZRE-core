@@ -233,7 +233,7 @@ class LapCoach:
         variance=(sum((value-representative)**2 for value in durations)/len(durations)) if durations and representative is not None else None
         ranked=self._aggregate_advice(self.stint_advice,limit=3);repeated=[]
         for zone,avg_loss,title,tip,count,avg_pct,phase,confidence,ratio,total in ranked:
-            repeated.append({'zone':self.location_label(zone,avg_pct,phase),'title':title,'advice':tip,'occurrences':count,'sampleLaps':total,'repeatRatio':round(ratio,3),'confidence':confidence,'averageLoss':round(avg_loss,3)})
+            repeated.append({'zone':self.location_label(zone,avg_pct,phase),'title':title,'advice':tip,'phase':phase,'occurrences':count,'sampleLaps':total,'repeatRatio':round(ratio,3),'confidence':confidence,'averageLoss':round(avg_loss,3)})
         return {
             'validLaps':valid_laps,'bestLap':round(self.best_lap,4) if self.best_lap else None,
             'optimalLap':round(self.optimal,4) if self.optimal else None,
