@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 let flashKey = null, flashTimer = null, socket = null, activeView = null, latestData = null;
 let timingMode = localStorage.getItem('zre-timing-mode') === 'standing' ? 'standing' : 'relative';
 let rolePreference=['driver','spotter'].includes(localStorage.getItem('zre-role'))?localStorage.getItem('zre-role'):'auto',activeRole='driver';
+let driverViewPreference='auto';
 const renderCache = new Map(), query = new URLSearchParams(location.search);
 const forcedView=query.get('view'),debugEnabled=query.get('debug')==='1';const defaultStrategyConfig={baseStintLaps:37,extendedStintLaps:38,pitLossSeconds:30,manualRaceSeconds:36000,averageLapSeconds:null,consumptionLiters:null,tankCapacityLiters:null,driverNames:['Santiago','David','Herney'],driverAssignments:{}};let strategyConfig=(()=>{try{return {...defaultStrategyConfig,...JSON.parse(localStorage.getItem('zre-strategy-config')||'{}')}}catch(_){return {...defaultStrategyConfig}}})();
 
