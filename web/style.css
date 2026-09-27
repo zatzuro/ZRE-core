@@ -212,3 +212,36 @@
   .race-plan-window-values{grid-template-columns:1fr 1fr 1fr}
   .race-plan-dialog-kpis,.race-plan-dialog-grid{grid-template-columns:1fr}
 }
+
+
+/* Race Plan vNext — PILOTO execution-only card */
+.pilot-race-plan-card{display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;min-height:0;overflow:hidden}
+.pilot-race-plan-card .strategy-title>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pilot-race-plan-main{display:grid;grid-template-columns:1.05fr 1.25fr 1fr .9fr;gap:1px;background:var(--line);min-height:0;border-bottom:1px solid var(--line)}
+.pilot-race-plan-main>div{min-width:0;background:var(--panel2);padding:10px 11px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.pilot-race-plan-main span{font-size:8px;font-weight:900;color:var(--muted);letter-spacing:.55px}
+.pilot-race-plan-main strong{font-size:18px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pilot-race-plan-main small{font-size:9px;color:#9eb4c1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pilot-plan-box strong{font-size:30px}
+.pilot-plan-box b{font-size:11px;color:#6ebcff}
+.pilot-plan-alert{padding:8px 12px;text-align:center;font-size:13px;font-weight:1000;letter-spacing:.75px;background:#15212b;color:#bcd0dc;border-top:1px solid #31434f}
+.pilot-race-plan-card[data-state="window-open"] .pilot-plan-alert{background:#153727;color:#7cf2ad}
+.pilot-race-plan-card[data-state="box-next-lap"] .pilot-plan-alert{background:#443919;color:#ffe077}
+.pilot-race-plan-card[data-state="box-this-lap"] .pilot-plan-alert{background:#4c211b;color:#ff987b;font-size:15px}
+.pilot-race-plan-card[data-state="en-boxes"] .pilot-plan-alert{background:#16334a;color:#6fc8ff}
+.pilot-strategy-config{justify-self:end;margin:4px 7px 5px}
+.pilot-strategy-config summary{padding:4px 7px}
+@media(max-height:850px){
+  .pilot-race-plan-main>div{padding:7px 9px}
+  .pilot-race-plan-main strong{font-size:16px}
+  .pilot-plan-box strong{font-size:25px}
+  .pilot-plan-alert{padding:5px 10px;font-size:11px}
+  .pilot-strategy-config{margin:2px 6px 3px}
+}
+@media(max-width:1350px) and (min-width:1101px){
+  .pilot-race-plan-main{grid-template-columns:1fr 1.15fr .9fr .85fr}
+  .pilot-race-plan-main>div{padding-left:8px;padding-right:8px}
+}
+@media(max-width:1100px){
+  .pilot-race-plan-main{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
