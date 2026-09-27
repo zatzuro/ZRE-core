@@ -22,6 +22,15 @@ class TrackModelTests(unittest.TestCase):
         self.assertEqual(advice_marker("Velocidad mínima baja", metrics, 6, 12), (.462, "MID"))
         self.assertEqual(advice_marker("Aceleración tardía", metrics, 6, 12), (.486, "EXIT"))
 
+    def test_new_driver_metrics_map_to_expected_phase(self):
+        metrics = [None] * 18
+        metrics[2] = .61
+        metrics[3] = .56
+        metrics[12] = .58
+        metrics[14] = .59
+        self.assertEqual(advice_marker("Gas demasiado progresivo", metrics, 7, 12), (.61, "EXIT"))
+        self.assertEqual(advice_marker("Correcciones de volante", metrics, 7, 12), (.58, "MID"))
+
     def test_nearest_corner_entry_prefers_corner_ahead(self):
         corners = [
             {"number": 4, "pct": .31, "direction": "derecha"},
