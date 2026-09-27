@@ -95,7 +95,17 @@ def render_setup_report(stint, previous=None, setup_changes=None):
 
     lines = ["# ZRE SETUP ENGINEER REPORT", ""]
     lines += _section_map("SESSION", session)
-    lines += _section_map("CONDITIONS", stint.get("conditions") or {})
+    lines += ["## CONDITIONS", ""]
+    conditions=stint.get("conditions") or {}
+    for phase in ("start","end"):
+        values=conditions.get(phase) or {}
+        lines.append(f"### {phase.upper()}")
+        if values:
+            for key,value in values.items():
+                lines.append(f"- **{str(key).replace('_',' ').title()}:** {_value(value)} [MEASURED]" if value is not None else f"- **{str(key).replace('_',' ').title()}:** UNAVAILABLE")
+        else:
+            lines.append("UNAVAILABLE")
+        lines.append("")
     lines += _section_map("TRACK PROFILE", profile)
 
     lines += ["## CURRENT SETUP", ""]
