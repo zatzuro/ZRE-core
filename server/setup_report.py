@@ -37,6 +37,48 @@ def _section_map(title, mapping):
     return lines
 
 
+def _comparison_lines(comparison):
+    lines=["## COMPARISON VS PREVIOUS STINT",""]
+    if not comparison:
+        return lines+["No previous comparable stint.",""]
+    overall=comparison.get("overall") or {}
+    if overall:
+        lines.append("### OVERALL")
+        for key,item in overall.items():
+            delta=item.get("delta")
+            lines.append(f"- **{key}:** {item.get('before')} → {item.get('after')} · Δ {delta:+.4f}" if isinstance(delta,(int,float)) else f"- **{key}:** {_value(item)}")
+        lines.append("")
+    gained=comparison.get("gainedTime") or []
+    lost=comparison.get("lostTime") or []
+    lines.append("### WHERE TIME WAS GAINED")
+    lines.extend([f"- **{row.get('zone')}:** {row.get('averageZoneTimeDelta'):+.3f}s" for row in gained] or ["No clear gain above threshold."])
+    lines.append("")
+    lines.append("### WHERE TIME WAS LOST")
+    lines.extend([f"- **{row.get('zone')}:** +{row.get('averageZoneTimeDelta'):.3f}s" for row in lost] or ["No clear loss above threshold."])
+    lines.append("")
+    categories=comparison.get("categoryAverageZoneTimeDelta") or {}
+    if categories:
+        lines.append("### TRACK-DEMAND DELTAS")
+        for key,value in categories.items():
+            lines.append(f"- **{key}:** {value:+.3f}s average zone-time delta")
+        lines.append("")
+    changes=comparison.get("zoneChanges") or []
+    if changes:
+        lines.append("### CORNER DELTAS")
+        for row in changes:
+            details=[]
+            for key,label,unit in (
+                ("averageZoneTimeDelta","time","s"),("minSpeedKphDelta","min speed"," km/h"),
+                ("exitSpeedKphDelta","exit speed"," km/h"),("brakeDurationDelta","brake duration","s"),
+                ("throttleRampSecondsDelta","to full throttle","s"),("steeringCorrectionsDelta","steering corrections",""),
+            ):
+                value=row.get(key)
+                if isinstance(value,(int,float)):details.append(f"{label} {value:+.3f}{unit}")
+            if details:lines.append(f"- **{row.get('zone')}:** "+", ".join(details))
+        lines.append("")
+    return lines
+
+
 def render_setup_report(stint, previous=None, setup_changes=None):
     stint = stint or {}
     session = stint.get("session") or {}
@@ -109,7 +151,7 @@ def render_setup_report(stint, previous=None, setup_changes=None):
     lines.append("")
 
     lines += _section_map("DRIVER FEEDBACK", feedback)
-    lines += _section_map("COMPARISON VS PREVIOUS STINT", comparison)
+    lines += _comparison_lines(comparison)
 
     lines += ["## ZRE SETUP ENGINEER SUMMARY", ""]
     if summary:
