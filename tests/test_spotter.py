@@ -1,3 +1,4 @@
+import inspect
 import asyncio
 import unittest
 from pathlib import Path
@@ -24,6 +25,17 @@ class TeamContextTests(unittest.TestCase):
         self.assertIn("if(latestData)render(latestData)",js)
         self.assertEqual(js.count('new WebSocket('),1)
         self.assertEqual(js.count('location.replace('),1) # version update only
+
+class PilotSourceIsolationTests(unittest.TestCase):
+    def test_manual_driver_route_does_not_follow_spotter_context(self):
+        self.assertFalse(bridge.DashboardSource.use_spotter_payload('spotter',force_driver=True))
+
+    def test_pilot_source_is_player_car_idx(self):
+        source=inspect.getsource(bridge.DashboardSource.live_payload)
+        self.assertIn('pilot_idx=player_idx',source)
+        self.assertIn('player_driver=cars.get(pilot_idx,{})',source)
+        self.assertIn('results.get(pilot_idx, {})',source)
+        self.assertIn('car_completed[pilot_idx]',source)
 
 class RoleRoutingTests(unittest.TestCase):
     def test_auto_spotter_routes_spotter(self):
