@@ -1096,6 +1096,8 @@ async def websocket(request):
                         else:source.setup_engineer.status='No hay un stint guardado para asociar feedback'
                     elif setting.get('type')=='action' and setting.get('action')=='export_setup_report':
                         if not source.setup_engineer.export_report():source.setup_engineer.status='No hay un stint guardado para exportar'
+                    elif setting.get('type')=='action' and setting.get('action')=='race_plan_simulate':
+                        source.race_plan_runtime.simulate_stop(setting.get('lap'))
                     elif setting.get('type')=='action' and setting.get('action')=='import_setup_html':
                         source.setup_engineer.import_html_setup(setting.get('html'),setting.get('filename'))
                     elif setting.get('type')=='settings' and setting.get('key')=='setupSource':
