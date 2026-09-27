@@ -16,6 +16,7 @@ class RaceIdentity:
     team_id: Any
     car_number: str
     car_id: Any = None
+    session_num: Any = None
 
     @property
     def key(self) -> str:
@@ -26,6 +27,7 @@ class RaceIdentity:
             self.team_id,
             self.car_number or "unknown",
             self.car_id,
+            self.session_num,
         )
         return "|".join(str(part) for part in parts)
 
