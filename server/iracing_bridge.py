@@ -30,7 +30,8 @@ try:
     from server.audio_coach import AudioCoach
     from server.session_recorder import SessionRecorder
     from server.race_director import RaceDirector
-    from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text
+    from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
+    from server.race_state import RaceIdentity
     from server.team_context import TeamCarContext
     from server.team_timing import relative_position,relative_window,estimated_team_fuel
     from server.spotter_control import SpotterControl
@@ -44,7 +45,8 @@ except ModuleNotFoundError:
     from audio_coach import AudioCoach
     from session_recorder import SessionRecorder
     from race_director import RaceDirector
-    from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text
+    from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
+    from race_state import RaceIdentity
     from team_context import TeamCarContext
     from team_timing import relative_position,relative_window,estimated_team_fuel
     from spotter_control import SpotterControl
@@ -214,11 +216,49 @@ class DashboardSource:
         self.coach = LapCoach()
         self.audio_mode = "off"
         self.audio_coach = AudioCoach()
+        self.race_plan_audio_announced=set()
+        self.race_plan_audio_state=None
+        self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
         self.setup_engineer = SetupEngineer(ROOT)
+        self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
         self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.debug_team_enabled=False;self.capture_status='Listo para capturar'
+
+    def handle_race_plan_audio(self, payload):
+        """Speak meaningful Race Plan transitions once for the local driver."""
+        vnext=(payload or {}).get("racePlanVNext") or {}
+        plan=vnext.get("currentPlan") or vnext.get("plan") or {}
+        race_state=vnext.get("raceState") or {}
+        window=plan.get("window") or {}
+        status=str(window.get("state") or "")
+        target=window.get("target")
+        identity=(vnext.get("raceIdentity") or {}).get("key") or self.session_key
+        self.race_plan_audio_state=status or None
+        self.race_plan_audio_target=target
+        if race_state.get("on_pit_road"):
+            return None
+        messages={
+            "WINDOW OPEN":"Ventana de boxes abierta.",
+            "BOX NEXT LAP":"Box próxima vuelta.",
+            "BOX THIS LAP":"Box, box.",
+        }
+        message=messages.get(status)
+        if not message or self.audio_mode=="off":
+            return None
+        key=(str(identity),target,status)
+        if key in self.race_plan_audio_announced:
+            return None
+        self.race_plan_audio_announced.add(key)
+        if len(self.race_plan_audio_announced)>48:
+            self.race_plan_audio_announced=set(list(self.race_plan_audio_announced)[-32:])
+        logger.info("RACE PLAN AUDIO state=%s target=%s",status,target)
+        self.audio_coach.say(message)
+        return status
+
+    def race_plan_suppresses_coach_audio(self):
+        return self.race_plan_audio_state in ("WINDOW OPEN","BOX NEXT LAP","BOX THIS LAP")
 
     def capture_sdk_once(self):
         """Save one SDK frame without starting another connection or polling loop."""
@@ -494,6 +534,11 @@ class DashboardSource:
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
             payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
+            payload["racePlanVNext"]=self.race_plan_vnext_payload(
+                context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
+                fuel,'REAL LOCAL' if fuel is not None else 'SIN DATO',lap_number,completed_for_strategy,
+                average_lap,on_pit_road,session_time)
+            self.handle_race_plan_audio(payload)
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
@@ -579,6 +624,43 @@ class DashboardSource:
             self.active_stint_driver=self.manual_team_driver
             self.manual_stop_counted=True
         return None
+
+    def race_plan_vnext_payload(self,context,session,results,weekend,driver_info,current_driver,
+                                fuel_value,fuel_source,current_lap,completed_laps,pace,on_pit,session_time):
+        car_idx=context.car_idx
+        car=next((d for d in (driver_info.get('Drivers',[]) or []) if isinstance(d,dict) and d.get('CarIdx')==car_idx),{}) if car_idx is not None else {}
+        identity=RaceIdentity(
+            weekend.get('SessionID'),weekend.get('SubSessionID'),weekend.get('TrackID'),
+            weekend.get('TrackConfigName') or 'default',context.team_id,
+            context.car_number or car.get('CarNumber') or 'unknown',car.get('CarID'),
+            self.get('SessionNum'),
+        )
+        car_laps=self.get('CarIdxLap',[]) or []
+        car_last=self.get('CarIdxLastLapTime',[]) or []
+        _,leader_lap,leader_pace=leader_from_results(results,car_laps,car_last)
+        laps_remaining=self.get('SessionLapsRemainEx')
+        if laps_remaining is None:laps_remaining=self.get('SessionLapsRemain')
+        physical=number(driver_info.get('DriverCarFuelMaxLtr')) or number(self.strategy_settings.get('tankCapacityLiters'))
+        max_pct=number(driver_info.get('DriverCarMaxFuelPct'))
+        require_tires=bool(session.get('SessionEnforceTireCompoundChange'))
+        try:
+            return self.race_plan_runtime.observe_frame(
+                identity=identity,session_type=session.get('SessionType'),
+                remaining_seconds=self.get('SessionTimeRemain'),session_total_seconds=self.get('SessionTimeTotal'),
+                current_lap=current_lap,completed_laps=completed_laps,own_pace_seconds=pace,
+                leader_lap=leader_lap,leader_pace_seconds=leader_pace,laps_remaining=laps_remaining,
+                current_driver=current_driver,current_fuel_liters=fuel_value,fuel_source=fuel_source,
+                physical_tank_liters=physical,max_fuel_pct=max_pct,on_pit_road=bool(on_pit),
+                session_flags=self.get('SessionFlags'),pit_loss_seconds=self.strategy_settings.get('pitLossSeconds',30.0),
+                mandatory_stops_remaining=0,require_tire_change=require_tires,
+                min_drivers=weekend.get('MinDrivers'),max_drivers=weekend.get('MaxDrivers'),
+                session_time=session_time,last_lap_time=(car_last[car_idx] if car_idx is not None and car_idx<len(car_last) else None),
+                auto_fuel_enabled=self.get('dpFuelAutoFillEnabled'),auto_fuel_active=self.get('dpFuelAutoFillActive'),
+                pit_sv_fuel=self.get('PitSvFuel'),
+            )
+        except (ValueError,TypeError,OverflowError,ZeroDivisionError):
+            logger.exception('RACE PLAN VNEXT FAILED carIdx=%s',car_idx)
+            return {'available':False,'reason':'Error en Race Plan vNext.'}
 
     def team_diagnostics(self,context):
         idx=context.car_idx
@@ -713,6 +795,9 @@ class DashboardSource:
             base_stint_laps=self.strategy_settings.get('baseStintLaps'),
             extended_stint_laps=self.strategy_settings.get('extendedStintLaps'))
         strategy['stopPlan']=plan
+        race_plan_vnext=self.race_plan_vnext_payload(
+            context,session,results,weekend,driver_info,driver,fuel_used,fuel_source,
+            lap or 0,completed or 0,pace,pit,session_time)
         strategy['boxLap']=f"VUELTA {plan['stops'][0]['lap']}" if plan['stops'] else '—'
         strategy['stopsRemaining']=plan['stopsRemaining']
         strategy['autonomy']=f"{plan['autonomyLaps']} vueltas · {fuel_source}" if plan['autonomyLaps'] is not None else '—'
@@ -748,7 +833,7 @@ class DashboardSource:
                     'pitWindow':'—','nextStop':strategy.get('boxLap','—')},
             'lastLapSummary':None,'relative':relative,'standing':standing,'standingAll':class_rows,'relativeAvailableCars':len(live),
             'capabilities':{'coachControls':False},'coach':{},'strategy':{},
-            'raceDirector':race_director,'enduranceStrategy':strategy,'racePlan':plan,
+            'raceDirector':race_director,'enduranceStrategy':strategy,'racePlan':plan,'racePlanVNext':race_plan_vnext,
             'sessionSummary':{'active':False},'teamDebug':team_debug}
 
     def reset_session_tracking(self):
@@ -756,7 +841,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -845,9 +930,12 @@ class DashboardSource:
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
         coach_ok=self.coach.finish(completed,pending.get("valid"))
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"telemetry":self.coach.last_lap_record})
+        self.race_plan_runtime.record_local_lap(
+            pending["lap"],usage,bool(pending.get("valid")),completed,
+            on_pit=bool(self.get("OnPitRoad",False)),caution=is_caution_flag(self.get("SessionFlags")))
         if coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
-            if self.audio_mode=="lap":
+            if self.audio_mode=="lap" and not self.race_plan_suppresses_coach_audio():
                 if self.coach.advice:
                     item=self.coach.advice[0];marker_pct=item[4] if len(item)>4 else None;phase=item[5] if len(item)>5 else None;label=self.coach.location_label(item[0],marker_pct,phase);logger.info("AUDIO PLAY location=%s zone=%s phase=%s loss=%.3f",label,item[0],phase,item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
                 else:self.audio_coach.say(f"Vuelta {pending['lap']}. Sin una pérdida clara para corregir.")
@@ -1017,6 +1105,7 @@ async def websocket(request):
                 try:
                     import json
                     setting=json.loads(message.data)
+                    if not isinstance(setting,dict):continue
                     if setting.get("type")=="settings" and setting.get("key")=="audio" and setting.get("value") in ("off","lap","corners"):source.audio_mode=setting["value"]
                     elif setting.get("type")=="settings" and setting.get("key")=="rival":source.race_director.set_selected(setting.get("value"))
                     elif setting.get("type")=="settings" and setting.get("key")=="strategy":source.apply_strategy_settings(setting.get("value"))
@@ -1045,6 +1134,8 @@ async def websocket(request):
                         else:source.setup_engineer.status='No hay un stint guardado para asociar feedback'
                     elif setting.get('type')=='action' and setting.get('action')=='export_setup_report':
                         if not source.setup_engineer.export_report():source.setup_engineer.status='No hay un stint guardado para exportar'
+                    elif setting.get('type')=='action' and setting.get('action')=='race_plan_simulate':
+                        source.race_plan_runtime.simulate_stop(setting.get('lap'))
                     elif setting.get('type')=='action' and setting.get('action')=='import_setup_html':
                         source.setup_engineer.import_html_setup(setting.get('html'),setting.get('filename'))
                     elif setting.get('type')=='settings' and setting.get('key')=='setupSource':

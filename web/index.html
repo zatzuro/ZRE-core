@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="zre-build" content="2.5.6.2">
+  <meta name="zre-build" content="2.6.0">
   <title>ZRE Core · iRacing Team Engineer</title>
-  <link rel="stylesheet" href="/static/style.css?v=2.5.6.2">
+  <link rel="stylesheet" href="/static/style.css?v=2.6.0">
 </head>
 <body data-view="live">
 <main class="dashboard">
   <header class="session-header">
-    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.5.6.2</span></div>
+    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.6.0</span></div>
     <div class="session-info"><strong id="car">CONECTANDO</strong><span id="track">iRacing Dashboard</span></div>
     <div class="driver-header"><span>PILOTO</span><strong id="header-driver">—</strong></div>
     <div class="driver-header compact"><span>POS</span><strong id="header-position">P—</strong></div>
@@ -44,12 +44,17 @@
         <div class="rival-main"><span id="rival-mode">AUTO</span><strong id="rival-name">—</strong><b id="rival-status">Esperando rivales de clase</b></div>
         <div class="rival-kpis"><div><span>POSICIÓN</span><strong id="rival-position">—</strong></div><div><span>GAP</span><strong id="rival-gap">—</strong></div><div><span>ÚLTIMA</span><strong id="rival-last">—</strong></div><div><span>VUELTA</span><strong id="rival-lap">—</strong></div></div>
       </article>
-      <article id="endurance-strategy-card" class="focus-card endurance-strategy-card" data-state="idle">
-        <div class="card-title strategy-title"><h2>ESTRATEGIA / STINTS</h2><span id="strategy-verdict">ESPERANDO DATOS</span></div>
-        <div class="strategy-live-kpis"><div><span>STINT ACTUAL</span><strong id="strategy-current-stint">—</strong></div><div><span>PILOTO</span><strong id="strategy-driver">—</strong></div><div><span>BOX EST.</span><strong id="strategy-box-lap">—</strong></div><div><span>AUTONOMÍA</span><strong id="strategy-autonomy">—</strong></div><div><span>PARADAS REST.</span><strong id="strategy-stops">—</strong></div><div><span>ÚLTIMA PARADA</span><strong id="strategy-avoidable">—</strong></div><div><span>EXTENSIÓN</span><strong id="strategy-extension">—</strong></div><div><span>OBJETIVO</span><strong id="strategy-target">—</strong></div></div>
-        <div class="strategy-bottom"><div class="strategy-compare"><span id="strategy-base">BASE —</span><span id="strategy-extended">EXT. —</span><b id="strategy-remaining-time">—</b></div><div id="strategy-timeline" class="strategy-timeline"><span class="timeline-empty">Esperando proyección…</span></div>
-          <details class="strategy-config"><summary>AJUSTAR</summary><div class="strategy-config-grid"><label>BASE<input id="strategy-base-input" type="number" min="1" value="37"></label><label>EXT.<input id="strategy-extended-input" type="number" min="1" value="38"></label><label>PÉRDIDA BOX (s)<input id="strategy-pit-loss-input" type="number" min="0" value="30"></label><label>DURACIÓN (h)<input id="strategy-race-hours-input" type="number" min=".1" step=".5" value="10"></label><label>RITMO (s, 0=AUTO)<input id="strategy-lap-input" type="number" min="0" step=".001" value="0"></label><label>CONSUMO (VACÍO=AUTO)<input id="strategy-consumption-input" type="number" min="0" step=".01"></label><label>TANQUE L (VACÍO=AUTO)<input id="strategy-tank-input" type="number" min="0" step=".1"></label><label class="drivers-input">PILOTOS<input id="strategy-drivers-input" type="text" value="Santiago, David, Herney"></label></div><p>Haz clic en un stint de la línea para asignar/cambiar piloto.</p></details>
+      <article id="endurance-strategy-card" class="focus-card endurance-strategy-card pilot-race-plan-card" data-state="idle">
+        <div class="card-title strategy-title"><h2>RACE PLAN</h2><span id="strategy-verdict">ESPERANDO DATOS</span></div>
+        <div class="pilot-race-plan-main">
+          <div class="pilot-plan-box"><span>BOX</span><strong id="pilot-plan-box">—</strong><b id="pilot-plan-countdown">—</b></div>
+          <div><span>VENTANA</span><strong id="pilot-plan-window">—</strong><small id="pilot-plan-range">—</small></div>
+          <div><span>FUEL</span><strong id="pilot-plan-fuel">—</strong><small id="pilot-plan-fuel-source">—</small></div>
+          <div><span>TYRES</span><strong id="pilot-plan-tyres">—</strong><small id="pilot-plan-tyres-note">SIN DECISIÓN</small></div>
         </div>
+        <div id="pilot-plan-alert" class="pilot-plan-alert">ESPERANDO RACE PLAN</div>
+        <div class="pilot-plan-legacy" hidden><strong id="strategy-current-stint">—</strong><strong id="strategy-driver">—</strong><strong id="strategy-box-lap">—</strong><strong id="strategy-autonomy">—</strong><strong id="strategy-stops">—</strong><strong id="strategy-avoidable">—</strong><strong id="strategy-extension">—</strong><strong id="strategy-target">—</strong><span id="strategy-base">BASE —</span><span id="strategy-extended">EXT. —</span><b id="strategy-remaining-time">—</b><div id="strategy-timeline"></div></div>
+        <details class="strategy-config pilot-strategy-config"><summary>AJUSTAR</summary><div class="strategy-config-grid"><label>BASE<input id="strategy-base-input" type="number" min="1" value="37"></label><label>EXT.<input id="strategy-extended-input" type="number" min="1" value="38"></label><label>PÉRDIDA BOX (s)<input id="strategy-pit-loss-input" type="number" min="0" value="30"></label><label>DURACIÓN (h)<input id="strategy-race-hours-input" type="number" min=".1" step=".5" value="10"></label><label>RITMO (s, 0=AUTO)<input id="strategy-lap-input" type="number" min="0" step=".001" value="0"></label><label>CONSUMO (VACÍO=AUTO)<input id="strategy-consumption-input" type="number" min="0" step=".01"></label><label>TANQUE L (VACÍO=AUTO)<input id="strategy-tank-input" type="number" min="0" step=".1"></label><label class="drivers-input">PILOTOS<input id="strategy-drivers-input" type="text" value="Santiago, David, Herney"></label></div><p>Compatibilidad con la estrategia anterior. Race Plan vNext calcula minimumStops automáticamente.</p></details>
       </article>
     </section>
     <section class="boards-grid">
@@ -64,10 +69,47 @@
     <div class="spotter-choice"><label>COCHE DEL EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label><label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label><span id="spotter-identity-warning">Selecciona el coche si ZRE no lo identifica.</span></div>
     <div class="spotter-panels"><article class="focus-card"><h2>RELATIVE EN PISTA <small id="spotter-relative-count">· — coches con posición disponible</small></h2><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ</span></div><div id="spotter-relative-rows"></div></article><article class="focus-card"><h2>CLASS STANDINGS</h2><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ</span></div><div id="spotter-standing-rows"></div><details><summary>VER TODOS</summary><div id="spotter-standing-all"></div></details></article></div>
     <div class="spotter-panels"><article class="focus-card"><div class="card-title"><h2>RIVAL ESTRATÉGICO</h2><strong id="spotter-rival-mode">AUTO</strong></div><div class="rival-picker"><button id="spotter-rival-auto" type="button" aria-pressed="true">AUTO</button><input id="spotter-rival-filter" type="search" placeholder="Buscar #, piloto o posición"><select id="spotter-rival-select"><option value="auto">AUTO · rival estratégico</option></select></div><div class="spotter-kpis"><div><small>RIVAL</small><strong id="spotter-rival-name">—</strong></div><div><small>POSICIÓN</small><strong id="spotter-rival-pos">—</strong></div><div><small>GAP</small><strong id="spotter-rival-gap">—</strong></div><div><small>ÚLTIMA</small><strong id="spotter-rival-last">—</strong></div><div><small>VUELTA</small><strong id="spotter-rival-lap">—</strong></div><div><small>ESTADO</small><strong id="spotter-rival-pit">—</strong></div></div></article>
-    <article class="focus-card"><h2>RACE PLAN · <small id="spotter-plan-state">SIN DATOS SUFICIENTES</small></h2><p id="spotter-plan-summary">Esperando datos…</p><div class="race-plan-metrics"><div>STINT ACTUAL <strong id="spotter-plan-current-stint">—</strong></div><div>PRÓXIMO BOX <strong id="spotter-plan-box">—</strong></div><div>STINTS RESTANTES <strong id="spotter-plan-stints">—</strong></div><div>PARADAS RESTANTES <strong id="spotter-plan-stops">—</strong></div><div>AUTONOMÍA ESTIMADA <strong id="spotter-plan-autonomy">—</strong></div><div>ÚLTIMO STINT ESTIMADO <strong id="spotter-plan-last-stint">—</strong></div><div>PARADA EVITABLE <strong id="spotter-plan-avoidable">—</strong></div></div><div id="spotter-stop-plan">Esperando proyección…</div></article></div>
+    <article id="spotter-race-plan-card" class="focus-card spotter-race-plan-card" data-state="idle">
+      <div class="card-title race-plan-title"><h2>RACE PLAN</h2><div><span id="spotter-plan-state">SIN DATOS SUFICIENTES</span><button id="spotter-race-plan-expand" type="button" aria-label="Expandir Race Plan">↗</button></div></div>
+      <div class="race-plan-compact-main">
+        <div class="race-plan-next"><small>PRÓXIMA PARADA</small><strong id="spotter-plan-box">—</strong><b id="spotter-plan-countdown">—</b></div>
+        <div class="race-plan-window">
+          <small>VENTANA DE PARADA</small>
+          <div class="race-plan-window-values"><span>EARLIEST <b id="spotter-plan-earliest">—</b></span><span>TARGET <b id="spotter-plan-target">—</b></span><span>FUEL LIMIT <b id="spotter-plan-fuel-limit">—</b></span></div>
+          <div class="race-plan-window-bar"><i></i><em id="spotter-plan-window-marker"></em></div>
+        </div>
+      </div>
+      <div class="race-plan-compact-metrics">
+        <div><span>PLAN ACTUAL</span><strong id="spotter-plan-stops">—</strong></div>
+        <div><span>Δ INICIAL</span><strong id="spotter-plan-delta">—</strong></div>
+        <div><span>FUEL</span><strong id="spotter-plan-fuel-add">—</strong></div>
+        <div><span>FINAL EST.</span><strong id="spotter-plan-finish">—</strong></div>
+      </div>
+      <div id="spotter-vnext-stints" class="race-plan-stint-map"><span>Esperando proyección…</span></div>
+      <p id="spotter-plan-summary">Esperando datos…</p>
+      <div class="race-plan-legacy-metrics" hidden><strong id="spotter-plan-current-stint">—</strong><strong id="spotter-plan-stints">—</strong><strong id="spotter-plan-autonomy">—</strong><strong id="spotter-plan-last-stint">—</strong><strong id="spotter-plan-avoidable">—</strong></div>
+    </article></div>
     <article class="focus-card"><h2>HISTORIAL DE PARADAS</h2><div id="spotter-stop-history">SIN PARADAS</div></article>
     <article class="focus-card spotter-controls"><h2>CONTROL DE PARADA / STINT</h2><p>iRacing aporta vueltas, posición y estado de pista. Aquí corriges manualmente lo que el SDK no entrega al spotter: repostaje, piloto y nueva referencia de stint.</p><p id="spotter-control-status">Sin eventos manuales</p><button type="button" data-spotter-action="stop">REGISTRAR PARADA</button><label>COMBUSTIBLE<select id="spotter-fuel-action"><option value="no_fuel">SIN REPOSTAR</option><option value="fill">LLENAR TANQUE</option><option value="add_fuel">+ LITROS</option></select></label><input id="spotter-added-liters" type="number" min="0.1" max="300" step="0.1" placeholder="Litros añadidos"><button type="button" id="spotter-fuel-submit">REGISTRAR COMBUSTIBLE</button><label>PILOTO<select id="spotter-driver-select"></select></label><button type="button" data-spotter-action="driver">CAMBIO DE PILOTO</button><button type="button" data-spotter-action="new_stint">INICIAR NUEVO STINT</button><p>Para LLENAR, configura TANQUE L en Estrategia desde PISTA cuando estés en PILOTO; también puedes usar la configuración de estrategia aquí:</p><label>TANQUE L · MANUAL<input id="spotter-tank-input" type="number" min="1" step="0.1" placeholder="Capacidad en litros"></label><label>CONSUMO L/V · MANUAL<input id="spotter-consumption-input" type="number" min="0.01" step="0.01" placeholder="Consumo medio"></label></article>
   </section>
+
+  <dialog id="race-plan-dialog" class="race-plan-dialog">
+    <form method="dialog">
+      <div class="race-plan-dialog-heading"><div><span>STRATEGY ENGINE</span><h2>ZRE RACE PLAN</h2></div><button type="submit" aria-label="Cerrar">×</button></div>
+      <div class="race-plan-dialog-kpis">
+        <div><span>PLAN INICIAL</span><strong id="race-plan-popup-initial">—</strong></div>
+        <div><span>PLAN ACTUAL</span><strong id="race-plan-popup-current">—</strong></div>
+        <div><span>FINAL ESTIMADO</span><strong id="race-plan-popup-finish">—</strong></div>
+        <div><span>CONFIANZA FUEL</span><strong id="race-plan-popup-confidence">—</strong></div>
+      </div>
+      <section class="race-plan-dialog-section"><h3>PRÓXIMA PARADA</h3><div class="race-plan-dialog-grid"><div>EARLIEST SAFE <strong id="race-plan-popup-earliest">—</strong></div><div>TARGET <strong id="race-plan-popup-target">—</strong></div><div>FUEL LIMIT <strong id="race-plan-popup-limit">—</strong></div><div>FUEL A AÑADIR <strong id="race-plan-popup-fuel">—</strong></div></div></section>
+      <section class="race-plan-dialog-section"><h3>MAPA DE STINTS</h3><div id="race-plan-popup-stints" class="race-plan-stint-map expanded"><span>Esperando proyección…</span></div></section>
+      <section class="race-plan-dialog-section"><h3>DATOS / CONFIANZA</h3><div class="race-plan-dialog-grid"><div>OBSERVADO <strong id="race-plan-popup-observed">—</strong></div><div>ESTRATEGIA <strong id="race-plan-popup-strategy">—</strong></div><div>MARGEN <strong id="race-plan-popup-margin">—</strong></div><div>FUENTE MARGEN <strong id="race-plan-popup-margin-source">—</strong></div><div>AUTO FUEL <strong id="race-plan-popup-autofuel">—</strong></div><div>PITSV FUEL <strong id="race-plan-popup-pitsv">—</strong></div></div></section>
+      <section class="race-plan-dialog-section race-plan-simulator"><h3>SIMULAR PARADA</h3><div><label>VUELTA A SIMULAR<input id="race-plan-sim-lap" type="number" min="1" step="1" placeholder="Ahora"></label><button id="race-plan-sim-now" type="button">SIMULAR PARADA AHORA</button></div><p id="race-plan-sim-result">No modifica el plan.</p></section>
+      <details class="race-plan-dialog-section race-plan-manual"><summary>AJUSTES MANUALES DE PARADAS EXISTENTES</summary><p>Se conserva el editor anterior para overrides manuales. Race Plan vNext no depende de estos ajustes para calcular minimumStops.</p><div id="spotter-stop-plan">Esperando proyección…</div></details>
+      <div class="race-plan-dialog-actions"><button type="submit">CERRAR</button></div>
+    </form>
+  </dialog>
 
   <section id="pit-view" class="screen pit-view" hidden>
     <section class="pit-top-grid">
@@ -104,8 +146,8 @@
   </section>
 
   <aside id="debug-panel" class="debug-panel" hidden><div><strong>COACH DEBUG</strong><span>?debug=1</span></div><pre id="debug-content">Esperando telemetría…</pre></aside>
-  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.5.6.2</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
+  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.6.0</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
 </main>
-<script src="/static/app.js?v=2.5.6.2"></script>
+<script src="/static/app.js?v=2.6.0"></script>
 </body>
 </html>

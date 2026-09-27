@@ -171,3 +171,12 @@ class SocketTests(unittest.IsolatedAsyncioTestCase):
             for _ in range(40):
                 packet = await asyncio.wait_for(ws.receive_json(), 3)
                 self.assertEqual(packet['appVersion'], bridge.APP_VERSION)
+
+    async def test_non_object_json_does_not_close_socket(self):
+        async with self.client.ws_connect('/ws') as ws:
+            await ws.receive_json()
+            await ws.send_json([{'type': 'settings'}])
+            await ws.send_json(None)
+            await ws.send_json({'type': 'settings', 'key': 'role', 'value': 'driver'})
+            self.assertTrue((await asyncio.wait_for(ws.receive_json(), 3))['connected'])
+            self.assertTrue((await asyncio.wait_for(ws.receive_json(), 3))['connected'])
