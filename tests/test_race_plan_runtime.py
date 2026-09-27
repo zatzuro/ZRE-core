@@ -172,6 +172,28 @@ class RacePlanRuntimeTests(unittest.TestCase):
         self.assertIn("payload[\"enduranceStrategy\"]", source)
         self.assertIn("'racePlan':plan,'racePlanVNext':race_plan_vnext", source)
 
+    def test_simulate_stop_does_not_mutate_plan_target_or_hysteresis(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runtime = RacePlanRuntime(folder, margin_paths=[])
+            identity = self.identity()
+            self.frame(runtime, identity=identity, completed_laps=0, current_lap=1, current_fuel_liters=100)
+            fuel = 100
+            for lap in range(1, 5):
+                fuel -= 2.5
+                self.frame(runtime, identity=identity, completed_laps=lap, current_lap=lap+1,
+                           current_fuel_liters=fuel, session_time=1000+lap*100,
+                           remaining_seconds=3600-lap*100, last_lap_time=100)
+            before = runtime.engine.snapshot()
+            target_before = runtime.engine.committed_target_lap
+            sim = runtime.simulate_stop()
+            after = runtime.engine.snapshot()
+            self.assertTrue(sim["valid"])
+            self.assertEqual(before, after)
+            self.assertEqual(runtime.engine.committed_target_lap, target_before)
+            self.assertIn("preservesMinimum", sim)
+            self.assertEqual(runtime.payload()["simulation"], sim)
+
+
     def test_runtime_has_no_sdk_reader_timer_or_thread(self):
         import server.strategy_runtime as runtime_module
         source = inspect.getsource(runtime_module.RacePlanRuntime)
