@@ -279,7 +279,7 @@ class SetupEngineerBaseTests(unittest.TestCase):
             second = engineer.finish_stint({**engineering, "bestLap": 89.9}, 40.0, 860.0, 3.75)
             self.assertEqual(second["stintNumber"], 2)
             self.assertEqual(second["setupChanges"][0]["parameter"], "Aero.Wing")
-            self.assertIn("bestLap", second["comparison"])
+            self.assertIn("bestLap", second["comparison"]["overall"])
 
 
     def test_markdown_report_contains_required_contract(self):
