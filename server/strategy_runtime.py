@@ -164,6 +164,9 @@ class RacePlanRuntime:
         self.last_signature=None
         self.last_persisted_signature=None
         self.sample_ids=set()
+        self.own_pace_samples=[]
+        self.leader_pace_samples=[]
+        self.last_leader_lap=None
         self.margin_laps,self.margin_source=read_iracing_auto_fuel_margin(margin_paths)
         self.auto_fuel_enabled=None
         self.auto_fuel_active=None
@@ -204,6 +207,9 @@ class RacePlanRuntime:
         self.stop_history=[]
         self.last_driver=None
         self.sample_ids=set()
+        self.own_pace_samples=[]
+        self.leader_pace_samples=[]
+        self.last_leader_lap=None
         history=self.store.load_history(*self.history_key) or {}
         for entry in history.get("entries",[]):
             if not isinstance(entry,dict) or entry.get("raceKey")==identity.key:continue
@@ -221,6 +227,9 @@ class RacePlanRuntime:
             self.last_on_pit=runtime.get("lastOnPit")
             self.last_driver=runtime.get("lastDriver")
             self.sample_ids=set(str(v) for v in runtime.get("sampleIds",[]))
+            self.own_pace_samples=[float(v) for v in runtime.get("ownPaceSamples",[]) if _positive(v) is not None][-12:]
+            self.leader_pace_samples=[float(v) for v in runtime.get("leaderPaceSamples",[]) if _positive(v) is not None][-12:]
+            self.last_leader_lap=runtime.get("lastLeaderLap")
         model=saved.get("fuelModel") if isinstance(saved,dict) else None
         if isinstance(model,dict):
             restored=FuelModel.restore(model)
@@ -252,9 +261,13 @@ class RacePlanRuntime:
     def record_local_lap(self, lap, liters, valid, lap_time_seconds, *, on_pit=False, caution=False):
         if self.identity is None:return False
         classification=CAUTION if caution else PIT_LAP if on_pit else GREEN_FULL if valid else "INVALID"
-        return self._add_sample(FuelLapSample(
-            int(lap),_number(liters),classification,_positive(lap_time_seconds),"REAL LOCAL",bool(valid)
+        pace=_positive(lap_time_seconds)
+        added=self._add_sample(FuelLapSample(
+            int(lap),_number(liters),classification,pace,"REAL LOCAL",bool(valid)
         ))
+        if added and classification==GREEN_FULL and pace is not None:
+            self.own_pace_samples.append(pace);self.own_pace_samples=self.own_pace_samples[-12:]
+        return added
 
     def _observed_fuel(self, value, source):
         if str(source or "") not in ("REAL LOCAL","SDK OBSERVADO"):
@@ -279,9 +292,12 @@ class RacePlanRuntime:
             classification=CAUTION
         else:
             classification=GREEN_FULL
+        pace=_positive(lap_time)
         added=self._add_sample(FuelLapSample(
-            int(completed),usage,classification,_positive(lap_time),str(source or "SDK"),True
+            int(completed),usage,classification,pace,str(source or "SDK"),True
         ))
+        if added and classification==GREEN_FULL and pace is not None:
+            self.own_pace_samples.append(pace);self.own_pace_samples=self.own_pace_samples[-12:]
         self.last_completed_laps=completed
         self.lap_start_fuel=end
         self.lap_had_pit=bool(self.last_on_pit)
@@ -337,6 +353,8 @@ class RacePlanRuntime:
         fuel_confidence=fuel_confidence_for_source(fuel_source)
         session_limit=session_fuel_limit(physical_tank_liters,max_fuel_pct)
         caution=is_caution_flag(session_flags)
+        if leader_lap is not None and leader_lap!=self.last_leader_lap and _positive(leader_pace_seconds) is not None:
+            self.leader_pace_samples.append(float(leader_pace_seconds));self.leader_pace_samples=self.leader_pace_samples[-12:];self.last_leader_lap=leader_lap
         self.lap_had_caution=self.lap_had_caution or caution
         self.last_driver=current_driver or self.last_driver
         self.auto_fuel_enabled=auto_fuel_enabled
@@ -348,13 +366,18 @@ class RacePlanRuntime:
             margin_laps=self.margin_laps if margin_laps is None else margin_laps,
             margin_source=self.margin_source if margin_source is None else margin_source,
         )
+        def median_pace(values,fallback):
+            clean=sorted(v for v in values[-7:] if _positive(v) is not None)
+            return clean[len(clean)//2] if len(clean)>=3 else _positive(fallback)
+        stable_own_pace=median_pace(self.own_pace_samples,own_pace_seconds)
+        stable_leader_pace=median_pace(self.leader_pace_samples,leader_pace_seconds)
         state=RaceState(
             identity=identity,session_type=str(session_type or ""),
             remaining_seconds=_valid_remaining(remaining_seconds),
             session_total_seconds=_valid_remaining(session_total_seconds),
             current_lap=max(0,int(current_lap or 0)),completed_laps=max(0,int(completed_laps or 0)),
-            own_pace_seconds=_positive(own_pace_seconds),leader_lap=leader_lap,
-            leader_pace_seconds=_positive(leader_pace_seconds),laps_remaining=_valid_laps_remaining(laps_remaining),
+            own_pace_seconds=stable_own_pace,leader_lap=leader_lap,
+            leader_pace_seconds=stable_leader_pace,laps_remaining=_valid_laps_remaining(laps_remaining),
             current_driver=current_driver,current_fuel_liters=_positive(current_fuel_liters),
             fuel_source=str(fuel_source or "SIN DATO"),fuel_confidence=fuel_confidence,
             physical_tank_liters=_positive(physical_tank_liters),session_fuel_limit_liters=session_limit,
@@ -400,6 +423,8 @@ class RacePlanRuntime:
                 "lastCompletedLaps":self.last_completed_laps,"lapStartFuel":self.lap_start_fuel,
                 "lastOnPit":self.last_on_pit,"lastDriver":self.last_driver,
                 "sampleIds":sorted(self.sample_ids)[-200:],
+                "ownPaceSamples":self.own_pace_samples[-12:],"leaderPaceSamples":self.leader_pace_samples[-12:],
+                "lastLeaderLap":self.last_leader_lap,
             },
             "iracingFuelCalculator":{
                 "autoFuelEnabled":self.auto_fuel_enabled,"autoFuelActive":self.auto_fuel_active,
