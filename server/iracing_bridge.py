@@ -777,7 +777,7 @@ class DashboardSource:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
             if self.audio_mode=="lap":
                 if self.coach.advice:
-                    item=self.coach.advice[0];label=self.coach.location_label(item[0]);logger.info("AUDIO PLAY location=%s zone=%s loss=%.3f",label,item[0],item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
+                    item=self.coach.advice[0];marker_pct=item[4] if len(item)>4 else None;phase=item[5] if len(item)>5 else None;label=self.coach.location_label(item[0],marker_pct,phase);logger.info("AUDIO PLAY location=%s zone=%s phase=%s loss=%.3f",label,item[0],phase,item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
                 else:self.audio_coach.say(f"Vuelta {pending['lap']}. Sin una pérdida clara para corregir.")
         else:logger.info("COACH SKIPPED lap=%s valid=%s",pending["lap"],pending.get("valid"))
         self.last_recorded_lap_time=completed
