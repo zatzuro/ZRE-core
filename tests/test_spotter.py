@@ -33,9 +33,10 @@ class PilotSourceIsolationTests(unittest.TestCase):
     def test_pilot_source_is_player_car_idx(self):
         source=inspect.getsource(bridge.DashboardSource.live_payload)
         self.assertIn('pilot_idx=player_idx',source)
-        self.assertIn('player_driver=cars.get(pilot_idx,{})',source)
+        self.assertIn('player_driver=local_pilot_driver(driver_info,drivers,cars,pilot_idx,context)',source)
         self.assertIn('results.get(pilot_idx, {})',source)
         self.assertIn('car_completed[pilot_idx]',source)
+        self.assertIn('active_indices=pilot_active_indices(cars,pilot_idx,lap_pct,track_surface)',source)
 
 class RoleRoutingTests(unittest.TestCase):
     def test_auto_spotter_routes_spotter(self):
