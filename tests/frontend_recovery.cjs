@@ -66,3 +66,13 @@ function makeContext() {
   }
   console.log('Frontend reload and socket lifecycle: OK');
 })().catch(err => {console.error(err);process.exitCode = 1;});
+
+
+(function pilotViewRegression(){
+  const app=fs.readFileSync(path.join(root,'web','app.js'),'utf8');
+  assert(/let driverViewPreference=['"]auto['"]/.test(app),'PILOTO driverViewPreference must be initialized');
+  assert(app.includes("if(activeRole==='spotter')return'spotter'"),'SPOTTER must remain an independent desired view');
+  assert(app.includes("$('live-view').hidden=view!=='live'"),'PILOTO live DOM must remain independently switchable');
+  assert(app.includes("$('spotter-view').hidden=view!=='spotter'"),'SPOTTER DOM must remain independently switchable');
+  console.log('PILOTO/SPOTTER view regression: OK');
+})();
