@@ -53,6 +53,7 @@ def render_setup_report(stint, previous=None, setup_changes=None):
 
     lines = ["# ZRE SETUP ENGINEER REPORT", ""]
     lines += _section_map("SESSION", session)
+    lines += _section_map("CONDITIONS", stint.get("conditions") or {})
     lines += _section_map("TRACK PROFILE", profile)
 
     lines += ["## CURRENT SETUP", ""]
