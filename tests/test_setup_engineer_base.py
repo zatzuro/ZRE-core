@@ -9,7 +9,7 @@ from server.setup_snapshot import (
     snapshot_from_sdk,
 )
 from server.setup_report import render_setup_report, write_setup_report
-from server.setup_engineer import SetupEngineer, build_track_profile
+from server.setup_engineer import SetupEngineer, build_track_profile, build_balance_patterns, build_setup_summary
 from server.lap_coach import LapCoach
 from server.stint_store import StintStore
 
@@ -125,6 +125,40 @@ class SetupEngineerBaseTests(unittest.TestCase):
         self.assertEqual(profile["highSpeed"]["source"], "INFERRED")
         self.assertEqual(profile["fullThrottleShare"]["source"], "MEASURED")
         self.assertEqual(profile["highSpeed"]["value"], "HIGH")
+
+    def test_balance_pattern_requires_feedback_alignment_for_setup_language(self):
+        repeated = [{
+            "location": "Curva 9 · salida",
+            "pattern": "Gas demasiado progresivo",
+            "phase": "EXIT",
+            "occurrences": 4,
+            "validLaps": 5,
+            "repeatRatio": "80%",
+            "confidence": "ALTA",
+            "averageLoss": .31,
+        }]
+        no_feedback = build_balance_patterns(repeated, {})
+        self.assertIn("DETECTED PATTERN", no_feedback["EXIT"])
+        self.assertNotIn("POSSIBLE SETUP-RELATED LIMITATION", no_feedback["EXIT"])
+        aligned = build_balance_patterns(repeated, {"exit": "SUELTO"})
+        self.assertIn("POSSIBLE SETUP-RELATED LIMITATION", aligned["EXIT"])
+        summary = build_setup_summary(repeated, {"exit": "SUELTO"})
+        self.assertIn("Possible setup-related limitation", summary[0])
+
+    def test_neutral_feedback_does_not_promote_setup_causality(self):
+        repeated = [{
+            "location": "Curva 4 · centro",
+            "pattern": "Correcciones de volante",
+            "phase": "MID",
+            "occurrences": 3,
+            "validLaps": 4,
+            "confidence": "MEDIA",
+            "averageLoss": .20,
+        }]
+        patterns = build_balance_patterns(repeated, {"mid": "NEUTRO"})
+        self.assertIn("DETECTED PATTERN", patterns["MID"])
+        self.assertNotIn("POSSIBLE SETUP-RELATED LIMITATION", patterns["MID"])
+
 
     def test_html_source_must_be_explicitly_selected(self):
         with tempfile.TemporaryDirectory() as folder:
