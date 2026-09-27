@@ -9,6 +9,11 @@ from collections import deque
 import bisect
 import math
 
+try:
+    from server.track_model import advice_marker, detect_corners, nearest_corner, normalize_points, project_track
+except ModuleNotFoundError:
+    from track_model import advice_marker, detect_corners, nearest_corner, normalize_points, project_track
+
 N = 480
 ZONES = 12
 
@@ -22,11 +27,18 @@ class LapCoach:
         self.samples={};self.last_pct=None;self.dirty=False;self.completed_buffers=deque(maxlen=2)
         self.recent=deque(maxlen=8);self.recent_advice=deque(maxlen=8);self.stint_advice=[];self.map_advice=[];self.map_source='';self.best_segments=[None]*ZONES
         self.lap_segments=deque(maxlen=12);self.best_lap=None;self.advice=[];self.completed=0
-        self.last_diagnostics={};self.last_lap_record=None;self.track_map=None
+        self.last_diagnostics={};self.last_lap_record=None;self.track_map=None;self.corner_model=[];self.track_name=None;self.track_layout=None;self.track_num_turns=None
+    def set_track_context(self,name=None,layout=None,num_turns=None):
+        identity=(name or '',layout or '')
+        if identity!=(self.track_name or '',self.track_layout or ''):
+            self.corner_model=[];self.track_map=None
+        self.track_name=name;self.track_layout=layout
+        try:self.track_num_turns=int(num_turns) if num_turns is not None else None
+        except (TypeError,ValueError):self.track_num_turns=None
     def _snapshot_at_wrap(self):
         if self.samples:self.completed_buffers.append((self.samples,self.dirty))
         self.samples={};self.dirty=False
-    def capture(self,pct,clock,speed,brake,throttle,on_track=True,steering=None,gear=None,yaw_rate=None,lat_accel=None):
+    def capture(self,pct,clock,speed,brake,throttle,on_track=True,steering=None,gear=None,yaw_rate=None,lat_accel=None,lat=None,lon=None,yaw_north=None):
         pct,clock=number(pct),number(clock)
         if not on_track or pct is None or clock is None or not 0<=pct<1:
             if self.samples:self.dirty=True
@@ -34,7 +46,7 @@ class LapCoach:
         if self.last_pct is not None and self.last_pct>.90 and pct<.10:self._snapshot_at_wrap()
         elif self.last_pct is not None and pct+.01<self.last_pct:self.dirty=True
         self.last_pct=pct;index=min(N-1,int(pct*N))
-        self.samples[index]=(clock,number(speed) or 0,number(brake) or 0,number(throttle) or 0,number(steering) or 0,number(gear),number(yaw_rate) or 0,number(lat_accel) or 0)
+        self.samples[index]=(clock,number(speed) or 0,number(brake) or 0,number(throttle) or 0,number(steering) or 0,number(gear),number(yaw_rate) or 0,number(lat_accel) or 0,number(lat),number(lon),number(yaw_north))
     @staticmethod
     def _scaled_time(points,keys,key,duration):
         start_key,end_key=keys[0],keys[-1];start_clock,end_clock=points[start_key][0],points[end_key][0];clock_span=end_clock-start_clock
@@ -62,18 +74,20 @@ class LapCoach:
         for zone in range(ZONES):
             lo,hi=zone*N//ZONES,(zone+1)*N//ZONES;inside=[k for k in keys if lo<=k<hi]
             if len(inside)<8:segments.append(None);continue
-            span=max(0.0,boundaries[zone+1]-boundaries[zone]);braking=[k for k in inside if points[k][2]>.15];accelerating=[k for k in inside if points[k][3]>.8];turning=[k for k in inside if abs(points[k][4])>.14];max_steer_key=max(inside,key=lambda k:abs(points[k][4]));tail=inside[max(0,int(len(inside)*.75)):] or inside
+            span=max(0.0,boundaries[zone+1]-boundaries[zone]);braking=[k for k in inside if points[k][2]>.15];accelerating=[k for k in inside if points[k][3]>.8];turning=[k for k in inside if abs(points[k][4])>.14];max_steer_key=max(inside,key=lambda k:abs(points[k][4]));min_speed_key=min(inside,key=lambda k:points[k][1]);tail=inside[max(0,int(len(inside)*.75)):] or inside
             meaningful_steer=[points[k][4] for k in inside if abs(points[k][4])>.14];signed_sum=sum(meaningful_steer);abs_sum=sum(abs(v) for v in meaningful_steer);direction_confidence=abs(signed_sum)/abs_sum if abs_sum else 0.0;dominant_sign=(1 if signed_sum>0 else -1) if direction_confidence>=.58 else 0
             prep_keys=[k for k in keys if max(0,lo-24)<=k<lo];prep_steer=(sum(points[k][4] for k in prep_keys)/len(prep_keys)) if prep_keys else 0.0
-            metrics=(braking[0]/N if braking else None,min(points[k][1] for k in inside),accelerating[0]/N if accelerating else None,turning[0]/N if turning else None,abs(points[max_steer_key][4]),braking[-1]/N if braking else None,sum(points[k][1] for k in tail)/len(tail),dominant_sign,max((points[k][2] for k in inside),default=0),direction_confidence,prep_steer)
+            metrics=(braking[0]/N if braking else None,points[min_speed_key][1],accelerating[0]/N if accelerating else None,turning[0]/N if turning else None,abs(points[max_steer_key][4]),braking[-1]/N if braking else None,sum(points[k][1] for k in tail)/len(tail),dominant_sign,max((points[k][2] for k in inside),default=0),direction_confidence,prep_steer,min_speed_key/N,max_steer_key/N)
             segments.append((span,metrics))
         prior=self._competitive_reference();self.advice=compare(segments,prior)
         if not self.advice and self.best_lap is not None and duration>self.best_lap+.25:
             losses=[(i,seg[0]-ref[0]) for i,(seg,ref) in enumerate(zip(segments,prior),1) if seg is not None and ref is not None and seg[0]-ref[0]>.12]
             if losses:
-                zone,loss=max(losses,key=lambda item:item[1]);self.advice=[(zone,loss,'Pérdida localizada','Aquí perdiste más tiempo que en tu referencia, pero todavía no hay una causa única con suficiente confianza.')]
-        self.last_diagnostics={'accepted':True,'sampleBins':len(points),'duration':round(duration,3),'zonesCompared':sum(1 for a,b in zip(segments,prior) if a is not None and b is not None),'adviceCount':len(self.advice),'advice':[{'zone':item[0],'loss':round(item[1],3),'cause':item[2],'tip':item[3]} for item in self.advice]}
-        base_clock=points[keys[0]][0];self.last_lap_record={'duration':round(duration,4),'samples':[[k,round(points[k][0]-base_clock,4),round(points[k][1],3),round(points[k][2],3),round(points[k][3],3),round(points[k][4],4),points[k][5],round(points[k][6],4),round(points[k][7],4)] for k in keys]}
+                zone,loss=max(losses,key=lambda item:item[1]);self.advice=[(zone,loss,'Pérdida localizada','Aquí perdiste más tiempo que en tu referencia, pero todavía no hay una causa única con suficiente confianza.',(zone-.5)/ZONES,'GENERAL')]
+        self.last_diagnostics={'accepted':True,'sampleBins':len(points),'duration':round(duration,3),'zonesCompared':sum(1 for a,b in zip(segments,prior) if a is not None and b is not None),'adviceCount':len(self.advice),'advice':[{'zone':item[0],'loss':round(item[1],3),'cause':item[2],'tip':item[3],'markerPct':round(item[4],4) if len(item)>4 and item[4] is not None else None,'phase':item[5] if len(item)>5 else 'GENERAL'} for item in self.advice]}
+        base_clock=points[keys[0]][0];self.last_lap_record={'duration':round(duration,4),'samples':[[k,round(points[k][0]-base_clock,4),round(points[k][1],3),round(points[k][2],3),round(points[k][3],3),round(points[k][4],4),points[k][5],round(points[k][6],4),round(points[k][7],4),points[k][8],points[k][9],points[k][10]] for k in keys]}
+        detected=detect_corners(self.last_lap_record['samples'],self.track_num_turns,N)
+        if detected:self.corner_model=detected
         self.recent.append(segments);self.recent_advice.append(list(self.advice));self.stint_advice.append(list(self.advice));self.lap_segments.append((duration,segments));self.best_lap=min(self.best_lap,duration) if self.best_lap else duration;self.best_segments=self._competitive_reference(include_all_if_empty=True);return True
     def _competitive_reference(self,include_all_if_empty=False):
         if not self.lap_segments:return [None]*ZONES
