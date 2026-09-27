@@ -105,15 +105,23 @@ class LapCoach:
                 pos=segment[1][0]
                 if not any(abs(pos-known)<.025 for known in anchors):anchors.append(pos)
         return sorted(anchors)
-    def location_label(self,zone):
+    def location_label(self,zone,marker_pct=None,phase=None):
+        pct=marker_pct if marker_pct is not None else (zone-.5)/ZONES
+        corner=nearest_corner(self.corner_model,pct,phase)
+        if corner:
+            phase_text={'ENTRY':'entrada','MID':'centro','EXIT':'salida'}.get(phase)
+            label=f"Curva {corner['number']}"
+            if phase_text:label+=f" · {phase_text}"
+            if corner.get('direction'):label+=f" · {corner['direction']}"
+            return label
         center=(zone-.5)/ZONES;anchors=self.braking_anchors()
         if anchors:
             nearest_index,nearest=min(enumerate(anchors),key=lambda item:abs(item[1]-center))
             if abs(nearest-center)<=.09:
-                names=['Primera frenada','Segunda frenada','Tercera frenada','Cuarta frenada','Quinta frenada','Sexta frenada','Séptima frenada','Octava frenada'];braking_name=names[nearest_index] if nearest_index<len(names) else f'Frenada {nearest_index+1}';segment=self.best_segments[zone-1] if 0<zone<=len(self.best_segments) else None
+                braking_name=f'Frenada {nearest_index+1}';segment=self.best_segments[zone-1] if 0<zone<=len(self.best_segments) else None
                 if segment:
                     direction=_direction(_metric(segment[1],7)) if (_metric(segment[1],9) or 0)>=.58 else None
-                    if direction:return f'{braking_name}, curva a {direction}'
+                    if direction:return f'{braking_name} · curva a {direction}'
                 return braking_name
         segment=self.best_segments[zone-1] if 0<zone<=len(self.best_segments) else None
         if segment:
@@ -126,59 +134,55 @@ class LapCoach:
     def _aggregate_advice(advice_laps,limit=3):
         totals={}
         for lap_advice in advice_laps:
-            for zone,loss,title,tip in lap_advice:
-                key=(zone,title,tip);record=totals.setdefault(key,[0,0.0]);record[0]+=1;record[1]+=loss
+            for item in lap_advice:
+                zone,loss,title,tip=item[:4];marker_pct=item[4] if len(item)>4 else (zone-.5)/ZONES;phase=item[5] if len(item)>5 else 'GENERAL'
+                key=(zone,title,tip,phase);record=totals.setdefault(key,[0,0.0,0.0]);record[0]+=1;record[1]+=loss;record[2]+=marker_pct
         ranked=sorted(totals.items(),key=lambda item:(item[1][0],item[1][1]),reverse=True)[:limit]
-        return [(zone,total/count,title,tip,count) for (zone,title,tip),(count,total) in ranked]
+        return [(zone,total/count,title,tip,count,pct_total/count,phase) for (zone,title,tip,phase),(count,total,pct_total) in ranked]
     def start_stint(self):
         self.stint_advice=[]
     def freeze_stint_summary(self):
         ranked=self._aggregate_advice(self.stint_advice,limit=3)
         if ranked:
-            self.map_advice=[(zone,avg_loss,title,tip) for zone,avg_loss,title,tip,_ in ranked]
+            self.map_advice=[(zone,avg_loss,title,tip,avg_pct,phase) for zone,avg_loss,title,tip,_,avg_pct,phase in ranked]
             self.map_source=f'ÚLTIMO STINT · {len(self.stint_advice)} VUELTAS'
         self.stint_advice=[]
         return self.map_advice
     def general_map_advice(self):
         if self.map_advice:return list(self.map_advice),self.map_source or 'ÚLTIMO STINT'
         ranked=self._aggregate_advice(self.stint_advice,limit=3)
-        current=[(zone,avg_loss,title,tip) for zone,avg_loss,title,tip,_ in ranked]
+        current=[(zone,avg_loss,title,tip,avg_pct,phase) for zone,avg_loss,title,tip,_,avg_pct,phase in ranked]
         if not current and self.advice:current=list(self.advice[:3])
         return current,(f'STINT ACTUAL · {len(self.stint_advice)} VUELTAS' if self.stint_advice else 'CONSTRUYENDO STINT')
     def _pattern(self):
         counts={}
         for lap_advice in self.recent_advice:
-            for zone,loss,title,tip in lap_advice:
-                key=(zone,title,tip);record=counts.setdefault(key,[0,0.0]);record[0]+=1;record[1]+=loss
+            for item in lap_advice:
+                zone,loss,title,tip=item[:4];marker_pct=item[4] if len(item)>4 else (zone-.5)/ZONES;phase=item[5] if len(item)>5 else 'GENERAL'
+                key=(zone,title,tip,phase);record=counts.setdefault(key,[0,0.0,0.0]);record[0]+=1;record[1]+=loss;record[2]+=marker_pct
         if not counts:return '',''
-        (zone,title,tip),(count,total_loss)=max(counts.items(),key=lambda item:(item[1][0],item[1][1]))
+        (zone,title,tip,phase),(count,total_loss,pct_total)=max(counts.items(),key=lambda item:(item[1][0],item[1][1]))
         if count<2:return '',''
-        average=total_loss/count;return f'{self.location_label(zone)} · {count}/{len(self.recent_advice)} vueltas · +{average:.2f}s',f'{title}. {tip}'
+        average=total_loss/count;avg_pct=pct_total/count;return f'{self.location_label(zone,avg_pct,phase)} · {count}/{len(self.recent_advice)} vueltas · +{average:.2f}s',f'{title}. {tip}'
     def summary_priorities(self,limit=3):
         ranked=self._aggregate_advice(self.recent_advice,limit=limit)
-        return [{'zone':self.location_label(zone),'title':title,'advice':f'{tip} · {count}/{len(self.recent_advice)} vueltas · pérdida media +{avg_loss:.2f}s'} for zone,avg_loss,title,tip,count in ranked]
+        return [{'zone':self.location_label(zone,avg_pct,phase),'title':title,'advice':f'{tip} · {count}/{len(self.recent_advice)} vueltas · pérdida media +{avg_loss:.2f}s'} for zone,avg_loss,title,tip,count,avg_pct,phase in ranked]
     def _track_map_payload(self):
         record=self.last_lap_record or {};rows=record.get('samples') or []
         if len(rows)<40:return self.track_map
-        x=y=heading=0.0;raw=[(0.0,0.0,rows[0][0]/max(1,N-1))];prev_t=rows[0][1]
-        for row in rows[1:]:
-            t,speed,yaw=row[1],row[2],row[7] if len(row)>7 else 0.0;dt=max(0.0,min(.5,t-prev_t));prev_t=t;heading+=yaw*dt;x+=speed*math.cos(heading)*dt;y+=speed*math.sin(heading)*dt;raw.append((x,y,row[0]/max(1,N-1)))
-        if len(raw)<2:return self.track_map
-        end_x,end_y=raw[-1][0],raw[-1][1];corrected=[];total=len(raw)-1
-        for i,(px,py,pct) in enumerate(raw):
-            f=i/total;corrected.append((px-end_x*f,py-end_y*f,pct))
-        xs=[a for a,_,_ in corrected];ys=[b for _,b,_ in corrected];dx=max(xs)-min(xs);dy=max(ys)-min(ys)
-        if dx<1e-6 or dy<1e-6:return self.track_map
-        scale=min(88/dx,88/dy);cx=(max(xs)+min(xs))/2;cy=(max(ys)+min(ys))/2
-        points=[{'x':round(50+(px-cx)*scale,2),'y':round(50-(py-cy)*scale,2),'pct':round(pct,4)} for px,py,pct in corrected];step=max(1,len(points)//180);slim=points[::step]
+        raw,geometry_source=project_track(rows,N);points=normalize_points(raw)
+        if len(points)<2:return self.track_map
+        step=max(1,len(points)//180);slim=points[::step]
         if slim[-1]!=points[-1]:slim.append(points[-1])
         general_advice,source=self.general_map_advice();markers=[]
         for rank,item in enumerate(general_advice[:3],1):
-            pct=(item[0]-.5)/ZONES;point=min(points,key=lambda q:abs(q['pct']-pct));markers.append({'rank':rank,'x':point['x'],'y':point['y'],'loss':round(item[1],3),'label':self.location_label(item[0]),'cause':item[2]})
-        self.track_map={'points':slim,'markers':markers,'source':source};return self.track_map
+            zone,loss,title,tip=item[:4];pct=item[4] if len(item)>4 and item[4] is not None else (zone-.5)/ZONES;phase=item[5] if len(item)>5 else 'GENERAL'
+            point=min(points,key=lambda q:abs(q['pct']-pct));corner=nearest_corner(self.corner_model,pct,phase)
+            markers.append({'rank':rank,'x':point['x'],'y':point['y'],'loss':round(loss,3),'label':self.location_label(zone,pct,phase),'cause':title,'phase':phase,'corner':f"T{corner['number']}" if corner else None,'markerPct':round(pct,4)})
+        self.track_map={'points':slim,'markers':markers,'source':source,'geometrySource':geometry_source,'cornerCount':len(self.corner_model),'expectedCorners':self.track_num_turns};return self.track_map
     def payload(self,format_lap):
         best,optimal=self.best_lap,self.optimal
-        def priority(item):return {'zone':f'{self.location_label(item[0])} +{item[1]:.2f}','title':item[2],'advice':item[3]}
+        def priority(item):return {'zone':f"{self.location_label(item[0],item[4] if len(item)>4 else None,item[5] if len(item)>5 else None)} +{item[1]:.2f}",'title':item[2],'advice':item[3],'phase':item[5] if len(item)>5 else 'GENERAL'}
         primary=priority(self.advice[0]) if self.advice else None;pattern,pattern_advice=self._pattern()
         return {'reference':'ÓPTIMA SESIÓN','bestLap':format_lap(best),'optimalLap':format_lap(optimal),'potential':f'{max(0,best-optimal):.3f}' if best and optimal else '—','lapMessage':f"{primary['zone']}: {primary['advice']}" if primary else '','primary':primary,'secondary':priority(self.advice[1]) if len(self.advice)>1 else None,'pattern':pattern,'patternAdvice':pattern_advice,'diagnostics':self.last_diagnostics,'trackMap':self._track_map_payload()}
 
