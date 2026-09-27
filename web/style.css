@@ -147,3 +147,68 @@
 .card-actions{display:flex;align-items:center;gap:8px;min-width:0}.card-actions>span{color:var(--muted);font-size:9px;letter-spacing:.6px;font-weight:700}.card-actions button{border:1px solid #f6c85f66;background:#f6c85f12;color:var(--amber);border-radius:4px;padding:5px 8px;font-size:9px;font-weight:900;letter-spacing:.6px;cursor:pointer}.card-actions button:disabled{opacity:.35;cursor:not-allowed}
 .setup-engineer-dialog{width:min(760px,92vw);max-height:88vh;border:1px solid #56626f;border-radius:6px;background:#0d1117;color:var(--text);box-shadow:0 24px 90px #000d;padding:0}.setup-engineer-dialog::backdrop{background:#000b}.setup-engineer-dialog form{padding:18px;display:grid;gap:14px}.setup-engineer-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:12px}.setup-engineer-heading span{color:var(--amber);font-size:9px;font-weight:900;letter-spacing:1px}.setup-engineer-heading h2{margin:4px 0 0;font-size:22px}.setup-engineer-heading>button{border:0;background:transparent;color:var(--muted);font-size:26px;cursor:pointer}.setup-engineer-dialog p{margin:0}.setup-engineer-dialog #setup-engineer-status{color:var(--green);font-weight:800}.setup-engineer-dialog #setup-engineer-meta{color:var(--muted);font-size:12px}.setup-import-row{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(220px,1fr) minmax(0,1fr);gap:10px;align-items:end}.setup-import-row label{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.6px}.setup-import-row select,.setup-import-row input{border:1px solid #3a4652;background:#111820;color:var(--text);border-radius:4px;padding:8px;font:inherit;min-width:0}.setup-import-row span{align-self:center;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.setup-feedback-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.setup-feedback-grid label,.setup-comment{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.6px}.setup-feedback-grid select,.setup-comment textarea{border:1px solid #3a4652;background:#111820;color:var(--text);border-radius:4px;padding:9px;font:inherit}.setup-comment textarea{min-height:92px;resize:vertical}.setup-engineer-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.setup-engineer-actions button{border:1px solid #46515f;background:#18202a;color:var(--text);border-radius:4px;padding:9px 12px;font-size:10px;font-weight:900;cursor:pointer}.setup-engineer-actions #setup-report-export{border-color:#55d9ff66;color:var(--cyan)}.setup-engineer-actions #setup-feedback-save{border-color:#68e0a066;color:var(--green)}
 @media(max-width:700px){.setup-import-row,.setup-feedback-grid{grid-template-columns:1fr}.setup-engineer-actions{justify-content:stretch}.setup-engineer-actions button{flex:1 1 100%}}
+
+
+/* Race Plan vNext — SPOTTER compact + expanded dialog */
+.spotter-race-plan-card{display:flex;flex-direction:column;gap:9px;min-width:0}
+.race-plan-title>div{display:flex;align-items:center;gap:8px;min-width:0}
+.race-plan-title span{font-size:10px;color:var(--muted);font-weight:800;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.race-plan-title button{border:1px solid #4f7289;background:#12222d;color:#d9edf7;border-radius:4px;padding:4px 8px;cursor:pointer;font-weight:900}
+.race-plan-compact-main{display:grid;grid-template-columns:minmax(150px,.6fr) minmax(0,1.4fr);gap:10px;align-items:stretch}
+.race-plan-next,.race-plan-window{border:1px solid #31434f;background:#111d26;border-radius:5px;padding:9px;min-width:0}
+.race-plan-next{display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.race-plan-next small,.race-plan-window>small,.race-plan-compact-metrics span{font-size:9px;color:#9eb4c1;letter-spacing:.55px;font-weight:800}
+.race-plan-next strong{font-size:28px;line-height:1.05}
+.race-plan-next b{margin-top:4px;font-size:11px;color:#6ebcff}
+.race-plan-window-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
+.race-plan-window-values span{display:flex;flex-direction:column;gap:2px;font-size:8px;color:#91a9b8}
+.race-plan-window-values b{font-size:14px;color:#fff}
+.race-plan-window-bar{position:relative;height:7px;margin-top:10px;border-radius:999px;background:linear-gradient(90deg,#2e6c8e,#55d59c);overflow:visible}
+.race-plan-window-bar i{position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px #ffffff22}
+.race-plan-window-bar em{position:absolute;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:#fff;border:2px solid #0b1117;box-shadow:0 0 0 2px #67d7ff55}
+.race-plan-compact-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.race-plan-compact-metrics>div{min-width:0;padding:7px 8px;border:1px solid #2d414e;background:#13202a;border-radius:4px;display:flex;flex-direction:column;gap:3px}
+.race-plan-compact-metrics strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.race-plan-stint-map{display:flex;gap:4px;min-width:0;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.race-stint-chip{flex:0 0 auto;min-width:58px;border:1px solid #405563;background:#162630;border-radius:4px;padding:5px 7px;display:flex;flex-direction:column;gap:2px}
+.race-stint-chip b{font-size:8px;color:#90a9b8}
+.race-stint-chip strong{font-size:10px}
+.race-stint-chip.done{border-color:#4f9b70;background:#173329}
+.race-stint-chip.current{border-color:#4e9cd1;background:#153149}
+.race-stint-chip.final{border-color:#7a8790;background:#1c252c}
+#spotter-plan-summary{margin:0;color:#9fb3bf;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spotter-race-plan-card[data-state="box-this-lap"]{border-color:#ff9a6b}
+.spotter-race-plan-card[data-state="box-next-lap"]{border-color:#ffd56b}
+.spotter-race-plan-card[data-state="window-open"]{border-color:#62d99b}
+
+.race-plan-dialog{width:min(1180px,94vw);max-height:92vh;border:1px solid #56626f;border-radius:7px;background:#0d1117;color:var(--text);box-shadow:0 24px 90px #000d;padding:0}
+.race-plan-dialog::backdrop{background:#000c}
+.race-plan-dialog form{padding:16px;display:grid;gap:12px;max-height:92vh;overflow:auto}
+.race-plan-dialog-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:10px}
+.race-plan-dialog-heading span{font-size:9px;color:var(--cyan);font-weight:900;letter-spacing:1px}
+.race-plan-dialog-heading h2{margin:3px 0 0;font-size:24px}
+.race-plan-dialog-heading>button{border:0;background:transparent;color:var(--muted);font-size:28px;cursor:pointer}
+.race-plan-dialog-kpis,.race-plan-dialog-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.race-plan-dialog-kpis>div,.race-plan-dialog-grid>div{border:1px solid #31434f;background:#121d27;border-radius:5px;padding:9px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.race-plan-dialog-kpis span,.race-plan-dialog-grid>div{font-size:10px;color:#9eb4c1}
+.race-plan-dialog-kpis strong,.race-plan-dialog-grid strong{font-size:16px;color:#fff;overflow:hidden;text-overflow:ellipsis}
+.race-plan-dialog-section{border:1px solid #293b47;background:#101921;border-radius:5px;padding:10px}
+.race-plan-dialog-section h3{margin:0 0 9px;font-size:12px;letter-spacing:.5px}
+.race-plan-stint-map.expanded{padding:4px 0}.race-plan-stint-map.expanded .race-stint-chip{min-width:76px}
+.race-plan-simulator>div{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.race-plan-simulator label{display:flex;flex-direction:column;gap:4px;color:#a8becb;font-size:10px}
+.race-plan-simulator input{background:#10202c;color:#fff;border:1px solid #637d8f;padding:8px;border-radius:4px}
+.race-plan-simulator button,.race-plan-dialog-actions button{background:#18344a;color:#fff;border:1px solid #4d7896;border-radius:4px;padding:9px 12px;font-weight:900;cursor:pointer}
+#race-plan-sim-result{margin:9px 0 0;color:#d8e6ee;font-weight:700}
+.race-plan-manual summary{cursor:pointer;color:#bcd2df;font-size:11px}.race-plan-manual>p{font-size:10px;color:#91a9b8}
+.race-plan-dialog-actions{display:flex;justify-content:flex-end}
+
+@media(max-width:1100px){
+  .race-plan-compact-main{grid-template-columns:1fr}
+  .race-plan-compact-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .race-plan-dialog-kpis,.race-plan-dialog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  .race-plan-window-values{grid-template-columns:1fr 1fr 1fr}
+  .race-plan-dialog-kpis,.race-plan-dialog-grid{grid-template-columns:1fr}
+}
