@@ -206,12 +206,12 @@ class DashboardSource:
         except (KeyError,TypeError,AttributeError):
             return default
 
-    def sample(self,force_spotter=False):
+    def sample(self,force_driver=False,force_spotter=False):
         if self.force_demo:
             return self.demo_payload()
         if self.connect():
             try:
-                payload=self.live_payload(force_spotter=force_spotter)
+                payload=self.live_payload(force_driver=force_driver,force_spotter=force_spotter)
                 self.session_state.remember_payload(payload)
                 return payload
             except Exception as exc:
@@ -228,7 +228,16 @@ class DashboardSource:
             except Exception:return False
         return bool(self.ir.is_initialized and self.ir.is_connected)
 
-    def live_payload(self,force_spotter=False):
+    @staticmethod
+    def use_spotter_payload(auto_mode,force_driver=False,force_spotter=False):
+        """Choose payload route without altering TeamCarContext or SDK identity."""
+        if force_spotter:
+            return True
+        if force_driver:
+            return False
+        return auto_mode == 'spotter'
+
+    def live_payload(self,force_driver=False,force_spotter=False):
         self.ir.freeze_var_buffer_latest()
         try:
             driver_info=self.get("DriverInfo",{});drivers=driver_info.get("Drivers",[])
@@ -282,7 +291,11 @@ class DashboardSource:
                 reading=valid_fuel(self.get('FuelLevel'))
                 if context.car_idx<len(levels) and levels[context.car_idx] is not None and levels[context.car_idx]>=0 and reading is not None:
                     self.team_fuel_reference=(reading,int(levels[context.car_idx]));self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
-            if context.auto_mode=='spotter' or force_spotter:
+            # Role routing is explicit: SPOTTER manual wins, PILOTO manual forces
+            # the normal local-telemetry payload, and AUTO follows TeamCarContext.
+            # force_driver never changes TeamCarContext/local_driving; it only selects
+            # which payload ZRE emits for this websocket frame.
+            if self.use_spotter_payload(context.auto_mode,force_driver,force_spotter):
                 return self.spotter_payload(context,drivers,session,results,weekend,session_time,driver_info)
             live_last=self.get("CarIdxLastLapTime",[])
             valid_bests=[seconds(r.get("FastestTime")) for r in results.values()]
@@ -953,7 +966,7 @@ async def websocket(request):
     task=asyncio.create_task(receive())
     try:
         while not ws.closed and not task.done():
-            payload=source.sample(force_spotter=role_preference=='spotter')
+            payload=source.sample(force_driver=role_preference=='driver',force_spotter=role_preference=='spotter')
             payload['captureStatus']=source.capture_status
             await ws.send_json(payload);await asyncio.sleep(.10)
     except (ConnectionResetError,ConnectionAbortedError,BrokenPipeError,asyncio.CancelledError):pass
