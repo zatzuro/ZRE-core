@@ -74,10 +74,21 @@ class LapCoach:
         for zone in range(ZONES):
             lo,hi=zone*N//ZONES,(zone+1)*N//ZONES;inside=[k for k in keys if lo<=k<hi]
             if len(inside)<8:segments.append(None);continue
-            span=max(0.0,boundaries[zone+1]-boundaries[zone]);braking=[k for k in inside if points[k][2]>.15];accelerating=[k for k in inside if points[k][3]>.8];turning=[k for k in inside if abs(points[k][4])>.14];max_steer_key=max(inside,key=lambda k:abs(points[k][4]));min_speed_key=min(inside,key=lambda k:points[k][1]);tail=inside[max(0,int(len(inside)*.75)):] or inside
+            span=max(0.0,boundaries[zone+1]-boundaries[zone]);braking=[k for k in inside if points[k][2]>.15];accelerating=[k for k in inside if points[k][3]>.8];full_throttle=[k for k in inside if points[k][3]>.95];throttle_build=[k for k in inside if points[k][3]>.20];turning=[k for k in inside if abs(points[k][4])>.14];max_steer_key=max(inside,key=lambda k:abs(points[k][4]));min_speed_key=min(inside,key=lambda k:points[k][1]);tail=inside[max(0,int(len(inside)*.75)):] or inside
             meaningful_steer=[points[k][4] for k in inside if abs(points[k][4])>.14];signed_sum=sum(meaningful_steer);abs_sum=sum(abs(v) for v in meaningful_steer);direction_confidence=abs(signed_sum)/abs_sum if abs_sum else 0.0;dominant_sign=(1 if signed_sum>0 else -1) if direction_confidence>=.58 else 0
             prep_keys=[k for k in keys if max(0,lo-24)<=k<lo];prep_steer=(sum(points[k][4] for k in prep_keys)/len(prep_keys)) if prep_keys else 0.0
-            metrics=(braking[0]/N if braking else None,points[min_speed_key][1],accelerating[0]/N if accelerating else None,turning[0]/N if turning else None,abs(points[max_steer_key][4]),braking[-1]/N if braking else None,sum(points[k][1] for k in tail)/len(tail),dominant_sign,max((points[k][2] for k in inside),default=0),direction_confidence,prep_steer,min_speed_key/N,max_steer_key/N)
+            brake_duration=(points[braking[-1]][0]-points[braking[0]][0]) if len(braking)>1 else 0.0 if braking else None
+            throttle_start=throttle_build[0] if throttle_build else None;full_key=next((k for k in full_throttle if throttle_start is not None and k>=throttle_start),None)
+            throttle_ramp=(points[full_key][0]-points[throttle_start][0]) if throttle_start is not None and full_key is not None else None
+            steer_steps=[];prev_key=None
+            for k in turning:
+                if prev_key is not None:
+                    delta=points[k][4]-points[prev_key][4]
+                    if abs(delta)>.012:steer_steps.append(1 if delta>0 else -1)
+                prev_key=k
+            steer_reversals=sum(1 for a,b in zip(steer_steps,steer_steps[1:]) if a!=b);steer_corrections=max(0,steer_reversals-1)
+            peak_yaw=max((abs(points[k][6]) for k in inside),default=0.0)
+            metrics=(braking[0]/N if braking else None,points[min_speed_key][1],accelerating[0]/N if accelerating else None,turning[0]/N if turning else None,abs(points[max_steer_key][4]),braking[-1]/N if braking else None,sum(points[k][1] for k in tail)/len(tail),dominant_sign,max((points[k][2] for k in inside),default=0),direction_confidence,prep_steer,min_speed_key/N,max_steer_key/N,brake_duration,throttle_start/N if throttle_start is not None else None,throttle_ramp,steer_corrections,peak_yaw)
             segments.append((span,metrics))
         current_rows=[[k,round(points[k][0]-points[keys[0]][0],4),round(points[k][1],3),round(points[k][2],3),round(points[k][3],3),round(points[k][4],4),points[k][5],round(points[k][6],4),round(points[k][7],4),points[k][8],points[k][9],points[k][10]] for k in keys]
         detected=detect_corners(current_rows,self.track_num_turns,N)
@@ -203,7 +214,7 @@ def compare(segments,reference):
         if sample is None or best is None:continue
         loss=sample[0]-best[0]
         if loss<.12:continue
-        m,r=sample[1],best[1];brake,minimum,throttle=_metric(m,0),_metric(m,1),_metric(m,2);ref_brake,ref_minimum,ref_throttle=_metric(r,0),_metric(r,1),_metric(r,2);turn,max_steer,release,exit_speed=_metric(m,3),_metric(m,4),_metric(m,5),_metric(m,6);ref_turn,ref_max_steer,ref_release,ref_exit=_metric(r,3),_metric(r,4),_metric(r,5),_metric(r,6);turn_sign,dir_conf=_metric(m,7),(_metric(m,9) or 0);ref_sign,ref_dir_conf=_metric(r,7),(_metric(r,9) or 0);direction=_direction(turn_sign) if dir_conf>=.58 else None;outside=_outside_side(turn_sign) if dir_conf>=.58 else None;same_direction=bool(direction and ref_dir_conf>=.58 and turn_sign==ref_sign);title=tip=None
+        m,r=sample[1],best[1];brake,minimum,throttle=_metric(m,0),_metric(m,1),_metric(m,2);ref_brake,ref_minimum,ref_throttle=_metric(r,0),_metric(r,1),_metric(r,2);turn,max_steer,release,exit_speed=_metric(m,3),_metric(m,4),_metric(m,5),_metric(m,6);ref_turn,ref_max_steer,ref_release,ref_exit=_metric(r,3),_metric(r,4),_metric(r,5),_metric(r,6);turn_sign,dir_conf=_metric(m,7),(_metric(m,9) or 0);ref_sign,ref_dir_conf=_metric(r,7),(_metric(r,9) or 0);brake_duration,throttle_ramp,corrections=_metric(m,13),_metric(m,15),(_metric(m,16) or 0);ref_brake_duration,ref_throttle_ramp,ref_corrections=_metric(r,13),_metric(r,15),(_metric(r,16) or 0);direction=_direction(turn_sign) if dir_conf>=.58 else None;outside=_outside_side(turn_sign) if dir_conf>=.58 else None;same_direction=bool(direction and ref_dir_conf>=.58 and turn_sign==ref_sign);title=tip=None
         if turn is not None and ref_turn is not None and turn<ref_turn-.006:
             if max_steer is not None and ref_max_steer is not None and max_steer>ref_max_steer+.12:
                 title='Giro demasiado temprano';extra_deg=math.degrees(max_steer-ref_max_steer);tip=f'Espera un poco antes de girar hacia la {direction}. Prepara una entrada más abierta por la {outside}; estás usando aproximadamente {extra_deg:.0f} grados más de volante que en tu referencia.' if same_direction and outside else f'Espera un poco antes de girar y prepara una entrada más abierta; estás usando aproximadamente {extra_deg:.0f} grados más de volante que en tu referencia.'
@@ -224,6 +235,18 @@ def compare(segments,reference):
             if max_steer is not None and ref_max_steer is not None and max_steer>ref_max_steer+.12:
                 extra_deg=math.degrees(max_steer-ref_max_steer);title='Exceso de volante';tip=f'Frenas en un punto parecido, pero usas unos {extra_deg:.0f} grados más de volante hacia la {direction} y pierdes cerca de {speed_delta:.0f} km/h. Prepara una entrada más abierta por la {outside} y deja correr más el coche.' if same_direction and outside else (f'Frenas en un punto parecido, pero usas unos {extra_deg:.0f} grados más de volante hacia la {direction} y pierdes cerca de {speed_delta:.0f} km/h. Abre la entrada y deja correr más el coche.' if direction else f'Frenas en un punto parecido, pero usas unos {extra_deg:.0f} grados más de volante y pierdes cerca de {speed_delta:.0f} km/h. Abre la entrada y deja correr más el coche.')
             else:title='Velocidad mínima baja';tip=f'Frenas en un punto parecido, pero llegas aproximadamente {speed_delta:.0f} km/h más lento al centro. Suelta progresivamente el freno y deja correr el coche.'
+        if title is None and throttle_ramp is not None and ref_throttle_ramp is not None and throttle_ramp>ref_throttle_ramp+.15 and exit_speed is not None and ref_exit is not None and exit_speed<ref_exit-.8:
+            delay=throttle_ramp-ref_throttle_ramp;title='Gas demasiado progresivo';tip=f'Tardas {delay:.2f} s más que tu referencia en pasar de gas parcial a gas completo. Prioriza orientar el coche antes y completar la aceleración con menos espera.'
+        if title is None and corrections>=max(2,ref_corrections+2):
+            title='Correcciones de volante';tip=f'Haces {int(corrections)} correcciones de volante frente a {int(ref_corrections)} en tu referencia. Busca una entrada más limpia y una sola trayectoria de apoyo.'
+        if title and brake_duration is not None and ref_brake_duration is not None and 'fren' in title.lower():
+            delta=brake_duration-ref_brake_duration
+            if abs(delta)>=.12:tip+=f" Tu fase de frenada dura {abs(delta):.2f} s {'más' if delta>0 else 'menos'} que en tu referencia."
+        if title and throttle_ramp is not None and ref_throttle_ramp is not None and title in ('Aceleración tardía','Salida comprometida'):
+            delta=throttle_ramp-ref_throttle_ramp
+            if delta>=.12:tip+=f' Además tardas {delta:.2f} s más en llegar a gas completo.'
+        if title and corrections>=ref_corrections+2 and title in ('Exceso de volante','Velocidad mínima baja'):
+            tip+=f' Haces {int(corrections)} correcciones frente a {int(ref_corrections)} en tu referencia.'
         if title:
             marker_pct,phase=advice_marker(title,m,i,ZONES)
             advice.append((i,loss,title,tip,marker_pct,phase))
