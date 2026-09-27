@@ -435,7 +435,8 @@ class DashboardSource:
             coach = self.coach.payload(self.lap_text)
             payload["capabilities"] = {"coachControls": True}
             payload["coach"] = coach
-            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":((self.setup_engineer.last_saved or {}).get("setup") or {}).get("fingerprint")}
+            last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
+            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None}
             payload["strategy"] = self.strategy_payload(fuel)
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
@@ -699,7 +700,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -982,6 +983,12 @@ async def websocket(request):
                         if setting.get('value') in ('driver','spotter'):source.demo_role=setting['value']
                     elif setting.get("type")=="action" and setting.get("action")=="audio_test":source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
                     elif setting.get('type')=='action' and setting.get('action')=='capture_sdk':source.capture_sdk_once()
+                    elif setting.get('type')=='action' and setting.get('action')=='setup_feedback':
+                        if source.setup_engineer.last_saved:
+                            source.setup_engineer.update_feedback(source.setup_engineer.last_saved,setting.get('entry'),setting.get('mid'),setting.get('exit'),setting.get('comment'))
+                        else:source.setup_engineer.status='No hay un stint guardado para asociar feedback'
+                    elif setting.get('type')=='action' and setting.get('action')=='export_setup_report':
+                        if not source.setup_engineer.export_report():source.setup_engineer.status='No hay un stint guardado para exportar'
                 except (ValueError,TypeError):pass
     task=asyncio.create_task(receive())
     try:
