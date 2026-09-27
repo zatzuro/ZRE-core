@@ -1,6 +1,7 @@
 import math
 import unittest
 
+from server.lap_coach import LapCoach
 from server.track_model import (
     advice_marker,
     consolidate_advice,
@@ -53,6 +54,32 @@ class TrackModelTests(unittest.TestCase):
         self.assertEqual(len(selected), 2)
         self.assertEqual(selected[0][2], "Giro temprano")
         self.assertEqual(selected[1][2], "Aceleración tardía")
+
+    def test_repeatability_groups_variable_numeric_tips(self):
+        coach = LapCoach()
+        coach.corner_model = [{"number": 9, "pct": .60, "direction": "derecha"}]
+        coach.recent_valid_advice.extend([
+            [(8, .31, "Aceleración tardía", "Tardas 0.18 s más.", .615, "EXIT")],
+            [(8, .28, "Aceleración tardía", "Tardas 0.22 s más.", .618, "EXIT")],
+            [(8, .25, "Aceleración tardía", "Tardas 0.19 s más.", .614, "EXIT")],
+            [],
+        ])
+        ranked = coach._aggregate_advice(coach.recent_valid_advice, limit=1)
+        self.assertEqual(ranked[0][4], 3)
+        self.assertEqual(ranked[0][7], "MEDIA")
+        self.assertAlmostEqual(ranked[0][8], .75)
+
+    def test_invalid_laps_do_not_change_pattern_denominator(self):
+        coach = LapCoach()
+        coach.corner_model = [{"number": 3, "pct": .25, "direction": "izquierda"}]
+        coach.recent_valid_advice.extend([
+            [(3, .20, "Giro temprano", "A", .235, "ENTRY")],
+            [(3, .22, "Giro temprano", "B", .238, "ENTRY")],
+            [(3, .19, "Giro temprano", "C", .236, "ENTRY")],
+        ])
+        pattern, _, confidence = coach._pattern()
+        self.assertIn("3/3 vueltas", pattern)
+        self.assertEqual(confidence, "MEDIA")
 
     def test_project_track_prefers_gps_when_available(self):
         rows = []
