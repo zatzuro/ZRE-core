@@ -9,7 +9,7 @@ from server.setup_snapshot import (
     snapshot_from_sdk,
 )
 from server.setup_report import render_setup_report, write_setup_report
-from server.setup_engineer import SetupEngineer, build_track_profile, build_balance_patterns, build_setup_summary
+from server.setup_engineer import SetupEngineer, build_track_profile, build_balance_patterns, build_setup_summary, compare_stint_performance
 from server.lap_coach import LapCoach
 from server.stint_store import StintStore
 
@@ -125,6 +125,30 @@ class SetupEngineerBaseTests(unittest.TestCase):
         self.assertEqual(profile["highSpeed"]["source"], "INFERRED")
         self.assertEqual(profile["fullThrottleShare"]["source"], "MEASURED")
         self.assertEqual(profile["highSpeed"]["value"], "HIGH")
+
+    def test_stint_comparison_finds_gain_and_loss_by_corner(self):
+        def tagged(value):
+            return {"value": value, "source": "MEASURED"}
+        previous = {
+            "stintPerformance": {"bestLap": 90.5, "representativeAverage": 91.0, "lapStdDev": .30},
+            "corners": [
+                {"zone": "T1", "types": ["HEAVY BRAKING"], "averageZoneTime": tagged(5.00), "minSpeedKph": tagged(80), "exitSpeedKph": tagged(120)},
+                {"zone": "T2", "types": ["HIGH SPEED"], "averageZoneTime": tagged(4.00), "minSpeedKph": tagged(170), "exitSpeedKph": tagged(190)},
+            ],
+        }
+        current = {
+            "stintPerformance": {"bestLap": 90.1, "representativeAverage": 90.7, "lapStdDev": .22},
+            "corners": [
+                {"zone": "T1", "types": ["HEAVY BRAKING"], "averageZoneTime": tagged(4.80), "minSpeedKph": tagged(84), "exitSpeedKph": tagged(124)},
+                {"zone": "T2", "types": ["HIGH SPEED"], "averageZoneTime": tagged(4.15), "minSpeedKph": tagged(166), "exitSpeedKph": tagged(188)},
+            ],
+        }
+        comparison = compare_stint_performance(previous, current)
+        self.assertEqual(comparison["gainedTime"][0]["zone"], "T1")
+        self.assertEqual(comparison["lostTime"][0]["zone"], "T2")
+        self.assertAlmostEqual(comparison["overall"]["bestLap"]["delta"], -.4)
+        self.assertIn("HIGH SPEED", comparison["categoryAverageZoneTimeDelta"])
+
 
     def test_balance_pattern_requires_feedback_alignment_for_setup_language(self):
         repeated = [{
