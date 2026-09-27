@@ -10,9 +10,9 @@ import bisect
 import math
 
 try:
-    from server.track_model import advice_marker, detect_corners, nearest_corner, normalize_points, project_track
+    from server.track_model import advice_marker, consolidate_advice, detect_corners, nearest_corner, normalize_points, project_track
 except ModuleNotFoundError:
-    from track_model import advice_marker, detect_corners, nearest_corner, normalize_points, project_track
+    from track_model import advice_marker, consolidate_advice, detect_corners, nearest_corner, normalize_points, project_track
 
 N = 480
 ZONES = 12
@@ -79,15 +79,16 @@ class LapCoach:
             prep_keys=[k for k in keys if max(0,lo-24)<=k<lo];prep_steer=(sum(points[k][4] for k in prep_keys)/len(prep_keys)) if prep_keys else 0.0
             metrics=(braking[0]/N if braking else None,points[min_speed_key][1],accelerating[0]/N if accelerating else None,turning[0]/N if turning else None,abs(points[max_steer_key][4]),braking[-1]/N if braking else None,sum(points[k][1] for k in tail)/len(tail),dominant_sign,max((points[k][2] for k in inside),default=0),direction_confidence,prep_steer,min_speed_key/N,max_steer_key/N)
             segments.append((span,metrics))
-        prior=self._competitive_reference();self.advice=compare(segments,prior)
+        current_rows=[[k,round(points[k][0]-points[keys[0]][0],4),round(points[k][1],3),round(points[k][2],3),round(points[k][3],3),round(points[k][4],4),points[k][5],round(points[k][6],4),round(points[k][7],4),points[k][8],points[k][9],points[k][10]] for k in keys]
+        detected=detect_corners(current_rows,self.track_num_turns,N)
+        if detected:self.corner_model=detected
+        prior=self._competitive_reference();self.advice=consolidate_advice(compare(segments,prior),self.corner_model,2)
         if not self.advice and self.best_lap is not None and duration>self.best_lap+.25:
             losses=[(i,seg[0]-ref[0]) for i,(seg,ref) in enumerate(zip(segments,prior),1) if seg is not None and ref is not None and seg[0]-ref[0]>.12]
             if losses:
                 zone,loss=max(losses,key=lambda item:item[1]);self.advice=[(zone,loss,'Pérdida localizada','Aquí perdiste más tiempo que en tu referencia, pero todavía no hay una causa única con suficiente confianza.',(zone-.5)/ZONES,'GENERAL')]
         self.last_diagnostics={'accepted':True,'sampleBins':len(points),'duration':round(duration,3),'zonesCompared':sum(1 for a,b in zip(segments,prior) if a is not None and b is not None),'adviceCount':len(self.advice),'advice':[{'zone':item[0],'loss':round(item[1],3),'cause':item[2],'tip':item[3],'markerPct':round(item[4],4) if len(item)>4 and item[4] is not None else None,'phase':item[5] if len(item)>5 else 'GENERAL'} for item in self.advice]}
-        base_clock=points[keys[0]][0];self.last_lap_record={'duration':round(duration,4),'samples':[[k,round(points[k][0]-base_clock,4),round(points[k][1],3),round(points[k][2],3),round(points[k][3],3),round(points[k][4],4),points[k][5],round(points[k][6],4),round(points[k][7],4),points[k][8],points[k][9],points[k][10]] for k in keys]}
-        detected=detect_corners(self.last_lap_record['samples'],self.track_num_turns,N)
-        if detected:self.corner_model=detected
+        self.last_lap_record={'duration':round(duration,4),'samples':current_rows}
         self.recent.append(segments);self.recent_advice.append(list(self.advice));self.stint_advice.append(list(self.advice));self.lap_segments.append((duration,segments));self.best_lap=min(self.best_lap,duration) if self.best_lap else duration;self.best_segments=self._competitive_reference(include_all_if_empty=True);return True
     def _competitive_reference(self,include_all_if_empty=False):
         if not self.lap_segments:return [None]*ZONES
@@ -226,4 +227,4 @@ def compare(segments,reference):
         if title:
             marker_pct,phase=advice_marker(title,m,i,ZONES)
             advice.append((i,loss,title,tip,marker_pct,phase))
-    return sorted(advice,key=lambda item:item[1],reverse=True)[:2]
+    return sorted(advice,key=lambda item:item[1],reverse=True)[:6]
