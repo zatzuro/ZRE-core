@@ -87,8 +87,9 @@ class LapCoach:
                     if abs(delta)>.012:steer_steps.append(1 if delta>0 else -1)
                 prev_key=k
             steer_reversals=sum(1 for a,b in zip(steer_steps,steer_steps[1:]) if a!=b);steer_corrections=max(0,steer_reversals-1)
-            peak_yaw=max((abs(points[k][6]) for k in inside),default=0.0)
-            metrics=(braking[0]/N if braking else None,points[min_speed_key][1],accelerating[0]/N if accelerating else None,turning[0]/N if turning else None,abs(points[max_steer_key][4]),braking[-1]/N if braking else None,sum(points[k][1] for k in tail)/len(tail),dominant_sign,max((points[k][2] for k in inside),default=0),direction_confidence,prep_steer,min_speed_key/N,max_steer_key/N,brake_duration,throttle_start/N if throttle_start is not None else None,throttle_ramp,steer_corrections,peak_yaw)
+            peak_yaw=max((abs(points[k][6]) for k in inside),default=0.0);peak_lat_accel=max((abs(points[k][7]) for k in inside),default=0.0)
+            head=inside[:max(1,int(len(inside)*.25))];entry_speed=sum(points[k][1] for k in head)/len(head);min_gear=points[min_speed_key][5];full_throttle_share=sum(1 for k in inside if points[k][3]>.95)/len(inside)
+            metrics=(braking[0]/N if braking else None,points[min_speed_key][1],accelerating[0]/N if accelerating else None,turning[0]/N if turning else None,abs(points[max_steer_key][4]),braking[-1]/N if braking else None,sum(points[k][1] for k in tail)/len(tail),dominant_sign,max((points[k][2] for k in inside),default=0),direction_confidence,prep_steer,min_speed_key/N,max_steer_key/N,brake_duration,throttle_start/N if throttle_start is not None else None,throttle_ramp,steer_corrections,peak_yaw,entry_speed,peak_lat_accel,min_gear,full_throttle_share)
             segments.append((span,metrics))
         current_rows=[[k,round(points[k][0]-points[keys[0]][0],4),round(points[k][1],3),round(points[k][2],3),round(points[k][3],3),round(points[k][4],4),points[k][5],round(points[k][6],4),round(points[k][7],4),points[k][8],points[k][9],points[k][10]] for k in keys]
         detected=detect_corners(current_rows,self.track_num_turns,N)
@@ -190,6 +191,54 @@ class LapCoach:
     def summary_priorities(self,limit=3):
         ranked=self._aggregate_advice(self.recent_valid_advice,limit=limit)
         return [{'zone':self.location_label(zone,avg_pct,phase),'title':title,'confidence':confidence,'occurrences':count,'sampleLaps':total,'repeatRatio':round(ratio,3),'advice':f'{tip} · {count}/{total} vueltas · confianza {confidence} · pérdida media +{avg_loss:.2f}s'} for zone,avg_loss,title,tip,count,avg_pct,phase,confidence,ratio,total in ranked]
+    def engineering_snapshot(self):
+        """Compact stint/zone contract consumed by Setup Engineer."""
+        laps=list(self.lap_segments);valid_laps=len(laps);zones=[]
+        for index in range(ZONES):
+            candidates=[segments[index] for _,segments in laps if index<len(segments) and segments[index] is not None]
+            if not candidates:continue
+            metrics=[item[1] for item in candidates]
+            def avg(metric):
+                values=[_metric(row,metric) for row in metrics];values=[v for v in values if v is not None]
+                return (sum(values)/len(values)) if values else None
+            center=(index+.5)/ZONES;corner=nearest_corner(self.corner_model,center)
+            min_speed=avg(1);types=[]
+            if min_speed is not None:
+                kmh=min_speed*3.6
+                types.append('LOW SPEED' if kmh<95 else 'MEDIUM SPEED' if kmh<165 else 'HIGH SPEED')
+            if (avg(8) or 0)>=.70:types.append('HEAVY BRAKING')
+            if (avg(15) or 0)>=.35:types.append('TRACTION')
+            if (avg(16) or 0)>=2:types.append('DIRECTION CHANGE')
+            zones.append({
+                'zone':index+1,'corner':f"T{corner['number']}" if corner else None,'types':types,
+                'entrySpeedKph':round(avg(18)*3.6,1) if avg(18) is not None else None,
+                'minSpeedKph':round(min_speed*3.6,1) if min_speed is not None else None,
+                'exitSpeedKph':round(avg(6)*3.6,1) if avg(6) is not None else None,
+                'brakeStartPct':round(avg(0),4) if avg(0) is not None else None,
+                'maxBrake':round(avg(8),3) if avg(8) is not None else None,
+                'brakeDuration':round(avg(13),3) if avg(13) is not None else None,
+                'brakeReleasePct':round(avg(5),4) if avg(5) is not None else None,
+                'maxSteeringDeg':round(math.degrees(avg(4)),1) if avg(4) is not None else None,
+                'steeringCorrections':round(avg(16),2) if avg(16) is not None else None,
+                'throttleReturnPct':round(avg(14),4) if avg(14) is not None else None,
+                'throttleRampSeconds':round(avg(15),3) if avg(15) is not None else None,
+                'peakYawRate':round(avg(17),4) if avg(17) is not None else None,
+                'peakLatAccel':round(avg(19),4) if avg(19) is not None else None,
+                'minGear':round(avg(20),1) if avg(20) is not None else None,
+                'fullThrottleShare':round(avg(21),3) if avg(21) is not None else None,
+                'averageZoneTime':round(sum(item[0] for item in candidates)/len(candidates),3),
+                'samples':len(candidates),
+            })
+        durations=[duration for duration,_ in laps];representative=(sum(durations)/len(durations)) if durations else None
+        variance=(sum((value-representative)**2 for value in durations)/len(durations)) if durations and representative is not None else None
+        repeated=self.summary_priorities(limit=3)
+        return {
+            'validLaps':valid_laps,'bestLap':round(self.best_lap,4) if self.best_lap else None,
+            'optimalLap':round(self.optimal,4) if self.optimal else None,
+            'representativeAverage':round(representative,4) if representative is not None else None,
+            'lapStdDev':round(math.sqrt(variance),4) if variance is not None else None,
+            'zones':zones,'corners':list(self.corner_model),'repeatedBehavior':repeated,
+        }
     def _track_map_payload(self):
         record=self.last_lap_record or {};rows=record.get('samples') or []
         if len(rows)<40:return self.track_map
