@@ -88,3 +88,16 @@ function makeContext() {
   assert(css.includes('#live-track-map{min-width:0;min-height:0;max-width:100%;max-height:100%}'),'track map must be allowed to shrink inside its container');
   console.log('Responsive CSS regression: OK');
 })();
+
+
+(function setupEngineerUiRegression(){
+  const html=fs.readFileSync(path.join(root,'web','index.html'),'utf8');
+  const js=fs.readFileSync(path.join(root,'web','app.js'),'utf8');
+  ['setup-engineer-open','setup-engineer-dialog','setup-feedback-entry','setup-feedback-mid','setup-feedback-exit','setup-feedback-comment','setup-feedback-save','setup-report-export'].forEach(id=>assert(html.includes(`id="${id}"`),`missing Setup Engineer UI id ${id}`));
+  assert(js.includes("action:'setup_feedback'"),'feedback action must be wired');
+  assert(js.includes("action:'export_setup_report'"),'report export action must be wired');
+  assert(js.includes("function renderSetupEngineer"),'Setup Engineer renderer must exist');
+  assert(js.includes("let driverViewPreference='auto'"),'PILOTO recovery guard must remain');
+  assert(js.includes("if(activeRole==='spotter')return'spotter'"),'SPOTTER routing guard must remain');
+  console.log('Setup Engineer UI regression: OK');
+})();
