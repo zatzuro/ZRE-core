@@ -293,10 +293,12 @@ class RacePlanRuntime:
         else:
             classification=GREEN_FULL
         pace=_positive(lap_time)
-        added=self._add_sample(FuelLapSample(
-            int(completed),usage,classification,pace,str(source or "SDK"),True
-        ))
-        if added and classification==GREEN_FULL and pace is not None:
+        added=False
+        if usage is not None:
+            added=self._add_sample(FuelLapSample(
+                int(completed),usage,classification,pace,str(source or "SDK"),True
+            ))
+        if classification==GREEN_FULL and pace is not None:
             self.own_pace_samples.append(pace);self.own_pace_samples=self.own_pace_samples[-12:]
         self.last_completed_laps=completed
         self.lap_start_fuel=end
