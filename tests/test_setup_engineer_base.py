@@ -12,9 +12,37 @@ from server.setup_report import render_setup_report, write_setup_report
 from server.setup_engineer import SetupEngineer, build_track_profile, build_balance_patterns, build_setup_summary, compare_stint_performance
 from server.lap_coach import LapCoach
 from server.stint_store import StintStore
+from server.stint_engineering_snapshot import capture_conditions, capture_tires, compare_tires, snapshot_availability
 
 
 class SetupEngineerBaseTests(unittest.TestCase):
+    def test_transition_tire_snapshot_is_low_frequency_and_explicit(self):
+        values = {
+            "LFcoldPressure": 145.0, "LFtempCL": 70.0, "LFtempCM": 72.0, "LFtempCR": 74.0,
+            "LFwearL": .98, "LFwearM": .97, "LFwearR": .96, "LFbrakeLinePress": 0.0,
+            "AirTemp": 21.0, "TrackTempCrew": 31.0, "RelativeHumidity": 42.0,
+            "TrackWetness": 0, "WeatherDeclaredWet": False,
+        }
+        getter = values.get
+        tires = capture_tires(getter)
+        conditions = capture_conditions(getter)
+        self.assertEqual(tires["wheels"]["LF"]["coldPressureKPa"], 145.0)
+        self.assertEqual(tires["dynamicPressure"]["source"], "UNAVAILABLE_LIVE_SDK")
+        self.assertEqual(conditions["trackTempC"], 31.0)
+        self.assertGreater(snapshot_availability(tires)["coverage"], 0)
+
+    def test_tire_delta_preserves_wear_direction(self):
+        def snap(wear, temp):
+            return {"wheels": {wheel: {
+                "coldPressureKPa": 145.0,
+                "carcassTempC": {"left": temp, "middle": temp+1, "right": temp+2},
+                "wearRemainingPct": {"left": wear, "middle": wear, "right": wear},
+            } for wheel in ("LF","RF","LR","RR")}}
+        delta = compare_tires(snap(.99, 60), snap(.95, 80))
+        self.assertEqual(delta["LF"]["wearRemainingDelta"]["left"], -.04)
+        self.assertEqual(delta["LF"]["carcassTempCDelta"]["middle"], 20)
+
+
     def test_sdk_snapshot_preserves_unknown_car_parameters(self):
         raw = {
             "Chassis": {
