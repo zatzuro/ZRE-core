@@ -39,13 +39,13 @@ try:
     )
     from server.pit_stop_engine import PitLearningModel, ObservedPitStop
     from server.race_state import RaceIdentity, RaceState, session_fuel_limit
-    from server.strategy_engine import RacePlanInputs, RacePlanEngine
+    from server.strategy_engine import RacePlanInputs, RacePlanEngine, simulate_stop_lap
     from server.strategy_store import StrategyStore
 except ModuleNotFoundError:
     from fuel_model import FuelLapSample, FuelModel, GREEN_FULL, OUT_LAP, IN_LAP, PIT_LAP, CAUTION
     from pit_stop_engine import PitLearningModel, ObservedPitStop
     from race_state import RaceIdentity, RaceState, session_fuel_limit
-    from strategy_engine import RacePlanInputs, RacePlanEngine
+    from strategy_engine import RacePlanInputs, RacePlanEngine, simulate_stop_lap
     from strategy_store import StrategyStore
 
 
@@ -163,6 +163,8 @@ class RacePlanRuntime:
         self.last_plan=None
         self.last_signature=None
         self.last_persisted_signature=None
+        self.last_inputs=None
+        self.last_simulation=None
         self.sample_ids=set()
         self.own_pace_samples=[]
         self.leader_pace_samples=[]
@@ -178,6 +180,8 @@ class RacePlanRuntime:
         self.last_signature=None
         self.last_state=None
         self.last_plan=None
+        self.last_inputs=None
+        self.last_simulation=None
 
     def _history_identity(self, identity):
         return (
@@ -397,6 +401,7 @@ class RacePlanRuntime:
             leader_lap=state.leader_lap,leader_pace_seconds=state.leader_pace_seconds,
             stops_completed=self.stops_completed,fuel_confidence=estimate.confidence,
         )
+        self.last_inputs=inputs
         signature=(
             state.identity.key,state.completed_laps,int((state.remaining_seconds or 0)//15),
             round(state.current_fuel_liters,1) if state.current_fuel_liters is not None else None,
@@ -443,6 +448,29 @@ class RacePlanRuntime:
             self.store.save(self.identity.key,payload)
             self.last_persisted_signature=marker
 
+    def simulate_stop(self, candidate_lap=None):
+        """Simulate a pit decision without mutating plan, target or hysteresis."""
+        if self.last_inputs is None or self.last_plan is None or not self.last_plan.available:
+            self.last_simulation={"valid":False,"reason":"PLAN NO DISPONIBLE"}
+            return self.last_simulation
+        if candidate_lap in (None,""):
+            candidate_lap=self.last_state.current_lap if self.last_state else None
+        try:candidate=int(candidate_lap)
+        except (TypeError,ValueError):
+            self.last_simulation={"valid":False,"reason":"VUELTA INVÁLIDA"}
+            return self.last_simulation
+        before=self.engine.snapshot()
+        self.last_simulation=simulate_stop_lap(
+            self.last_inputs,candidate,self.last_plan.minimum_stops
+        )
+        self.last_simulation["minimumStops"]=self.last_plan.minimum_stops
+        self.last_simulation["currentLap"]=self.last_state.current_lap if self.last_state else None
+        # Defensive invariant: simulation must never mutate strategic state.
+        after=self.engine.snapshot()
+        if after!=before:
+            self.last_simulation={"valid":False,"reason":"SIMULATION MUTATED PLAN"}
+        return self.last_simulation
+
     def payload(self, estimate=None):
         estimate=estimate or self.fuel_model.estimate(margin_laps=self.margin_laps,margin_source=self.margin_source)
         plan=self.last_plan
@@ -460,6 +488,7 @@ class RacePlanRuntime:
             "initialPlan":self.engine.snapshot().get("initialPlan"),
             "currentPlan":self.engine.current_plan.to_dict() if self.engine.current_plan else None,
             "transition":self.engine.last_transition,
+            "simulation":self.last_simulation,
             "stopsCompleted":self.stops_completed,
             "stopHistory":self.stop_history[-16:],
             "pitLearning":{"pitLaneSeconds":self.pit_learning.learned_pit_lane_seconds()},
