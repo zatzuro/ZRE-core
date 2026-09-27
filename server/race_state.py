@@ -93,7 +93,7 @@ def session_fuel_limit(physical_liters, max_fuel_pct):
     except (TypeError, ValueError):
         return physical
     if pct <= 0:
-        return None
+        return physical
     if pct > 1:
         pct /= 100.0
     return min(physical, physical * pct)
