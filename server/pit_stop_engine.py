@@ -110,6 +110,28 @@ class PitLearningModel:
         values = [s.pit_lane_seconds for s in self.samples if s.pit_lane_seconds is not None and s.pit_lane_seconds > 0]
         return median(values) if len(values) >= 2 else None
 
+    def snapshot(self):
+        return [
+            {
+                "pit_lane_seconds":sample.pit_lane_seconds,
+                "stationary_seconds":sample.stationary_seconds,
+                "fuel_added_liters":sample.fuel_added_liters,
+                "tyres":sample.tyres,
+                "driver_change":sample.driver_change,
+                "repair_seconds":sample.repair_seconds,
+            }
+            for sample in self.samples
+        ]
+
+    @classmethod
+    def restore(cls, payload):
+        model=cls()
+        for item in payload or []:
+            if not isinstance(item,dict):continue
+            try:model.add(ObservedPitStop(**item))
+            except TypeError:continue
+        return model
+
     def learned_refuel_rate(self):
         rates = []
         for sample in self.samples:
