@@ -117,6 +117,51 @@ def driver_roster_by_car(drivers):
         elif not earlier:cars[idx]=entry
     return cars,conflicts
 
+def local_pilot_driver(driver_info, drivers, cars, player_idx, context=None):
+    """Resolve PILOTO identity from the local SDK user, never from roster row order."""
+    info=driver_info or {};entries=[d for d in (drivers or []) if isinstance(d,dict)]
+    car_meta=dict((cars or {}).get(player_idx,{}) or {})
+    local_user=(context.local_user_id if context is not None else None) or info.get('DriverUserID')
+    local_name=context.local_driver_name if context is not None else None
+    identity=None
+    if local_user not in (None,0,''):
+        identity=next((d for d in entries if str(d.get('UserID'))==str(local_user)),None)
+    if identity is not None:
+        for key in ('UserID','UserName'):
+            if identity.get(key) not in (None,''):car_meta[key]=identity.get(key)
+        if not car_meta.get('TeamID') and identity.get('TeamID'):car_meta['TeamID']=identity.get('TeamID')
+    elif local_name:
+        car_meta['UserName']=local_name
+    return car_meta
+
+
+def pilot_active_indices(cars, player_idx, lap_pct=None, track_surface=None):
+    """Live PILOTO boards show cars currently in-world plus the local car.
+
+    DriverInfo is a session roster and can retain cars which are no longer
+    physically present. CarIdxTrackSurface, when available, is authoritative:
+    negative means not in world. Without it, require a real 0..1 lap position.
+    """
+    lap_pct=lap_pct or [];track_surface=track_surface or [];active={player_idx}
+    for idx,driver in (cars or {}).items():
+        if idx==player_idx:continue
+        if driver.get('CarIsPaceCar'):continue
+        surface=track_surface[idx] if idx<len(track_surface) else None
+        if surface is not None:
+            try:
+                if int(surface)<0:continue
+                active.add(idx);continue
+            except (TypeError,ValueError):
+                pass
+        pct=lap_pct[idx] if idx<len(lap_pct) else None
+        try:
+            pct=float(pct)
+        except (TypeError,ValueError):
+            continue
+        if math.isfinite(pct) and 0.0<=pct<=1.0:active.add(idx)
+    return active
+
+
 def class_results_rows(results, cars, conflicts, class_id, team_idx, last_laps, lap_text):
     """Official zero-based ClassPosition from ResultsPositions, class by CarIdx."""
     rows=[]
@@ -184,7 +229,7 @@ class DashboardSource:
               'SessionTimeRemain','FuelLevel','Lap','LapCompleted',
               'CarIdxLapDistPct','CarIdxLap','CarIdxLapCompleted','CarIdxPosition',
               'CarIdxClassPosition','CarIdxLastLapTime','CarIdxBestLapTime',
-              'CarIdxOnPitRoad','CarIdxEstTime','Lat','Lon','YawNorth')
+              'CarIdxOnPitRoad','CarIdxEstTime','CarIdxTrackSurface','Lat','Lon','YawNorth')
         try:
             self.ir.freeze_var_buffer_latest()
             try:
@@ -312,15 +357,19 @@ class DashboardSource:
             session_best=min((v for v in valid_bests if v),default=None)
             if self.confirmed_session_best is not None:
                 session_best=min(session_best,self.confirmed_session_best) if session_best else self.confirmed_session_best
-            player_driver=cars.get(pilot_idx,{})
+            player_driver=local_pilot_driver(driver_info,drivers,cars,pilot_idx,context)
             player_class_id=player_driver.get("CarClassID")
-            lap_pct=self.get("CarIdxLapDistPct",[])
+            lap_pct=self.get("CarIdxLapDistPct",[]) or []
+            track_surface=self.get("CarIdxTrackSurface",[]) or []
+            active_indices=pilot_active_indices(cars,pilot_idx,lap_pct,track_surface)
             raw_player_pct=lap_pct[pilot_idx] if pilot_idx<len(lap_pct) else None
             player_pct=raw_player_pct if raw_player_pct is not None and raw_player_pct>=-.5 else None
             speed=seconds(self.get("Speed",0),45.0)
             track_length=self.track_metres(self.get("WeekendInfo",{}).get("TrackLength","5 km"))
             standing_rows=[];relative_candidates=[]
             for idx,driver in cars.items():
+                if idx not in active_indices:continue
+                shown_driver=player_driver if idx==pilot_idx else driver
                 result=results.get(idx,{})
                 gap=None
                 valid_live_pct=(player_pct is not None and idx<len(lap_pct) and lap_pct[idx] is not None and lap_pct[idx]>=-.5)
@@ -333,9 +382,9 @@ class DashboardSource:
                 class_position=result.get("ClassPosition")
                 try:class_pos=int(class_position)+1 if class_position is not None else overall_pos
                 except (TypeError,ValueError):class_pos=overall_pos
-                row={"idx":idx,"pos":overall_pos,"classPos":class_pos,"classId":driver.get("CarClassID"),
-                     "className":driver.get("CarClassShortName") or "","number":str(driver.get("CarNumber","—")),
-                     "car":car_label(driver),"brand":car_brand(driver),"driver":driver.get("UserName") or "—" if idx not in roster_conflicts else "—",
+                row={"idx":idx,"pos":overall_pos,"classPos":class_pos,"classId":shown_driver.get("CarClassID"),
+                     "className":shown_driver.get("CarClassShortName") or "","number":str(shown_driver.get("CarNumber","—")),
+                     "car":car_label(shown_driver),"brand":car_brand(shown_driver),"driver":shown_driver.get("UserName") or "—" if idx==pilot_idx or idx not in roster_conflicts else "—",
                      "gap":"TÚ" if idx==pilot_idx else (self.gap_text(gap) if gap is not None else "—"),
                      "gapSeconds":gap if gap is not None else 0.0,
                      "lastLap":self.lap_text(live_last[idx] if idx<len(live_last) else result.get("LastTime")),
@@ -345,6 +394,10 @@ class DashboardSource:
             standing_rows.sort(key=lambda row:(row["pos"]==0,row["pos"]))
             overall_player=next((row for row in standing_rows if row["isPlayer"]),None)
             category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text)
+            category_rows=[row for row in category_rows if row["idx"] in active_indices]
+            for row in category_rows:
+                if row["idx"]==pilot_idx:
+                    row["driver"]=player_driver.get("UserName") or "Piloto";row["car"]=car_label(player_driver);row["brand"]=car_brand(player_driver);row["number"]=str(player_driver.get("CarNumber","—"))
             player = next((row for row in category_rows if row["isPlayer"]), None)
             relative_player = next((row for row in relative_candidates if row["isPlayer"]), None)
             relative = self.relative_rows(relative_candidates, relative_player) if relative_player else []
