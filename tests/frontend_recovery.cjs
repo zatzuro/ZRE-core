@@ -93,9 +93,11 @@ function makeContext() {
 (function setupEngineerUiRegression(){
   const html=fs.readFileSync(path.join(root,'web','index.html'),'utf8');
   const js=fs.readFileSync(path.join(root,'web','app.js'),'utf8');
-  ['setup-engineer-open','setup-engineer-dialog','setup-feedback-entry','setup-feedback-mid','setup-feedback-exit','setup-feedback-comment','setup-feedback-save','setup-report-export'].forEach(id=>assert(html.includes(`id="${id}"`),`missing Setup Engineer UI id ${id}`));
+  ['setup-engineer-open','setup-engineer-dialog','setup-source-select','setup-html-file','setup-feedback-entry','setup-feedback-mid','setup-feedback-exit','setup-feedback-comment','setup-feedback-save','setup-report-export'].forEach(id=>assert(html.includes(`id="${id}"`),`missing Setup Engineer UI id ${id}`));
   assert(js.includes("action:'setup_feedback'"),'feedback action must be wired');
   assert(js.includes("action:'export_setup_report'"),'report export action must be wired');
+  assert(js.includes("action:'import_setup_html'"),'HTML setup import must be wired');
+  assert(js.includes("sendSetting('setupSource'"),'setup source selector must be wired');
   assert(js.includes("function renderSetupEngineer"),'Setup Engineer renderer must exist');
   assert(js.includes("let driverViewPreference='auto'"),'PILOTO recovery guard must remain');
   assert(js.includes("if(activeRole==='spotter')return'spotter'"),'SPOTTER routing guard must remain');
