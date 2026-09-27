@@ -37,6 +37,7 @@ try:
     from server.stop_plan import build_stop_plan, race_plan
     from server.setup_engineer import SetupEngineer
     from server.setup_snapshot import snapshot_from_sdk
+    from server.stint_engineering_snapshot import capture_conditions, capture_tires
 except ModuleNotFoundError:
     from session_state import SessionIdentity, SessionState
     from lap_coach import LapCoach, number
@@ -50,6 +51,7 @@ except ModuleNotFoundError:
     from stop_plan import build_stop_plan, race_plan
     from setup_engineer import SetupEngineer
     from setup_snapshot import snapshot_from_sdk
+    from stint_engineering_snapshot import capture_conditions, capture_tires
 
 from aiohttp import web
 try:
@@ -392,17 +394,17 @@ class DashboardSource:
                 engineering=self.coach.engineering_snapshot()
                 frozen = self.coach.freeze_stint_summary()
                 if frozen: logger.info("COACH STINT SUMMARY frozen priorities=%s", len(frozen))
-                saved=self.setup_engineer.finish_stint(engineering,fuel_end=fuel,session_time=session_time)
+                end_tires=capture_tires(self.get);end_conditions=capture_conditions(self.get)
+                saved=self.setup_engineer.finish_stint(engineering,fuel_end=fuel,session_time=session_time,tires_end=end_tires,conditions_end=end_conditions)
                 if saved: logger.info("SETUP ENGINEER STINT SAVED number=%s validLaps=%s setup=%s",saved.get("stintNumber"),saved.get("stintPerformance",{}).get("validLaps"),saved.get("setup",{}).get("fingerprint"))
             elif not self.stint_active and driving_stint:
                 self.coach.start_stint()
                 sdk_setup=snapshot_from_sdk(self.get("CarSetup",{}) or {},driver_info)
                 setup_snapshot=self.setup_engineer.resolve_setup(sdk_setup)
-                def condition(value):
-                    return {"value":value,"source":"MEASURED" if value is not None else "UNAVAILABLE"}
                 setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID")}
-                setup_conditions={"airTemp":condition(self.get("AirTemp")),"trackTemp":condition(self.get("TrackTempCrew") if self.get("TrackTempCrew") is not None else self.get("TrackTemp")),"trackWetness":condition(self.get("TrackWetness")),"weatherDeclaredWet":condition(self.get("WeatherDeclaredWet")),"skies":condition(self.get("Skies")),"relativeHumidity":condition(self.get("RelativeHumidity")),"windVel":condition(self.get("WindVel"))}
-                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time)
+                setup_conditions=capture_conditions(self.get)
+                setup_tires=capture_tires(self.get)
+                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires)
                 logger.info("COACH STINT START setup=%s source=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"))
             self.stint_active = driving_stint
             completed_for_strategy=completed_laps if completed_laps is not None else max(0,lap_number-1)
