@@ -121,6 +121,27 @@ def render_setup_report(stint, previous=None, setup_changes=None):
 
     lines += _section_map("STINT PERFORMANCE", performance)
 
+    lines += ["## TIRE SNAPSHOT", ""]
+    tires=stint.get("tires") or {}
+    for phase in ("start","end"):
+        snapshot=tires.get(phase) or {}
+        lines.append(f"### {phase.upper()}")
+        lines.append("- **Dynamic pressure:** UNAVAILABLE_LIVE_SDK")
+        wheels=snapshot.get("wheels") or {}
+        if not wheels:
+            lines.append("- No live tire snapshot available.")
+        for wheel,data in wheels.items():
+            temp=data.get("carcassTempC") or {};wear=data.get("wearRemainingPct") or {}
+            lines.append(f"- **{wheel}:** cold { _value(data.get('coldPressureKPa')) } kPa · carcass L/M/R { _value(temp.get('left')) }/{ _value(temp.get('middle')) }/{ _value(temp.get('right')) } C · wear remaining L/M/R { _value(wear.get('left')) }/{ _value(wear.get('middle')) }/{ _value(wear.get('right')) }")
+        lines.append("")
+    delta=tires.get("delta") or {}
+    if delta:
+        lines.append("### START → END DELTA")
+        for wheel,data in delta.items():
+            wear=data.get("wearRemainingDelta") or {};temp=data.get("carcassTempCDelta") or {}
+            lines.append(f"- **{wheel}:** carcass Δ L/M/R { _value(temp.get('left')) }/{ _value(temp.get('middle')) }/{ _value(temp.get('right')) } C · wear remaining Δ L/M/R { _value(wear.get('left')) }/{ _value(wear.get('middle')) }/{ _value(wear.get('right')) }")
+        lines.append("")
+
     lines += ["## CORNER / ZONE ANALYSIS", ""]
     if corners:
         for corner in corners:
