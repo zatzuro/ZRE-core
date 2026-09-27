@@ -9,6 +9,8 @@ from server.setup_snapshot import (
     snapshot_from_sdk,
 )
 from server.setup_report import render_setup_report, write_setup_report
+from server.setup_engineer import SetupEngineer, build_track_profile
+from server.lap_coach import LapCoach
 from server.stint_store import StintStore
 
 
@@ -91,6 +93,83 @@ class SetupEngineerBaseTests(unittest.TestCase):
             b = store.save_setup("Car", "Track", "Layout", snap)
             self.assertEqual(a, b)
             self.assertEqual(len(list(a.parent.glob("setup-*.json"))), 1)
+
+    def test_lap_coach_exposes_compact_engineering_contract(self):
+        coach = LapCoach()
+        metrics = (
+            .10, 30.0, .16, .12, .45, .15, 40.0, 1, .80, .9, 0.0,
+            .13, .125, .50, .14, .22, 2, .18, 48.0, 7.5, 3, .55
+        )
+        segments = [(1.2, metrics)] * 12
+        coach.lap_segments.append((90.0, segments))
+        coach.best_lap = 90.0
+        coach.best_segments = segments
+        coach.corner_model = [{"number": 1, "pct": .04, "direction": "derecha"}]
+        snapshot = coach.engineering_snapshot()
+        self.assertEqual(snapshot["validLaps"], 1)
+        self.assertEqual(len(snapshot["zones"]), 12)
+        self.assertEqual(snapshot["zones"][0]["entrySpeedKph"], 172.8)
+        self.assertEqual(snapshot["zones"][0]["minGear"], 3)
+        self.assertNotIn("samples", snapshot)
+
+    def test_track_profile_marks_inference_vs_measurement(self):
+        engineering = {
+            "zones": [
+                {"types": ["HIGH SPEED"], "fullThrottleShare": .8, "peakLatAccel": 8.0},
+                {"types": ["HIGH SPEED", "DIRECTION CHANGE"], "fullThrottleShare": .7, "peakLatAccel": 7.0},
+                {"types": ["HEAVY BRAKING", "MEDIUM SPEED"], "fullThrottleShare": .2, "peakLatAccel": 4.0},
+                {"types": ["TRACTION", "LOW SPEED"], "fullThrottleShare": .1, "peakLatAccel": 3.0},
+            ]
+        }
+        profile = build_track_profile(engineering)
+        self.assertEqual(profile["highSpeed"]["source"], "INFERRED")
+        self.assertEqual(profile["fullThrottleShare"]["source"], "MEASURED")
+        self.assertEqual(profile["highSpeed"]["value"], "HIGH")
+
+    def test_setup_engineer_saves_stint_compares_and_exports(self):
+        engineering = {
+            "validLaps": 4,
+            "bestLap": 90.1,
+            "optimalLap": 89.7,
+            "representativeAverage": 90.5,
+            "lapStdDev": .22,
+            "corners": [{"number": 1, "pct": .10}],
+            "zones": [{
+                "zone": 1, "corner": "T1", "types": ["HEAVY BRAKING", "LOW SPEED"],
+                "entrySpeedKph": 210.0, "minSpeedKph": 80.0, "exitSpeedKph": 125.0,
+                "brakeStartPct": .07, "maxBrake": .9, "brakeDuration": 1.1,
+                "brakeReleasePct": .11, "maxSteeringDeg": 28.0,
+                "steeringCorrections": 1, "throttleReturnPct": .13,
+                "throttleRampSeconds": .25, "peakYawRate": .15,
+                "peakLatAccel": 6.0, "minGear": 2, "fullThrottleShare": .2,
+                "averageZoneTime": 4.1,
+            }],
+            "repeatedBehavior": [{
+                "zone": "Curva 1 · entrada", "title": "Giro temprano",
+                "occurrences": 3, "sampleLaps": 4, "repeatRatio": .75,
+                "confidence": "MEDIA", "advice": "Retrasa ligeramente el giro."
+            }],
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            engineer = SetupEngineer(folder)
+            session = {"car": "McLaren", "track": "Spa", "layout": "GP", "session": "Practice"}
+            setup_a = snapshot_from_sdk({"Aero": {"Wing": 8.5}})
+            engineer.start_stint(session, setup_a, {"trackTemp": {"value": 32, "source": "MEASURED"}}, 55.0, 100.0)
+            engineer.set_feedback("NEUTRO", "SUELTO", "NEUTRO", "Rear moves in T1.")
+            first = engineer.finish_stint(engineering, 40.0, 460.0, 3.75)
+            self.assertEqual(first["stintNumber"], 1)
+            self.assertEqual(first["driverFeedback"]["mid"], "SUELTO")
+            self.assertEqual(first["dataQuality"]["telemetrySource"], "LAP_COACH_SUMMARY")
+            report = engineer.export_report(first)
+            self.assertTrue(report.exists())
+
+            setup_b = snapshot_from_sdk({"Aero": {"Wing": 7.5}})
+            engineer.start_stint(session, setup_b, {}, 55.0, 500.0)
+            second = engineer.finish_stint({**engineering, "bestLap": 89.9}, 40.0, 860.0, 3.75)
+            self.assertEqual(second["stintNumber"], 2)
+            self.assertEqual(second["setupChanges"][0]["parameter"], "Aero.Wing")
+            self.assertIn("bestLap", second["comparison"])
+
 
     def test_markdown_report_contains_required_contract(self):
         setup = snapshot_from_sdk({"Aero": {"Wing": 8.5}})
