@@ -445,3 +445,13 @@ class RacePlanEngine:
             "pendingCount":self.stabilizer.count,
             "transition":self.last_transition,
         }
+
+    def restore_runtime(self, payload):
+        """Restore hysteresis state without pretending serialized plans are live dataclasses."""
+        payload=payload or {}
+        self.stabilizer.stable=payload.get("stableMinimumStops")
+        self.stabilizer.pending=payload.get("pendingMinimumStops")
+        try:self.stabilizer.count=max(0,int(payload.get("pendingCount") or 0))
+        except (TypeError,ValueError):self.stabilizer.count=0
+        self.last_transition=str(payload.get("transition") or "")
+        return self
