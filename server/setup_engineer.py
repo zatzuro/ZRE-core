@@ -164,19 +164,52 @@ def build_corner_analysis(engineering):
     return rows
 
 
+def _tag_value(item):
+    return item.get("value") if isinstance(item,dict) and "value" in item else item
+
+
 def compare_stint_performance(previous, current):
-    old = (previous or {}).get("stintPerformance") or {}
-    new = (current or {}).get("stintPerformance") or {}
-    result = {}
+    old_perf = (previous or {}).get("stintPerformance") or {}
+    new_perf = (current or {}).get("stintPerformance") or {}
+    overall = {}
     for key in ("bestLap", "representativeAverage", "lapStdDev", "fuelPerLap"):
-        before, after = old.get(key), new.get(key)
+        before, after = old_perf.get(key), new_perf.get(key)
         if isinstance(before, (int, float)) and isinstance(after, (int, float)):
-            result[key] = {
+            overall[key] = {
                 "before": round(before, 4),
                 "after": round(after, 4),
                 "delta": round(after - before, 4),
             }
-    return result
+
+    old_corners={row.get("zone"):row for row in (previous or {}).get("corners") or [] if row.get("zone")}
+    new_corners={row.get("zone"):row for row in (current or {}).get("corners") or [] if row.get("zone")}
+    zone_changes=[]
+    for zone in sorted(set(old_corners)&set(new_corners)):
+        before,after=old_corners[zone],new_corners[zone]
+        change={"zone":zone,"types":after.get("types") or []}
+        for key in ("averageZoneTime","minSpeedKph","exitSpeedKph","brakeDuration","throttleRampSeconds","steeringCorrections"):
+            old_value,new_value=_tag_value(before.get(key)),_tag_value(after.get(key))
+            if isinstance(old_value,(int,float)) and isinstance(new_value,(int,float)):
+                change[key+"Delta"]=round(new_value-old_value,4)
+        if len(change)>2:zone_changes.append(change)
+
+    gained=sorted([row for row in zone_changes if row.get("averageZoneTimeDelta",0)<-.03],key=lambda row:row["averageZoneTimeDelta"])[:3]
+    lost=sorted([row for row in zone_changes if row.get("averageZoneTimeDelta",0)>.03],key=lambda row:row["averageZoneTimeDelta"],reverse=True)[:3]
+
+    category_changes={}
+    categories=sorted({kind for row in zone_changes for kind in row.get("types") or []})
+    for kind in categories:
+        rows=[row for row in zone_changes if kind in (row.get("types") or []) and "averageZoneTimeDelta" in row]
+        if rows:
+            category_changes[kind]=round(sum(row["averageZoneTimeDelta"] for row in rows)/len(rows),4)
+
+    return {
+        "overall":overall,
+        "gainedTime":gained,
+        "lostTime":lost,
+        "zoneChanges":zone_changes,
+        "categoryAverageZoneTimeDelta":category_changes,
+    }
 
 
 class SetupEngineer:
