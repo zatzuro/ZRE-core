@@ -179,6 +179,8 @@ class SetupEngineer:
             duration = max(0.0, session_time - start_time)
 
         valid_laps = int((engineering or {}).get("validLaps") or 0)
+        if fuel_per_lap is None and valid_laps>0 and isinstance(base.get("fuelStart"),(int,float)) and isinstance(fuel_end,(int,float)) and base.get("fuelStart")>=fuel_end:
+            fuel_per_lap=(base.get("fuelStart")-fuel_end)/valid_laps
         performance = {
             "laps": valid_laps,
             "validLaps": valid_laps,
