@@ -133,3 +133,11 @@
   #live-track-map{min-height:0}
   .dashboard-footer{font-size:9px;line-height:12px}
 }
+
+/* Coach map phases: entry/braking, mid-corner and exit are visually distinct. */
+.loss-marker.loss-phase-entry circle:first-child{fill:#f6c85f33;stroke:var(--amber)}
+.loss-marker.loss-phase-entry circle:nth-child(2){fill:var(--amber)}
+.loss-marker.loss-phase-mid circle:first-child{fill:#ff402833;stroke:var(--accent)}
+.loss-marker.loss-phase-mid circle:nth-child(2){fill:var(--accent)}
+.loss-marker.loss-phase-exit circle:first-child{fill:#55d9ff33;stroke:var(--cyan)}
+.loss-marker.loss-phase-exit circle:nth-child(2){fill:var(--cyan)}
