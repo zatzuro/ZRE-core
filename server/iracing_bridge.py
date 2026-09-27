@@ -1017,6 +1017,7 @@ async def websocket(request):
                 try:
                     import json
                     setting=json.loads(message.data)
+                    if not isinstance(setting,dict):continue
                     if setting.get("type")=="settings" and setting.get("key")=="audio" and setting.get("value") in ("off","lap","corners"):source.audio_mode=setting["value"]
                     elif setting.get("type")=="settings" and setting.get("key")=="rival":source.race_director.set_selected(setting.get("value"))
                     elif setting.get("type")=="settings" and setting.get("key")=="strategy":source.apply_strategy_settings(setting.get("value"))
