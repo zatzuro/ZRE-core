@@ -101,7 +101,7 @@ class SetupEngineerBaseTests(unittest.TestCase):
             .13, .125, .50, .14, .22, 2, .18, 48.0, 7.5, 3, .55
         )
         segments = [(1.2, metrics)] * 12
-        coach.lap_segments.append((90.0, segments))
+        coach.stint_segments.append((90.0, segments))
         coach.best_lap = 90.0
         coach.best_segments = segments
         coach.corner_model = [{"number": 1, "pct": .04, "direction": "derecha"}]
