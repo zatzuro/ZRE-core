@@ -8,11 +8,11 @@ from pathlib import Path
 import math
 
 try:
-    from server.setup_snapshot import compare_setups
+    from server.setup_snapshot import compare_setups, snapshot_from_html
     from server.setup_report import write_setup_report
     from server.stint_store import StintStore, slug
 except ModuleNotFoundError:
-    from setup_snapshot import compare_setups
+    from setup_snapshot import compare_setups, snapshot_from_html
     from setup_report import write_setup_report
     from stint_store import StintStore, slug
 
@@ -144,7 +144,48 @@ class SetupEngineer:
         self.current = None
         self.last_saved = None
         self.last_report_path = None
+        self.imported_setup = None
+        self.setup_source_preference = "auto"
         self.status = "Esperando stint"
+
+    def import_html_setup(self, html_text, filename=None):
+        text=str(html_text or "")
+        if not text or len(text)>500_000:
+            self.status="HTML de setup inválido o demasiado grande"
+            return None
+        snapshot=snapshot_from_html(text, filename)
+        if not snapshot.get("parameters"):
+            self.status="No se encontraron parámetros de setup en el HTML"
+            return None
+        self.imported_setup=snapshot
+        self.status=f"Setup HTML importado · {filename or snapshot.get('fingerprint')}"
+        return snapshot
+
+    def set_setup_source(self, value):
+        value=str(value or "auto").lower()
+        if value not in ("auto","html"):
+            return False
+        self.setup_source_preference=value
+        if value=="html" and not self.imported_setup:
+            self.status="HTML seleccionado · importa un setup antes del próximo stint"
+        elif value=="html":
+            self.status="HTML IMPORTADO será usado en el próximo stint"
+        else:
+            self.status="AUTO · SDK prioritario, HTML como respaldo"
+        return True
+
+    def resolve_setup(self, sdk_snapshot):
+        sdk=sdk_snapshot or {}
+        html=self.imported_setup or {}
+        if self.setup_source_preference=="html":
+            if html.get("parameters"):
+                return html
+            self.status="HTML no disponible · usando SDK"
+        if sdk.get("parameters"):
+            return sdk
+        if html.get("parameters"):
+            return html
+        return sdk
 
     def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None):
         self.current = {
