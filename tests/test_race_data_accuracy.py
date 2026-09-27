@@ -30,6 +30,43 @@ class RaceDataAccuracyTests(unittest.TestCase):
         packet=source.spotter_payload(ctx,roster,{},results,{},20,{'Drivers':roster})
         return source,packet
 
+    def test_pilot_header_prefers_local_sdk_user_over_same_car_roster_order(self):
+        teammate={'CarIdx':8,'CarClassID':1,'CarNumber':'18','UserName':'David','UserID':2,'TeamID':6,'CarScreenName':'McLaren'}
+        local={'CarIdx':8,'CarClassID':1,'CarNumber':'18','UserName':'Santiago','UserID':1,'TeamID':6,'CarScreenName':'McLaren'}
+        info={'DriverUserID':1,'Drivers':[teammate,local]}
+        cars,conflicts=bridge.driver_roster_by_car(info['Drivers'])
+        self.assertIn(8,conflicts)
+        context=TeamCarContext.resolve(info,8,True,local_user_id=1,local_driver_name='Santiago',local_car_active=True)
+        pilot=bridge.local_pilot_driver(info,info['Drivers'],cars,8,context)
+        self.assertEqual(pilot['UserName'],'Santiago')
+        self.assertEqual(pilot['UserID'],1)
+        self.assertEqual(pilot['CarNumber'],'18')
+
+    def test_pilot_live_roster_excludes_not_in_world_and_pace_car(self):
+        cars={
+            8:{'CarIdx':8,'UserName':'Santiago'},
+            9:{'CarIdx':9,'UserName':'Ghost'},
+            10:{'CarIdx':10,'UserName':'Live Rival'},
+            11:{'CarIdx':11,'UserName':'Pace Car','CarIsPaceCar':True},
+        }
+        lap_pct=[None]*12
+        lap_pct[8]=.20;lap_pct[9]=.42;lap_pct[10]=.31;lap_pct[11]=.10
+        surface=[None]*12
+        surface[8]=3;surface[9]=-1;surface[10]=3;surface[11]=3
+        active=bridge.pilot_active_indices(cars,8,lap_pct,surface)
+        self.assertEqual(active,{8,10})
+
+    def test_solo_practice_keeps_local_car_even_when_in_garage(self):
+        cars={
+            8:{'CarIdx':8,'UserName':'Santiago'},
+            9:{'CarIdx':9,'UserName':'Old Roster Driver'},
+        }
+        lap_pct=[None]*10
+        surface=[-1]*10
+        active=bridge.pilot_active_indices(cars,8,lap_pct,surface)
+        self.assertEqual(active,{8})
+
+
     def test_relative_driver_tracks_current_sdk_user_name_not_team_or_spectator(self):
         car={'CarIdx':8,'CarClassID':1,'CarNumber':'18','UserName':'Santiago','TeamName':'ZRE','UserID':1,'TeamID':6}
         ahead={'CarIdx':9,'CarClassID':2,'CarNumber':'91','UserName':'Rival A','TeamName':'Team Prototype','UserID':2,'TeamID':7}
