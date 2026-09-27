@@ -224,12 +224,12 @@ def _candidate_minimum_stops(inputs):
 
 def _window_state(current_lap, earliest, target, fuel_limit):
     current=int(current_lap)
-    if current < earliest:
-        return "WINDOW CLOSED"
-    if current >= target:
+    if current >= target and current <= fuel_limit:
         return "BOX THIS LAP"
     if current == target-1:
         return "BOX NEXT LAP"
+    if current < earliest:
+        return "WINDOW CLOSED"
     if current <= fuel_limit:
         return "WINDOW OPEN"
     return "FUEL LIMIT PASSED"
