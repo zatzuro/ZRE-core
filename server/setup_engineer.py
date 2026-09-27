@@ -11,10 +11,12 @@ try:
     from server.setup_snapshot import compare_setups, snapshot_from_html
     from server.setup_report import write_setup_report
     from server.stint_store import StintStore, slug
+    from server.stint_engineering_snapshot import compare_tires, snapshot_availability
 except ModuleNotFoundError:
     from setup_snapshot import compare_setups, snapshot_from_html
     from setup_report import write_setup_report
     from stint_store import StintStore, slug
+    from stint_engineering_snapshot import compare_tires, snapshot_availability
 
 
 def measured(value):
@@ -262,7 +264,7 @@ class SetupEngineer:
             return html
         return sdk
 
-    def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None):
+    def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None, tires_start=None):
         self.current = {
             "startedAt": datetime.now().isoformat(timespec="seconds"),
             "session": dict(session or {}),
@@ -270,6 +272,7 @@ class SetupEngineer:
             "setup": dict(setup_snapshot or {}),
             "fuelStart": fuel_start,
             "startSessionTime": session_time,
+            "tiresStart": tires_start or {},
             "driverFeedback": {},
         }
         setup_name=(setup_snapshot or {}).get("metadata",{}).get("setupName")
@@ -287,7 +290,7 @@ class SetupEngineer:
             feedback["comment"] = str(comment).strip()[:1000]
         return True
 
-    def finish_stint(self, engineering, fuel_end=None, session_time=None, fuel_per_lap=None):
+    def finish_stint(self, engineering, fuel_end=None, session_time=None, fuel_per_lap=None, tires_end=None, conditions_end=None):
         if self.current is None:
             return None
         base = self.current
@@ -318,11 +321,12 @@ class SetupEngineer:
         record = {
             "createdAt": datetime.now().isoformat(timespec="seconds"),
             "session": session,
-            "conditions": base.get("conditions") or {},
+            "conditions": {"start":base.get("conditions") or {},"end":conditions_end or {}},
             "trackProfile": build_track_profile(engineering),
             "setup": setup,
             "stintPerformance": performance,
             "corners": build_corner_analysis(engineering),
+            "tires": {"start":base.get("tiresStart") or {},"end":tires_end or {},"delta":compare_tires(base.get("tiresStart") or {},tires_end or {})},
             "balancePatterns": build_balance_patterns(repeated,feedback),
             "repeatedBehavior": repeated,
             "driverFeedback": feedback,
@@ -334,6 +338,8 @@ class SetupEngineer:
                 "zonesAnalyzed": len((engineering or {}).get("zones") or []),
                 "setupSource": setup.get("source"),
                 "setupAvailable": bool(setup.get("parameters")),
+                "tireStart": snapshot_availability(base.get("tiresStart") or {}),
+                "tireEnd": snapshot_availability(tires_end or {}),
                 "telemetrySource": "LAP_COACH_SUMMARY",
             },
         }
