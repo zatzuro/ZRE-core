@@ -30,7 +30,8 @@ try:
     from server.audio_coach import AudioCoach
     from server.session_recorder import SessionRecorder
     from server.race_director import RaceDirector
-    from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text
+    from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
+    from server.race_state import RaceIdentity
     from server.team_context import TeamCarContext
     from server.team_timing import relative_position,relative_window,estimated_team_fuel
     from server.spotter_control import SpotterControl
@@ -44,7 +45,8 @@ except ModuleNotFoundError:
     from audio_coach import AudioCoach
     from session_recorder import SessionRecorder
     from race_director import RaceDirector
-    from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text
+    from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
+    from race_state import RaceIdentity
     from team_context import TeamCarContext
     from team_timing import relative_position,relative_window,estimated_team_fuel
     from spotter_control import SpotterControl
@@ -216,6 +218,7 @@ class DashboardSource:
         self.audio_coach = AudioCoach()
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
         self.setup_engineer = SetupEngineer(ROOT)
+        self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
         self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.debug_team_enabled=False;self.capture_status='Listo para capturar'
@@ -580,6 +583,43 @@ class DashboardSource:
             self.manual_stop_counted=True
         return None
 
+    def race_plan_vnext_payload(self,context,session,results,weekend,driver_info,current_driver,
+                                fuel_value,fuel_source,current_lap,completed_laps,pace,on_pit,session_time):
+        car_idx=context.car_idx
+        car=next((d for d in (driver_info.get('Drivers',[]) or []) if isinstance(d,dict) and d.get('CarIdx')==car_idx),{}) if car_idx is not None else {}
+        identity=RaceIdentity(
+            weekend.get('SessionID'),weekend.get('SubSessionID'),weekend.get('TrackID'),
+            weekend.get('TrackConfigName') or 'default',context.team_id,
+            context.car_number or car.get('CarNumber') or 'unknown',car.get('CarID'),
+            self.get('SessionNum'),
+        )
+        car_laps=self.get('CarIdxLap',[]) or []
+        car_last=self.get('CarIdxLastLapTime',[]) or []
+        _,leader_lap,leader_pace=leader_from_results(results,car_laps,car_last)
+        laps_remaining=self.get('SessionLapsRemainEx')
+        if laps_remaining is None:laps_remaining=self.get('SessionLapsRemain')
+        physical=number(driver_info.get('DriverCarFuelMaxLtr')) or number(self.strategy_settings.get('tankCapacityLiters'))
+        max_pct=number(driver_info.get('DriverCarMaxFuelPct'))
+        require_tires=bool(session.get('SessionEnforceTireCompoundChange'))
+        try:
+            return self.race_plan_runtime.observe_frame(
+                identity=identity,session_type=session.get('SessionType'),
+                remaining_seconds=self.get('SessionTimeRemain'),session_total_seconds=self.get('SessionTimeTotal'),
+                current_lap=current_lap,completed_laps=completed_laps,own_pace_seconds=pace,
+                leader_lap=leader_lap,leader_pace_seconds=leader_pace,laps_remaining=laps_remaining,
+                current_driver=current_driver,current_fuel_liters=fuel_value,fuel_source=fuel_source,
+                physical_tank_liters=physical,max_fuel_pct=max_pct,on_pit_road=bool(on_pit),
+                session_flags=self.get('SessionFlags'),pit_loss_seconds=self.strategy_settings.get('pitLossSeconds',30.0),
+                mandatory_stops_remaining=0,require_tire_change=require_tires,
+                min_drivers=weekend.get('MinDrivers'),max_drivers=weekend.get('MaxDrivers'),
+                session_time=session_time,last_lap_time=(car_last[car_idx] if car_idx is not None and car_idx<len(car_last) else None),
+                auto_fuel_enabled=self.get('dpFuelAutoFillEnabled'),auto_fuel_active=self.get('dpFuelAutoFillActive'),
+                pit_sv_fuel=self.get('PitSvFuel'),
+            )
+        except (ValueError,TypeError,OverflowError,ZeroDivisionError):
+            logger.exception('RACE PLAN VNEXT FAILED carIdx=%s',car_idx)
+            return {'available':False,'reason':'Error en Race Plan vNext.'}
+
     def team_diagnostics(self,context):
         idx=context.car_idx
         def at(key):
@@ -756,7 +796,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_plan_runtime.detach(); self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -845,6 +885,9 @@ class DashboardSource:
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
         coach_ok=self.coach.finish(completed,pending.get("valid"))
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"telemetry":self.coach.last_lap_record})
+        self.race_plan_runtime.record_local_lap(
+            pending["lap"],usage,bool(pending.get("valid")),completed,
+            on_pit=bool(self.get("OnPitRoad",False)),caution=is_caution_flag(self.get("SessionFlags")))
         if coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
             if self.audio_mode=="lap":
