@@ -126,6 +126,29 @@ class SetupEngineerBaseTests(unittest.TestCase):
         self.assertEqual(profile["fullThrottleShare"]["source"], "MEASURED")
         self.assertEqual(profile["highSpeed"]["value"], "HIGH")
 
+    def test_html_source_must_be_explicitly_selected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            engineer = SetupEngineer(folder)
+            sdk = snapshot_from_sdk({"Aero": {"Wing": 8.5}})
+            html = "<h2>Aero</h2><table><tr><td>Rear Wing</td><td>7.5</td></tr></table>"
+            imported = engineer.import_html_setup(html, "setup.html")
+            self.assertIsNotNone(imported)
+            self.assertEqual(engineer.resolve_setup(sdk)["source"], "SDK")
+            engineer.set_setup_source("html")
+            resolved = engineer.resolve_setup(sdk)
+            self.assertEqual(resolved["source"], "IRACING_HTML")
+            self.assertEqual(resolved["metadata"]["filename"], "setup.html")
+
+    def test_html_source_falls_back_to_sdk_when_not_imported(self):
+        with tempfile.TemporaryDirectory() as folder:
+            engineer = SetupEngineer(folder)
+            engineer.set_setup_source("html")
+            sdk = snapshot_from_sdk({"Aero": {"Wing": 8.5}})
+            resolved = engineer.resolve_setup(sdk)
+            self.assertEqual(resolved["source"], "SDK")
+            self.assertIn("usando SDK", engineer.status)
+
+
     def test_setup_engineer_saves_stint_compares_and_exports(self):
         engineering = {
             "validLaps": 4,
