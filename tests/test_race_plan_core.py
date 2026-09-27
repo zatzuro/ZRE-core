@@ -102,7 +102,8 @@ class RacePlanCoreTests(unittest.TestCase):
         self.assertTrue(at["preservesMinimum"])
 
     def test_K_L_box_next_and_box_this_lap_are_absolute_targets(self):
-        first = calculate_race_plan(self.inputs(
+        engine = RacePlanEngine()
+        first = engine.update(self.inputs(
             remaining_time_seconds=1200, current_lap=100, own_pace_seconds=100,
             leader_pace_seconds=100, current_fuel_liters=5,
             fuel_strategy_lpl=2.5, session_fuel_limit_liters=55,
@@ -112,13 +113,14 @@ class RacePlanCoreTests(unittest.TestCase):
         target = first.window.target
         elapsed = (target - 100) * 100
         fuel_left = max(.1, 5 - (target - 100) * 2.5)
-        second = calculate_race_plan(self.inputs(
+        second = engine.update(self.inputs(
             remaining_time_seconds=max(1, 1200-elapsed), current_lap=target,
             own_pace_seconds=100, leader_pace_seconds=100,
             current_fuel_liters=fuel_left, fuel_strategy_lpl=2.5,
             session_fuel_limit_liters=55, pit_loss_seconds=30, margin_laps=1,
         ))
-        self.assertIn(second.window.state, ("BOX THIS LAP", "FUEL LIMIT PASSED"))
+        self.assertEqual(second.window.target, target)
+        self.assertEqual(second.window.state, "BOX THIS LAP")
 
     def test_M_last_stint_is_partial_fill(self):
         plan = calculate_race_plan(self.inputs(
@@ -293,6 +295,7 @@ class RacePlanCoreTests(unittest.TestCase):
         self.assertEqual(restored.stabilizer.stable, 10)
         self.assertEqual(restored.stabilizer.pending, 9)
         self.assertEqual(restored.stabilizer.count, 2)
+        self.assertEqual(restored.committed_target_lap, engine.committed_target_lap)
         self.assertEqual(restored.last_transition, "STOP REMOVAL POSSIBLE")
 
 
