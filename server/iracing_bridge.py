@@ -396,7 +396,8 @@ class DashboardSource:
                 if saved: logger.info("SETUP ENGINEER STINT SAVED number=%s validLaps=%s setup=%s",saved.get("stintNumber"),saved.get("stintPerformance",{}).get("validLaps"),saved.get("setup",{}).get("fingerprint"))
             elif not self.stint_active and driving_stint:
                 self.coach.start_stint()
-                setup_snapshot=snapshot_from_sdk(self.get("CarSetup",{}) or {},driver_info)
+                sdk_setup=snapshot_from_sdk(self.get("CarSetup",{}) or {},driver_info)
+                setup_snapshot=self.setup_engineer.resolve_setup(sdk_setup)
                 def condition(value):
                     return {"value":value,"source":"MEASURED" if value is not None else "UNAVAILABLE"}
                 setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID")}
@@ -436,7 +437,7 @@ class DashboardSource:
             payload["capabilities"] = {"coachControls": True}
             payload["coach"] = coach
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
-            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None}
+            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
@@ -700,7 +701,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -989,6 +990,10 @@ async def websocket(request):
                         else:source.setup_engineer.status='No hay un stint guardado para asociar feedback'
                     elif setting.get('type')=='action' and setting.get('action')=='export_setup_report':
                         if not source.setup_engineer.export_report():source.setup_engineer.status='No hay un stint guardado para exportar'
+                    elif setting.get('type')=='action' and setting.get('action')=='import_setup_html':
+                        source.setup_engineer.import_html_setup(setting.get('html'),setting.get('filename'))
+                    elif setting.get('type')=='settings' and setting.get('key')=='setupSource':
+                        source.setup_engineer.set_setup_source(setting.get('value'))
                 except (ValueError,TypeError):pass
     task=asyncio.create_task(receive())
     try:
