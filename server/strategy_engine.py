@@ -235,7 +235,7 @@ def _window_state(current_lap, earliest, target, fuel_limit):
     return "FUEL LIMIT PASSED"
 
 
-def _build_windows_and_stops(inputs, stop_count, finish, current_capacity, future_capacity):
+def _build_windows_and_stops(inputs, stop_count, finish, current_capacity, future_capacity, first_target_override=None):
     if stop_count<=0:
         return None,(),None
     current=int(inputs.current_lap)
@@ -256,6 +256,11 @@ def _build_windows_and_stops(inputs, stop_count, finish, current_capacity, futur
             earliest=fuel_limit
         target=max(earliest,fuel_limit-1)
         target=min(target,fuel_limit)
+        if local_index==0 and first_target_override is not None:
+            try:forced=int(first_target_override)
+            except (TypeError,ValueError):forced=None
+            if forced is not None and earliest<=forced<=fuel_limit:
+                target=forced
 
         laps_run=max(0,target-previous_lap)
         if local_index==0 and fuel_before_start is not None and use is not None:
@@ -303,7 +308,7 @@ def _build_windows_and_stops(inputs, stop_count, finish, current_capacity, futur
     return window,tuple(stops),final_required
 
 
-def calculate_race_plan(inputs, *, forced_minimum_stops=None):
+def calculate_race_plan(inputs, *, forced_minimum_stops=None, first_target_override=None):
     candidate,current_capacity,future_capacity,safety=_candidate_minimum_stops(inputs)
     missing=[]
     if _finite_positive(inputs.own_pace_seconds) is None and inputs.laps_remaining is None:
@@ -323,7 +328,7 @@ def calculate_race_plan(inputs, *, forced_minimum_stops=None):
         minimum=max(candidate,int(forced_minimum_stops))
     finish=_finish_range_vnext(inputs,minimum)
     window,stops,final_required=_build_windows_and_stops(
-        inputs,minimum,finish,current_capacity,future_capacity
+        inputs,minimum,finish,current_capacity,future_capacity,first_target_override
     )
     return RacePlanCalculation(
         True,None,candidate,minimum,minimum+1,finish,current_capacity,future_capacity,
@@ -418,18 +423,31 @@ class RacePlanEngine:
         self.current_plan=None
         self.stabilizer=StopCountStabilizer()
         self.last_transition=""
+        self.committed_target_lap=None
 
     def update(self, inputs):
         candidate=calculate_race_plan(inputs)
         if not candidate.available:
             self.current_plan=candidate
             return candidate
+        previous_stable=self.stabilizer.stable
         stable,state=self.stabilizer.update(
             candidate.candidate_minimum_stops,
             confidence=inputs.fuel_confidence,
             safety_margin_laps=candidate.safety_margin_laps,
         )
-        plan=calculate_race_plan(inputs,forced_minimum_stops=stable)
+        if stable!=previous_stable:
+            self.committed_target_lap=None
+        target=self.committed_target_lap
+        if target is not None and candidate.window is not None:
+            if not (candidate.window.earliest_safe<=target<=candidate.window.fuel_limit):
+                target=None
+        plan=calculate_race_plan(inputs,forced_minimum_stops=stable,first_target_override=target)
+        if plan.window is not None:
+            if target is None:
+                self.committed_target_lap=plan.window.target
+            elif plan.window.earliest_safe<=target<=plan.window.fuel_limit:
+                self.committed_target_lap=target
         self.last_transition=state
         if self.initial_plan is None and plan.available:
             self.initial_plan=plan
@@ -443,6 +461,7 @@ class RacePlanEngine:
             "stableMinimumStops":self.stabilizer.stable,
             "pendingMinimumStops":self.stabilizer.pending,
             "pendingCount":self.stabilizer.count,
+            "committedTargetLap":self.committed_target_lap,
             "transition":self.last_transition,
         }
 
@@ -453,5 +472,7 @@ class RacePlanEngine:
         self.stabilizer.pending=payload.get("pendingMinimumStops")
         try:self.stabilizer.count=max(0,int(payload.get("pendingCount") or 0))
         except (TypeError,ValueError):self.stabilizer.count=0
+        try:self.committed_target_lap=int(payload.get("committedTargetLap")) if payload.get("committedTargetLap") is not None else None
+        except (TypeError,ValueError):self.committed_target_lap=None
         self.last_transition=str(payload.get("transition") or "")
         return self
