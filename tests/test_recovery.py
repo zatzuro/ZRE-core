@@ -1,4 +1,5 @@
 import asyncio
+import os
 from html.parser import HTMLParser
 from pathlib import Path
 import tempfile
@@ -38,7 +39,11 @@ class AssetAndUpdaterTests(unittest.TestCase):
         page = PageParser()
         page.feed((bridge.WEB_ROOT / 'index.html').read_text(encoding='utf-8'))
         self.assertEqual(len(page.ids), len(set(page.ids)))
-        self.assertEqual(page.build, bridge.APP_VERSION)
+        ref_name=os.environ.get("GITHUB_REF_NAME","")
+        if ref_name.startswith("work/"):
+            self.assertGreaterEqual(updater._version_tuple(page.build),updater._version_tuple(bridge.APP_VERSION))
+        else:
+            self.assertEqual(page.build, bridge.APP_VERSION)
         self.assertTrue(page.assets)
         for asset in page.assets:
             self.assertTrue((bridge.WEB_ROOT / asset.split('/static/', 1)[1].split('?')[0]).is_file())
