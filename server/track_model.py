@@ -214,9 +214,9 @@ def advice_marker(title, metrics, zone, zones):
     if title in ("Giro demasiado temprano", "Giro temprano", "Giro tardío",
                  "Falta giro durante la frenada", "Demasiado giro con freno"):
         return (m(3) if m(3) is not None else center), "ENTRY"
-    if title in ("Aceleración tardía", "Salida comprometida"):
-        return (m(2) if m(2) is not None else center), "EXIT"
-    if title == "Exceso de volante":
+    if title in ("Aceleración tardía", "Salida comprometida", "Gas demasiado progresivo"):
+        return (m(2) if m(2) is not None else m(14) if m(14) is not None else center), "EXIT"
+    if title in ("Exceso de volante", "Correcciones de volante"):
         return (m(12) if m(12) is not None else m(3) if m(3) is not None else center), "MID"
     if title == "Velocidad mínima baja":
         return (m(11) if m(11) is not None else center), "MID"
