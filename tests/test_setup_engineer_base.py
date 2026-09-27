@@ -162,6 +162,8 @@ class SetupEngineerBaseTests(unittest.TestCase):
             self.assertEqual(first["dataQuality"]["telemetrySource"], "LAP_COACH_SUMMARY")
             report = engineer.export_report(first)
             self.assertTrue(report.exists())
+            self.assertIn("Reporte exportado", engineer.status)
+            self.assertEqual(engineer.last_report_path, report)
 
             setup_b = snapshot_from_sdk({"Aero": {"Wing": 7.5}})
             engineer.start_stint(session, setup_b, {}, 55.0, 500.0)
