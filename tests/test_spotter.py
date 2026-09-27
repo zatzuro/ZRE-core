@@ -25,6 +25,23 @@ class TeamContextTests(unittest.TestCase):
         self.assertEqual(js.count('new WebSocket('),1)
         self.assertEqual(js.count('location.replace('),1) # version update only
 
+class RoleRoutingTests(unittest.TestCase):
+    def test_auto_spotter_routes_spotter(self):
+        self.assertTrue(bridge.DashboardSource.use_spotter_payload('spotter'))
+
+    def test_auto_local_driving_routes_driver(self):
+        self.assertFalse(bridge.DashboardSource.use_spotter_payload('driver'))
+
+    def test_manual_driver_overrides_auto_spotter(self):
+        self.assertFalse(bridge.DashboardSource.use_spotter_payload('spotter',force_driver=True))
+
+    def test_manual_spotter_overrides_auto_driver(self):
+        self.assertTrue(bridge.DashboardSource.use_spotter_payload('driver',force_spotter=True))
+
+    def test_return_to_auto_obeys_context_again(self):
+        self.assertTrue(bridge.DashboardSource.use_spotter_payload('spotter',False,False))
+        self.assertFalse(bridge.DashboardSource.use_spotter_payload('driver',False,False))
+
 class DemoRoleTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         app=web.Application();app['source']=bridge.DashboardSource(force_demo=True)
@@ -36,22 +53,50 @@ class DemoRoleTests(unittest.IsolatedAsyncioTestCase):
         source=self.client.server.app['source']
         original=source.sample
         calls=[]
-        def sampled(force_spotter=False):
-            calls.append(force_spotter)
-            return original(force_spotter=force_spotter)
+        def sampled(force_driver=False,force_spotter=False):
+            calls.append((force_driver,force_spotter))
+            return original(force_driver=force_driver,force_spotter=force_spotter)
         with patch.object(source,'sample',side_effect=sampled):
             async with self.client.ws_connect('/ws') as ws:
                 await ws.receive_json()
                 await ws.send_json({'type':'settings','key':'role','value':'spotter'})
                 for _ in range(3):
                     await asyncio.wait_for(ws.receive_json(),2)
-                    if True in calls:break
-                self.assertIn(True,calls)
+                    if (False,True) in calls:break
+                self.assertIn((False,True),calls)
                 await ws.send_json({'type':'settings','key':'role','value':'auto'})
                 for _ in range(3):
                     await asyncio.wait_for(ws.receive_json(),2)
-                    if calls[-1] is False:break
-                self.assertFalse(calls[-1])
+                    if calls[-1] == (False,False):break
+                self.assertEqual(calls[-1],(False,False))
+
+
+    async def test_manual_driver_is_explicit_backend_override_on_same_socket(self):
+        from unittest.mock import patch
+        source=self.client.server.app['source']
+        original=source.sample
+        calls=[]
+        def sampled(force_driver=False,force_spotter=False):
+            calls.append((force_driver,force_spotter))
+            return original(force_driver=force_driver,force_spotter=force_spotter)
+        with patch.object(source,'sample',side_effect=sampled):
+            async with self.client.ws_connect('/ws') as ws:
+                await ws.receive_json()
+                await ws.send_json({'type':'settings','key':'role','value':'driver'})
+                for _ in range(3):
+                    await asyncio.wait_for(ws.receive_json(),2)
+                    if (True,False) in calls:break
+                self.assertIn((True,False),calls)
+                await ws.send_json({'type':'settings','key':'role','value':'spotter'})
+                for _ in range(3):
+                    await asyncio.wait_for(ws.receive_json(),2)
+                    if calls[-1] == (False,True):break
+                self.assertEqual(calls[-1],(False,True))
+                await ws.send_json({'type':'settings','key':'role','value':'auto'})
+                for _ in range(3):
+                    await asyncio.wait_for(ws.receive_json(),2)
+                    if calls[-1] == (False,False):break
+                self.assertEqual(calls[-1],(False,False))
 
     async def test_switch_modes_on_same_socket(self):
         async with self.client.ws_connect('/ws') as ws:
