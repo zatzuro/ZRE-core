@@ -26,7 +26,7 @@ class LapCoach:
     def __init__(self):
         self.samples={};self.last_pct=None;self.dirty=False;self.completed_buffers=deque(maxlen=2)
         self.recent=deque(maxlen=8);self.recent_advice=deque(maxlen=8);self.recent_valid_advice=deque(maxlen=8);self.stint_advice=[];self.map_advice=[];self.map_source='';self.best_segments=[None]*ZONES
-        self.lap_segments=deque(maxlen=12);self.best_lap=None;self.advice=[];self.completed=0
+        self.lap_segments=deque(maxlen=12);self.stint_segments=[];self.best_lap=None;self.advice=[];self.completed=0
         self.last_diagnostics={};self.last_lap_record=None;self.track_map=None;self.corner_model=[];self.track_name=None;self.track_layout=None;self.track_num_turns=None
     def set_track_context(self,name=None,layout=None,num_turns=None):
         identity=(name or '',layout or '')
@@ -101,7 +101,7 @@ class LapCoach:
                 zone,loss=max(losses,key=lambda item:item[1]);self.advice=[(zone,loss,'Pérdida localizada','Aquí perdiste más tiempo que en tu referencia, pero todavía no hay una causa única con suficiente confianza.',(zone-.5)/ZONES,'GENERAL')]
         self.last_diagnostics={'accepted':True,'sampleBins':len(points),'duration':round(duration,3),'zonesCompared':sum(1 for a,b in zip(segments,prior) if a is not None and b is not None),'adviceCount':len(self.advice),'advice':[{'zone':item[0],'loss':round(item[1],3),'cause':item[2],'tip':item[3],'markerPct':round(item[4],4) if len(item)>4 and item[4] is not None else None,'phase':item[5] if len(item)>5 else 'GENERAL'} for item in self.advice]}
         self.last_lap_record={'duration':round(duration,4),'samples':current_rows}
-        self.recent.append(segments);self.recent_advice.append(list(self.advice));self.recent_valid_advice.append(list(self.advice));self.stint_advice.append(list(self.advice));self.lap_segments.append((duration,segments));self.best_lap=min(self.best_lap,duration) if self.best_lap else duration;self.best_segments=self._competitive_reference(include_all_if_empty=True);return True
+        self.recent.append(segments);self.recent_advice.append(list(self.advice));self.recent_valid_advice.append(list(self.advice));self.stint_advice.append(list(self.advice));self.stint_segments.append((duration,segments));self.lap_segments.append((duration,segments));self.best_lap=min(self.best_lap,duration) if self.best_lap else duration;self.best_segments=self._competitive_reference(include_all_if_empty=True);return True
     def _competitive_reference(self,include_all_if_empty=False):
         if not self.lap_segments:return [None]*ZONES
         window_best=min(duration for duration,_ in self.lap_segments);eligible=[segments for duration,segments in self.lap_segments if duration<=window_best*1.02]
@@ -168,7 +168,7 @@ class LapCoach:
             result.append((record['zone'],record['loss']/count,title,record['tip'],count,record['pct']/count,phase,confidence,ratio,len(laps)))
         return result
     def start_stint(self):
-        self.stint_advice=[]
+        self.stint_advice=[];self.stint_segments=[]
     def freeze_stint_summary(self):
         ranked=self._aggregate_advice(self.stint_advice,limit=3)
         if ranked:
@@ -193,7 +193,7 @@ class LapCoach:
         return [{'zone':self.location_label(zone,avg_pct,phase),'title':title,'confidence':confidence,'occurrences':count,'sampleLaps':total,'repeatRatio':round(ratio,3),'advice':f'{tip} · {count}/{total} vueltas · confianza {confidence} · pérdida media +{avg_loss:.2f}s'} for zone,avg_loss,title,tip,count,avg_pct,phase,confidence,ratio,total in ranked]
     def engineering_snapshot(self):
         """Compact stint/zone contract consumed by Setup Engineer."""
-        laps=list(self.lap_segments);valid_laps=len(laps);zones=[]
+        laps=list(self.stint_segments);valid_laps=len(laps);zones=[]
         for index in range(ZONES):
             candidates=[segments[index] for _,segments in laps if index<len(segments) and segments[index] is not None]
             if not candidates:continue
@@ -231,7 +231,9 @@ class LapCoach:
             })
         durations=[duration for duration,_ in laps];representative=(sum(durations)/len(durations)) if durations else None
         variance=(sum((value-representative)**2 for value in durations)/len(durations)) if durations and representative is not None else None
-        repeated=self.summary_priorities(limit=3)
+        ranked=self._aggregate_advice(self.stint_advice,limit=3);repeated=[]
+        for zone,avg_loss,title,tip,count,avg_pct,phase,confidence,ratio,total in ranked:
+            repeated.append({'zone':self.location_label(zone,avg_pct,phase),'title':title,'advice':tip,'occurrences':count,'sampleLaps':total,'repeatRatio':round(ratio,3),'confidence':confidence,'averageLoss':round(avg_loss,3)})
         return {
             'validLaps':valid_laps,'bestLap':round(self.best_lap,4) if self.best_lap else None,
             'optimalLap':round(self.optimal,4) if self.optimal else None,
