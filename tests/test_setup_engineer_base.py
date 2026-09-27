@@ -122,6 +122,17 @@ class SetupEngineerBaseTests(unittest.TestCase):
             self.assertEqual(a, b)
             self.assertEqual(len(list(a.parent.glob("setup-*.json"))), 1)
 
+    def test_report_names_preserve_separate_layouts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            engineer = SetupEngineer(folder)
+            gp = {"session": {"car": "McLaren", "track": "Spa", "layout": "GP"}, "stintNumber": 1}
+            endurance = {"session": {"car": "McLaren", "track": "Spa", "layout": "Endurance"}, "stintNumber": 1}
+            first = engineer.export_report(gp)
+            second = engineer.export_report(endurance)
+            self.assertNotEqual(first, second)
+            self.assertTrue(first.exists())
+            self.assertTrue(second.exists())
+
     def test_lap_coach_exposes_compact_engineering_contract(self):
         coach = LapCoach()
         metrics = (
