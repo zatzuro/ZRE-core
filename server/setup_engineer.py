@@ -90,9 +90,51 @@ def build_repeated_behavior(engineering):
             "validLaps": total,
             "repeatRatio": f"{ratio*100:.0f}%" if isinstance(ratio, (int, float)) else ratio,
             "confidence": item.get("confidence"),
+            "phase": item.get("phase"),
+            "averageLoss": item.get("averageLoss"),
             "advice": item.get("advice"),
         })
     return repeated
+
+
+def build_balance_patterns(repeated, feedback=None):
+    feedback=feedback or {};grouped={"ENTRY":[],"MID":[],"EXIT":[]}
+    for item in repeated or []:
+        phase=item.get("phase")
+        if phase not in grouped:continue
+        confidence=item.get("confidence") or "BAJA"
+        count=item.get("occurrences");total=item.get("validLaps")
+        driver_value=feedback.get(phase.lower())
+        aligned=driver_value in ("SUELTO","SUBVIRA") and confidence in ("MEDIA","ALTA")
+        prefix="POSSIBLE SETUP-RELATED LIMITATION" if aligned else "DETECTED PATTERN"
+        evidence=f"{item.get('pattern') or 'Pattern'} · {count}/{total} valid laps · confidence {confidence}"
+        if driver_value:
+            evidence+=f" · driver feedback {driver_value}"
+        grouped[phase].append((confidence=="ALTA",confidence=="MEDIA",item.get("averageLoss") or 0,f"{prefix}: {evidence}"))
+    result={}
+    for phase,items in grouped.items():
+        if not items:result[phase]="No repeated pattern with sufficient evidence."
+        else:
+            items.sort(reverse=True)
+            result[phase]=" | ".join(item[3] for item in items[:2])
+    return result
+
+
+def build_setup_summary(repeated, feedback=None):
+    feedback=feedback or {};ranked=[]
+    for item in repeated or []:
+        confidence=item.get("confidence") or "BAJA"
+        if confidence=="BAJA":continue
+        phase=item.get("phase")
+        driver_value=feedback.get(str(phase or "").lower())
+        aligned=driver_value in ("SUELTO","SUBVIRA")
+        priority=(2 if confidence=="ALTA" else 1)+(1 if aligned else 0)
+        prefix="Possible setup-related limitation" if aligned else "Detected pattern"
+        text=f"{prefix}: {item.get('location') or 'Zone'} · {item.get('pattern') or 'Pattern'} · {item.get('occurrences')}/{item.get('validLaps')} valid laps · confidence {confidence}"
+        if aligned:text+=f" · driver reports {driver_value}"
+        ranked.append((priority,item.get("averageLoss") or 0,text))
+    ranked.sort(reverse=True)
+    return [item[2] for item in ranked[:3]]
 
 
 def build_corner_analysis(engineering):
@@ -239,6 +281,7 @@ class SetupEngineer:
             "stintDurationSeconds": round(duration, 1) if duration is not None else None,
         }
 
+        repeated=build_repeated_behavior(engineering);feedback=base.get("driverFeedback") or {}
         record = {
             "createdAt": datetime.now().isoformat(timespec="seconds"),
             "session": session,
@@ -247,11 +290,11 @@ class SetupEngineer:
             "setup": setup,
             "stintPerformance": performance,
             "corners": build_corner_analysis(engineering),
-            "balancePatterns": {},
-            "repeatedBehavior": build_repeated_behavior(engineering),
-            "driverFeedback": base.get("driverFeedback") or {},
+            "balancePatterns": build_balance_patterns(repeated,feedback),
+            "repeatedBehavior": repeated,
+            "driverFeedback": feedback,
             "comparison": {},
-            "setupEngineerSummary": [],
+            "setupEngineerSummary": build_setup_summary(repeated,feedback),
             "dataQuality": {
                 "validLaps": valid_laps,
                 "cornerModelCount": len((engineering or {}).get("corners") or []),
@@ -290,6 +333,8 @@ class SetupEngineer:
         if comment is not None:
             feedback["comment"] = str(comment).strip()[:1000]
         stint["driverFeedback"] = feedback
+        stint["balancePatterns"]=build_balance_patterns(stint.get("repeatedBehavior") or [],feedback)
+        stint["setupEngineerSummary"]=build_setup_summary(stint.get("repeatedBehavior") or [],feedback)
         session = stint.get("session") or {}
         path = self.store.save_stint(stint)
         self.last_saved = self.store._read_json(path, stint)
