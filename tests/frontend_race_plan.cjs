@@ -50,3 +50,59 @@ assert.equal(rendered['spotter-standing-all'].full,true);
 assert.ok((el('spotter-vnext-stints').children||[]).length>=3);
 console.log('Spotter Race Plan vNext rendering and full standings: OK');
 
+
+
+const driverIds=['endurance-strategy-card','pilot-plan-box','pilot-plan-countdown','pilot-plan-window','pilot-plan-range','pilot-plan-fuel','pilot-plan-fuel-source','pilot-plan-tyres','pilot-plan-tyres-note','pilot-plan-alert','strategy-verdict'];
+driverIds.forEach(id=>assert(html.includes('id="'+id+'"'),'missing PILOTO Race Plan id '+id));
+
+const pilotCode=code.slice(code.indexOf('function renderEnduranceStrategy('),code.indexOf('function priorityParts('));
+const pilotNodes=new Map();
+const pilotEl=id=>{if(!pilotNodes.has(id))pilotNodes.set(id,{hidden:false,value:'',textContent:'',dataset:{},style:{},classList:{toggle(){}},replaceChildren(){}});return pilotNodes.get(id);};
+const pilotUi={
+  $:pilotEl,
+  document:{activeElement:null},
+  strategyConfig:{baseStintLaps:37,extendedStintLaps:38,pitLossSeconds:30},
+  setText(id,value){pilotEl(id).textContent=String(value??'—');},
+  strategyInputValue(){},
+  renderStrategyTimeline(){},
+  timingMode:'relative',
+  timingRows(){},
+  renderLiveTrackMap(){},
+  renderRival(){},
+  paceRows(){},
+};
+vm.createContext(pilotUi);vm.runInContext(pilotCode,pilotUi);
+const pilotData={
+  enduranceStrategy:{available:true,verdict:'LEGACY OK',currentStint:3},
+  racePlanVNext:{
+    fuelModel:{confidence:'HIGH',source:'CURRENT_SESSION'},
+    raceState:{current_lap:404,completed_laps:403,on_pit_road:false,require_tire_change:false},
+    currentPlan:{available:true,minimum_stops:2,window:{earliest_safe:401,target:405,fuel_limit:405,state:'BOX NEXT LAP'},stops:[{number:10,lap:405,earliest_safe:401,fuel_limit:405,fuel_to_add_liters:96.4,final_fill:false}]}
+  },
+  self:{pit:'PISTA',pitWindow:'—',nextStop:'—',laps:[],fuel:'33.4 L',lastUse:'2.39',bestUse:'2.30',worstUse:'2.50',wear:{}},
+  relative:[],standing:[],coach:{},raceDirector:{}
+};
+pilotUi.renderLive(pilotData);
+assert.equal(pilotEl('pilot-plan-box').textContent,'V405');
+assert.equal(pilotEl('pilot-plan-countdown').textContent,'1 VUELTA');
+assert.equal(pilotEl('pilot-plan-window').textContent,'BOX NEXT LAP');
+assert.equal(pilotEl('pilot-plan-range').textContent,'V401 → V405');
+assert.equal(pilotEl('pilot-plan-fuel').textContent,'+96.4 L');
+assert.equal(pilotEl('pilot-plan-tyres').textContent,'—');
+assert.equal(pilotEl('pilot-plan-alert').textContent,'BOX NEXT LAP');
+assert.equal(pilotEl('pit').textContent,'BOX NEXT LAP');
+assert.equal(pilotEl('pit-window').textContent,'1 VUELTA');
+assert.equal(pilotEl('next-stop').textContent,'V405');
+
+pilotData.racePlanVNext.raceState.current_lap=405;
+pilotData.racePlanVNext.currentPlan.window.state='BOX THIS LAP';
+pilotUi.renderLive(pilotData);
+assert.equal(pilotEl('pilot-plan-countdown').textContent,'AHORA');
+assert.equal(pilotEl('pilot-plan-alert').textContent,'BOX THIS LAP');
+assert.equal(pilotEl('pit').textContent,'BOX THIS LAP');
+
+pilotData.racePlanVNext.raceState.require_tire_change=true;
+pilotUi.renderLive(pilotData);
+assert.equal(pilotEl('pilot-plan-tyres').textContent,'REGLA ACTIVA');
+assert.equal(pilotEl('pilot-plan-tyres-note').textContent,'SERVICIO AÚN NO ASIGNADO');
+console.log('PILOTO Race Plan vNext rendering: OK');
