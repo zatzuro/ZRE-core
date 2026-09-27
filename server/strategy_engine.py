@@ -259,7 +259,9 @@ def _build_windows_and_stops(inputs, stop_count, finish, current_capacity, futur
         if local_index==0 and first_target_override is not None:
             try:forced=int(first_target_override)
             except (TypeError,ValueError):forced=None
-            if forced is not None and earliest<=forced<=fuel_limit:
+            if forced is not None and forced==previous_lap and forced<=fuel_limit:
+                earliest=forced;target=forced
+            elif forced is not None and earliest<=forced<=fuel_limit:
                 target=forced
 
         laps_run=max(0,target-previous_lap)
@@ -440,7 +442,10 @@ class RacePlanEngine:
             self.committed_target_lap=None
         target=self.committed_target_lap
         if target is not None and candidate.window is not None:
-            if not (candidate.window.earliest_safe<=target<=candidate.window.fuel_limit):
+            current_now=int(inputs.current_lap)
+            still_valid=(candidate.window.earliest_safe<=target<=candidate.window.fuel_limit)
+            committed_this_lap=(target==current_now and target<=candidate.window.fuel_limit)
+            if not (still_valid or committed_this_lap):
                 target=None
         plan=calculate_race_plan(inputs,forced_minimum_stops=stable,first_target_override=target)
         if plan.window is not None:
