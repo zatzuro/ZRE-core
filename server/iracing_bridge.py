@@ -177,7 +177,7 @@ class DashboardSource:
               'SessionTimeRemain','FuelLevel','Lap','LapCompleted',
               'CarIdxLapDistPct','CarIdxLap','CarIdxLapCompleted','CarIdxPosition',
               'CarIdxClassPosition','CarIdxLastLapTime','CarIdxBestLapTime',
-              'CarIdxOnPitRoad','CarIdxEstTime')
+              'CarIdxOnPitRoad','CarIdxEstTime','Lat','Lon','YawNorth')
         try:
             self.ir.freeze_var_buffer_latest()
             try:
@@ -358,11 +358,13 @@ class DashboardSource:
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             if completed_laps is not None and fuel is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
+            self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
             self.coach.capture(self.get("LapDistPct", player_pct), session_time,
                                self.get("Speed"), self.get("Brake"), self.get("Throttle"),
                                on_track=bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
                                steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
-                               yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"))
+                               yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"),
+                               lat=self.get("Lat"),lon=self.get("Lon"),yaw_north=self.get("YawNorth"))
             if player:
                 player["lastLap"] = self.lap_text(last_lap)
             if self.confirmed_session_best is not None:
