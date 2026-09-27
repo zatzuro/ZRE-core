@@ -221,3 +221,36 @@ def advice_marker(title, metrics, zone, zones):
     if title == "Velocidad mínima baja":
         return (m(11) if m(11) is not None else center), "MID"
     return center, "GENERAL"
+
+
+def consolidate_advice(advice, corners=None, limit=2):
+    """Keep the strongest actionable finding per physical corner.
+
+    compare() may find multiple symptoms in adjacent distance zones that belong
+    to the same real corner. Preserve the highest-loss item for that corner and
+    then fill remaining slots with findings from different locations.
+    """
+    corners = corners or []
+    ranked = sorted(advice or [], key=lambda item: item[1], reverse=True)
+    selected = []
+    used_corner_numbers = set()
+    used_positions = []
+    for item in ranked:
+        zone, loss, title, tip = item[:4]
+        marker_pct = item[4] if len(item) > 4 else None
+        phase = item[5] if len(item) > 5 else "GENERAL"
+        corner = nearest_corner(corners, marker_pct, phase) if marker_pct is not None else None
+        if corner:
+            number = corner.get("number")
+            if number in used_corner_numbers:
+                continue
+        elif marker_pct is not None and any(circular_distance(marker_pct, pct) < 0.055 for pct in used_positions):
+            continue
+        selected.append(item)
+        if corner:
+            used_corner_numbers.add(corner.get("number"))
+        elif marker_pct is not None:
+            used_positions.append(marker_pct)
+        if len(selected) >= limit:
+            break
+    return selected
