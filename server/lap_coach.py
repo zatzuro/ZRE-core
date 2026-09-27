@@ -223,5 +223,7 @@ def compare(segments,reference):
             if max_steer is not None and ref_max_steer is not None and max_steer>ref_max_steer+.12:
                 extra_deg=math.degrees(max_steer-ref_max_steer);title='Exceso de volante';tip=f'Frenas en un punto parecido, pero usas unos {extra_deg:.0f} grados más de volante hacia la {direction} y pierdes cerca de {speed_delta:.0f} km/h. Prepara una entrada más abierta por la {outside} y deja correr más el coche.' if same_direction and outside else (f'Frenas en un punto parecido, pero usas unos {extra_deg:.0f} grados más de volante hacia la {direction} y pierdes cerca de {speed_delta:.0f} km/h. Abre la entrada y deja correr más el coche.' if direction else f'Frenas en un punto parecido, pero usas unos {extra_deg:.0f} grados más de volante y pierdes cerca de {speed_delta:.0f} km/h. Abre la entrada y deja correr más el coche.')
             else:title='Velocidad mínima baja';tip=f'Frenas en un punto parecido, pero llegas aproximadamente {speed_delta:.0f} km/h más lento al centro. Suelta progresivamente el freno y deja correr el coche.'
-        if title:advice.append((i,loss,title,tip))
+        if title:
+            marker_pct,phase=advice_marker(title,m,i,ZONES)
+            advice.append((i,loss,title,tip,marker_pct,phase))
     return sorted(advice,key=lambda item:item[1],reverse=True)[:2]
