@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
+const root = process.cwd();
 const vm = require('node:vm');
 
 const source = fs.readFileSync('web/app.js', 'utf8');
@@ -75,4 +77,14 @@ function makeContext() {
   assert(app.includes("$('live-view').hidden=view!=='live'"),'PILOTO live DOM must remain independently switchable');
   assert(app.includes("$('spotter-view').hidden=view!=='spotter'"),'SPOTTER DOM must remain independently switchable');
   console.log('PILOTO/SPOTTER view regression: OK');
+})();
+
+
+(function responsiveCssRegression(){
+  const css=fs.readFileSync(path.join(root,'web','style.css'),'utf8');
+  assert(css.includes('v2.5.6 — responsive viewport stabilization'),'responsive stabilization block must exist');
+  assert(css.includes('@media(min-width:1101px) and (max-width:1650px)'),'desktop width breakpoint must exist');
+  assert(css.includes('@media(min-width:1101px) and (max-height:850px)'),'desktop height breakpoint must exist');
+  assert(css.includes('#live-track-map{min-width:0;min-height:0;max-width:100%;max-height:100%}'),'track map must be allowed to shrink inside its container');
+  console.log('Responsive CSS regression: OK');
 })();
