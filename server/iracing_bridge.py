@@ -297,15 +297,18 @@ class DashboardSource:
             # which payload ZRE emits for this websocket frame.
             if self.use_spotter_payload(context.auto_mode,force_driver,force_spotter):
                 return self.spotter_payload(context,drivers,session,results,weekend,session_time,driver_info)
+            # PILOTO is always the local SDK car. TeamCarContext may decide AUTO,
+            # but it must never replace PlayerCarIdx as the driver's data source.
+            pilot_idx=player_idx
             live_last=self.get("CarIdxLastLapTime",[])
             valid_bests=[seconds(r.get("FastestTime")) for r in results.values()]
             session_best=min((v for v in valid_bests if v),default=None)
             if self.confirmed_session_best is not None:
                 session_best=min(session_best,self.confirmed_session_best) if session_best else self.confirmed_session_best
-            player_driver=cars.get(player_idx,{})
+            player_driver=cars.get(pilot_idx,{})
             player_class_id=player_driver.get("CarClassID")
             lap_pct=self.get("CarIdxLapDistPct",[])
-            raw_player_pct=lap_pct[player_idx] if player_idx<len(lap_pct) else None
+            raw_player_pct=lap_pct[pilot_idx] if pilot_idx<len(lap_pct) else None
             player_pct=raw_player_pct if raw_player_pct is not None and raw_player_pct>=-.5 else None
             speed=seconds(self.get("Speed",0),45.0)
             track_length=self.track_metres(self.get("WeekendInfo",{}).get("TrackLength","5 km"))
@@ -326,15 +329,15 @@ class DashboardSource:
                 row={"idx":idx,"pos":overall_pos,"classPos":class_pos,"classId":driver.get("CarClassID"),
                      "className":driver.get("CarClassShortName") or "","number":str(driver.get("CarNumber","—")),
                      "car":car_label(driver),"brand":car_brand(driver),"driver":driver.get("UserName") or "—" if idx not in roster_conflicts else "—",
-                     "gap":"TÚ" if idx==player_idx else (self.gap_text(gap) if gap is not None else "—"),
+                     "gap":"TÚ" if idx==pilot_idx else (self.gap_text(gap) if gap is not None else "—"),
                      "gapSeconds":gap if gap is not None else 0.0,
                      "lastLap":self.lap_text(live_last[idx] if idx<len(live_last) else result.get("LastTime")),
-                     "pace":self.delta_text(seconds(result.get("FastestTime")),session_best),"completedLaps":result.get("LapsComplete"),"isPlayer":idx==player_idx}
+                     "pace":self.delta_text(seconds(result.get("FastestTime")),session_best),"completedLaps":result.get("LapsComplete"),"isPlayer":idx==pilot_idx}
                 standing_rows.append(row)
                 if valid_live_pct:relative_candidates.append(row.copy())
             standing_rows.sort(key=lambda row:(row["pos"]==0,row["pos"]))
             overall_player=next((row for row in standing_rows if row["isPlayer"]),None)
-            category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,player_idx,live_last,self.lap_text)
+            category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text)
             player = next((row for row in category_rows if row["isPlayer"]), None)
             relative_player = next((row for row in relative_candidates if row["isPlayer"]), None)
             relative = self.relative_rows(relative_candidates, relative_player) if relative_player else []
@@ -347,10 +350,10 @@ class DashboardSource:
             fuel=valid_fuel(self.get("FuelLevel"))
             completed_raw = self.get("LapCompleted")
             completed_laps = int(completed_raw) if completed_raw is not None else None
-            result = results.get(player_idx, {})
+            result = results.get(pilot_idx, {})
             car_completed=self.get('CarIdxLapCompleted',[]) or []
-            team_completed=car_completed[context.car_idx] if context.car_idx is not None and context.car_idx<len(car_completed) else None
-            if fuel is not None and context.local_driving and team_completed is not None and team_completed>=0:
+            team_completed=car_completed[pilot_idx] if pilot_idx<len(car_completed) else None
+            if fuel is not None and team_completed is not None and team_completed>=0:
                 self.team_fuel_reference=(fuel,int(team_completed))
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             if completed_laps is not None and fuel is not None:
@@ -401,8 +404,8 @@ class DashboardSource:
                 "header": {"car": car_label(player_driver), "track": weekend.get("TrackDisplayName", "Pista"),
                            "driver": player_driver.get("UserName", "Piloto"), "position": f"P{player['pos']}" if player else "P—",
                            "lap": f"VUELTA {lap_number}", "state": self.session_type_text(session.get("SessionType", "EN SESIÓN"))},
-                "self": {"fuel": f"{fuel:.1f} L · {'REAL LOCAL' if context.local_driving else 'SDK OBSERVADO'}" if fuel is not None else "—",
-                         "fuelValue":fuel,"fuelSource":('REAL LOCAL' if context.local_driving else 'SDK OBSERVADO') if fuel is not None else 'SIN DATO',
+                "self": {"fuel": f"{fuel:.1f} L · REAL LOCAL" if fuel is not None else "—",
+                         "fuelValue":fuel,"fuelSource":'REAL LOCAL' if fuel is not None else 'SIN DATO',
                          "lastUse": self.use_text(sum(self.fuel_per_lap) / len(self.fuel_per_lap) if self.fuel_per_lap else None),
                          "bestUse": self.use_text(min(self.fuel_per_lap) if self.fuel_per_lap else None),
                          "worstUse": self.use_text(max(self.fuel_per_lap) if self.fuel_per_lap else None),
@@ -418,7 +421,7 @@ class DashboardSource:
             payload["coach"] = coach
             payload["strategy"] = self.strategy_payload(fuel)
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
-            payload["raceDirector"]=self.race_director.payload(category_rows,player_idx,pit_by_idx,lap_by_idx)
+            payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
             behind=max((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']<0),key=lambda r:r['gapSeconds'],default=None)
@@ -429,7 +432,7 @@ class DashboardSource:
                 "teamChoices":[{'idx':context.car_idx,'label':f"#{player_driver.get('CarNumber','—')} · {player_driver.get('TeamName') or player_driver.get('UserName') or '—'}"}] if context.car_idx is not None else []}
             pilot_debug=dict(self.team_diagnostics(context),FuelLevelRaw=self.get('FuelLevel'),
                 FuelLevelValidated=valid_fuel(self.get('FuelLevel')),fuelValueUsed=fuel,
-                fuelSource=('REAL LOCAL' if context.local_driving else 'SDK OBSERVADO') if fuel is not None else 'SIN DATO',
+                fuelSource='REAL LOCAL' if fuel is not None else 'SIN DATO',
                 localDriving=context.local_driving)
             if self.debug_team_enabled:pilot_debug.update(rosterConflicts=sorted(roster_conflicts),relativeRoster=[{'carIdx':r['idx'],'sdkUserName':cars.get(r['idx'],{}).get('UserName'),'shownDriver':r['driver']} for r in relative],classResultPositions=[{'carIdx':r['idx'],'classPositionRaw':results.get(r['idx'],{}).get('ClassPosition'),'shownPosition':r['pos'],'overallPosition':results.get(r['idx'],{}).get('Position')} for r in category_rows])
             payload['teamDebug']=pilot_debug
