@@ -497,6 +497,10 @@ class DashboardSource:
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
             payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
+            payload["racePlanVNext"]=self.race_plan_vnext_payload(
+                context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
+                fuel,'REAL LOCAL' if fuel is not None else 'SIN DATO',lap_number,completed_for_strategy,
+                average_lap,on_pit_road,session_time)
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
@@ -753,6 +757,9 @@ class DashboardSource:
             base_stint_laps=self.strategy_settings.get('baseStintLaps'),
             extended_stint_laps=self.strategy_settings.get('extendedStintLaps'))
         strategy['stopPlan']=plan
+        race_plan_vnext=self.race_plan_vnext_payload(
+            context,session,results,weekend,driver_info,driver,fuel_used,fuel_source,
+            lap or 0,completed or 0,pace,pit,session_time)
         strategy['boxLap']=f"VUELTA {plan['stops'][0]['lap']}" if plan['stops'] else '—'
         strategy['stopsRemaining']=plan['stopsRemaining']
         strategy['autonomy']=f"{plan['autonomyLaps']} vueltas · {fuel_source}" if plan['autonomyLaps'] is not None else '—'
@@ -788,7 +795,7 @@ class DashboardSource:
                     'pitWindow':'—','nextStop':strategy.get('boxLap','—')},
             'lastLapSummary':None,'relative':relative,'standing':standing,'standingAll':class_rows,'relativeAvailableCars':len(live),
             'capabilities':{'coachControls':False},'coach':{},'strategy':{},
-            'raceDirector':race_director,'enduranceStrategy':strategy,'racePlan':plan,
+            'raceDirector':race_director,'enduranceStrategy':strategy,'racePlan':plan,'racePlanVNext':race_plan_vnext,
             'sessionSummary':{'active':False},'teamDebug':team_debug}
 
     def reset_session_tracking(self):
