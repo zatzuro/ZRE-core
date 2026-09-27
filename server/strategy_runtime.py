@@ -229,6 +229,8 @@ class RacePlanRuntime:
             self.fuel_model.current=restored.current
         engine=saved.get("engine") if isinstance(saved,dict) else None
         if isinstance(engine,dict):self.engine.restore_runtime(engine)
+        pit_learning=saved.get("pitLearning") if isinstance(saved,dict) else None
+        if isinstance(pit_learning,list):self.pit_learning=PitLearningModel.restore(pit_learning)
 
     def _persist_history_sample(self, sample, sample_id):
         history=self.store.load_history(*self.history_key) or {}
@@ -392,6 +394,7 @@ class RacePlanRuntime:
             "fuelModel":self.fuel_model.snapshot(),
             "fuelEstimate":estimate.to_dict(),
             "engine":self.engine.snapshot(),
+            "pitLearning":self.pit_learning.snapshot(),
             "runtime":{
                 "stopsCompleted":self.stops_completed,"stopHistory":self.stop_history[-64:],
                 "lastCompletedLaps":self.last_completed_laps,"lapStartFuel":self.lap_start_fuel,
@@ -427,7 +430,7 @@ class RacePlanRuntime:
                 "marginSource":estimate.margin_source,
             },
             "plan":plan.to_dict() if plan else None,
-            "initialPlan":self.engine.initial_plan.to_dict() if self.engine.initial_plan else None,
+            "initialPlan":self.engine.snapshot().get("initialPlan"),
             "currentPlan":self.engine.current_plan.to_dict() if self.engine.current_plan else None,
             "transition":self.engine.last_transition,
             "stopsCompleted":self.stops_completed,
