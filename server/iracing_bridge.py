@@ -216,12 +216,49 @@ class DashboardSource:
         self.coach = LapCoach()
         self.audio_mode = "off"
         self.audio_coach = AudioCoach()
+        self.race_plan_audio_announced=set()
+        self.race_plan_audio_state=None
+        self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
         self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.debug_team_enabled=False;self.capture_status='Listo para capturar'
+
+    def handle_race_plan_audio(self, payload):
+        """Speak meaningful Race Plan transitions once for the local driver."""
+        vnext=(payload or {}).get("racePlanVNext") or {}
+        plan=vnext.get("currentPlan") or vnext.get("plan") or {}
+        race_state=vnext.get("raceState") or {}
+        window=plan.get("window") or {}
+        status=str(window.get("state") or "")
+        target=window.get("target")
+        identity=(vnext.get("raceIdentity") or {}).get("key") or self.session_key
+        self.race_plan_audio_state=status or None
+        self.race_plan_audio_target=target
+        if race_state.get("on_pit_road"):
+            return None
+        messages={
+            "WINDOW OPEN":"Ventana de boxes abierta.",
+            "BOX NEXT LAP":"Box próxima vuelta.",
+            "BOX THIS LAP":"Box, box.",
+        }
+        message=messages.get(status)
+        if not message or self.audio_mode=="off":
+            return None
+        key=(str(identity),target,status)
+        if key in self.race_plan_audio_announced:
+            return None
+        self.race_plan_audio_announced.add(key)
+        if len(self.race_plan_audio_announced)>48:
+            self.race_plan_audio_announced=set(list(self.race_plan_audio_announced)[-32:])
+        logger.info("RACE PLAN AUDIO state=%s target=%s",status,target)
+        self.audio_coach.say(message)
+        return status
+
+    def race_plan_suppresses_coach_audio(self):
+        return self.race_plan_audio_state in ("WINDOW OPEN","BOX NEXT LAP","BOX THIS LAP")
 
     def capture_sdk_once(self):
         """Save one SDK frame without starting another connection or polling loop."""
@@ -501,6 +538,7 @@ class DashboardSource:
                 context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
                 fuel,'REAL LOCAL' if fuel is not None else 'SIN DATO',lap_number,completed_for_strategy,
                 average_lap,on_pit_road,session_time)
+            self.handle_race_plan_audio(payload)
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
@@ -803,7 +841,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_plan_runtime.detach(); self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -897,7 +935,7 @@ class DashboardSource:
             on_pit=bool(self.get("OnPitRoad",False)),caution=is_caution_flag(self.get("SessionFlags")))
         if coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
-            if self.audio_mode=="lap":
+            if self.audio_mode=="lap" and not self.race_plan_suppresses_coach_audio():
                 if self.coach.advice:
                     item=self.coach.advice[0];marker_pct=item[4] if len(item)>4 else None;phase=item[5] if len(item)>5 else None;label=self.coach.location_label(item[0],marker_pct,phase);logger.info("AUDIO PLAY location=%s zone=%s phase=%s loss=%.3f",label,item[0],phase,item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
                 else:self.audio_coach.say(f"Vuelta {pending['lap']}. Sin una pérdida clara para corregir.")
