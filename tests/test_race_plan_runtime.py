@@ -194,6 +194,66 @@ class RacePlanRuntimeTests(unittest.TestCase):
             self.assertEqual(runtime.payload()["simulation"], sim)
 
 
+    def test_race_plan_audio_is_deduplicated_by_target_and_state(self):
+        source=bridge.DashboardSource(force_demo=True)
+        spoken=[]
+        source.audio_coach=type("FakeAudio",(),{"say":lambda self,message:spoken.append(message)})()
+        source.audio_mode="lap"
+        def payload(status,target=405,on_pit=False):
+            return {"racePlanVNext":{
+                "raceIdentity":{"key":"race-1"},
+                "raceState":{"on_pit_road":on_pit},
+                "currentPlan":{"window":{"state":status,"target":target}}
+            }}
+        for _ in range(20):
+            source.handle_race_plan_audio(payload("WINDOW OPEN"))
+        self.assertEqual(spoken,["Ventana de boxes abierta."])
+        for _ in range(20):
+            source.handle_race_plan_audio(payload("BOX NEXT LAP"))
+        self.assertEqual(spoken[-1],"Box próxima vuelta.")
+        self.assertEqual(spoken.count("Box próxima vuelta."),1)
+        for _ in range(20):
+            source.handle_race_plan_audio(payload("BOX THIS LAP"))
+        self.assertEqual(spoken[-1],"Box, box.")
+        self.assertEqual(spoken.count("Box, box."),1)
+        source.handle_race_plan_audio(payload("WINDOW OPEN",target=440))
+        self.assertEqual(spoken.count("Ventana de boxes abierta."),2)
+
+    def test_race_plan_audio_respects_off_and_pit_lane(self):
+        source=bridge.DashboardSource(force_demo=True)
+        spoken=[]
+        source.audio_coach=type("FakeAudio",(),{"say":lambda self,message:spoken.append(message)})()
+        source.audio_mode="off"
+        data={"racePlanVNext":{"raceIdentity":{"key":"race-1"},"raceState":{"on_pit_road":False},"currentPlan":{"window":{"state":"BOX THIS LAP","target":405}}}}
+        source.handle_race_plan_audio(data)
+        self.assertEqual(spoken,[])
+        source.audio_mode="lap"
+        data["racePlanVNext"]["raceState"]["on_pit_road"]=True
+        source.handle_race_plan_audio(data)
+        self.assertEqual(spoken,[])
+
+    def test_race_plan_audio_state_suppresses_coach_near_pit(self):
+        source=bridge.DashboardSource(force_demo=True)
+        source.audio_mode="lap"
+        source.race_plan_audio_state="WINDOW CLOSED"
+        self.assertFalse(source.race_plan_suppresses_coach_audio())
+        for state in ("WINDOW OPEN","BOX NEXT LAP","BOX THIS LAP"):
+            source.race_plan_audio_state=state
+            self.assertTrue(source.race_plan_suppresses_coach_audio())
+
+    def test_race_plan_audio_reset_allows_new_session_alerts(self):
+        source=bridge.DashboardSource(force_demo=True)
+        spoken=[]
+        source.audio_coach=type("FakeAudio",(),{"say":lambda self,message:spoken.append(message)})()
+        source.audio_mode="lap"
+        data={"racePlanVNext":{"raceIdentity":{"key":"race-1"},"raceState":{"on_pit_road":False},"currentPlan":{"window":{"state":"WINDOW OPEN","target":405}}}}
+        source.handle_race_plan_audio(data)
+        self.assertTrue(source.race_plan_audio_announced)
+        source.reset_session_tracking()
+        self.assertEqual(source.race_plan_audio_announced,set())
+        self.assertIsNone(source.race_plan_audio_state)
+        self.assertIsNone(source.race_plan_audio_target)
+
     def test_runtime_has_no_sdk_reader_timer_or_thread(self):
         import server.strategy_runtime as runtime_module
         source = inspect.getsource(runtime_module.RacePlanRuntime)
