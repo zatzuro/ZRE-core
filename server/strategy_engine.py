@@ -422,6 +422,7 @@ class RacePlanEngine:
     """Stateful wrapper preserving initialPlan while currentPlan evolves."""
     def __init__(self):
         self.initial_plan=None
+        self.initial_plan_snapshot=None
         self.current_plan=None
         self.stabilizer=StopCountStabilizer()
         self.last_transition=""
@@ -454,14 +455,14 @@ class RacePlanEngine:
             elif plan.window.earliest_safe<=target<=plan.window.fuel_limit:
                 self.committed_target_lap=target
         self.last_transition=state
-        if self.initial_plan is None and plan.available:
+        if self.initial_plan is None and self.initial_plan_snapshot is None and plan.available:
             self.initial_plan=plan
         self.current_plan=plan
         return plan
 
     def snapshot(self):
         return {
-            "initialPlan":self.initial_plan.to_dict() if self.initial_plan else None,
+            "initialPlan":self.initial_plan.to_dict() if self.initial_plan else self.initial_plan_snapshot,
             "currentPlan":self.current_plan.to_dict() if self.current_plan else None,
             "stableMinimumStops":self.stabilizer.stable,
             "pendingMinimumStops":self.stabilizer.pending,
@@ -473,6 +474,7 @@ class RacePlanEngine:
     def restore_runtime(self, payload):
         """Restore hysteresis state without pretending serialized plans are live dataclasses."""
         payload=payload or {}
+        self.initial_plan_snapshot=payload.get("initialPlan") if isinstance(payload.get("initialPlan"),dict) else None
         self.stabilizer.stable=payload.get("stableMinimumStops")
         self.stabilizer.pending=payload.get("pendingMinimumStops")
         try:self.stabilizer.count=max(0,int(payload.get("pendingCount") or 0))
