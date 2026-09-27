@@ -282,6 +282,20 @@ class RacePlanCoreTests(unittest.TestCase):
         self.assertEqual(snapshot["initialPlan"]["minimum_stops"], initial)
         self.assertLessEqual(snapshot["currentPlan"]["minimum_stops"], initial)
 
+    def test_restart_restores_hysteresis_state(self):
+        engine = RacePlanEngine()
+        engine.update(self.inputs())
+        engine.stabilizer.pending = 9
+        engine.stabilizer.count = 2
+        engine.last_transition = "STOP REMOVAL POSSIBLE"
+        payload = engine.snapshot()
+        restored = RacePlanEngine().restore_runtime(payload)
+        self.assertEqual(restored.stabilizer.stable, 10)
+        self.assertEqual(restored.stabilizer.pending, 9)
+        self.assertEqual(restored.stabilizer.count, 2)
+        self.assertEqual(restored.last_transition, "STOP REMOVAL POSSIBLE")
+
+
     def test_petit_le_mans_observed_stints_fixture_can_seed_history(self):
         fixture = Path(__file__).parent / "fixtures" / "endurance_laps.json"
         data = json.loads(fixture.read_text(encoding="utf-8"))
