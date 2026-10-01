@@ -122,6 +122,16 @@ class SetupEngineerBaseTests(unittest.TestCase):
             self.assertEqual(a, b)
             self.assertEqual(len(list(a.parent.glob("setup-*.json"))), 1)
 
+    def test_setup_engineer_recovers_latest_persisted_stint_on_startup(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = StintStore(Path(folder) / 'data' / 'setup_engineer')
+            store.save_stint({'session':{'car':'McLaren','track':'Spa','layout':'GP'},'stintNumber':1})
+            engineer = SetupEngineer(folder)
+            self.assertIsNotNone(engineer.last_saved)
+            self.assertEqual(engineer.last_saved['stintNumber'], 1)
+            self.assertIsNotNone(engineer.last_report_path)
+            self.assertTrue(engineer.last_report_path.exists())
+            self.assertIn('Último stint recuperado', engineer.status)
     def test_report_names_preserve_separate_layouts(self):
         with tempfile.TemporaryDirectory() as folder:
             engineer = SetupEngineer(folder)
