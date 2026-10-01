@@ -73,6 +73,20 @@ class StintStore:
                 result.append(value)
         return result
 
+    def latest_stint(self):
+        candidates = []
+        if self.root.exists():
+            for path in self.root.glob("*/*/*/stints/stint-*.json"):
+                try:
+                    candidates.append((path.stat().st_mtime_ns, path))
+                except OSError:
+                    continue
+        if not candidates:
+            return None
+        _, path = max(candidates, key=lambda item: item[0])
+        value = self._read_json(path)
+        return value if isinstance(value, dict) else None
+
     def previous_stint(self, car, track, layout, before_number=None):
         stints = self.load_stints(car, track, layout)
         if before_number is not None:
