@@ -372,7 +372,9 @@ class DashboardSource:
             identity=SessionIdentity.from_sdk(weekend,session_num,context.car_idx if context.car_idx is not None else player_idx)
             session_time=self.get("SessionTime")
             if self.session_state.observe_identity(identity,ignore_car_idx=True):
-                logger.info("SESSION CHANGED");self.reset_session_tracking()
+                logger.info("SESSION CHANGED")
+                self.finalize_setup_stint_before_reset("session-change")
+                self.reset_session_tracking()
             self.session_key=identity;self.last_session_time=session_time
             if context.local_driving and context.car_idx is not None:
                 if not self.strategy_settings.get('tankCapacityLiters'):
@@ -835,6 +837,34 @@ class DashboardSource:
             'capabilities':{'coachControls':False},'coach':{},'strategy':{},
             'raceDirector':race_director,'enduranceStrategy':strategy,'racePlan':plan,'racePlanVNext':race_plan_vnext,
             'sessionSummary':{'active':False},'teamDebug':team_debug}
+
+    def finalize_setup_stint_before_reset(self, reason="session-change"):
+        """Best-effort close of an active Setup Engineer stint before session state is cleared."""
+        if not self.stint_active or self.setup_engineer.current is None:
+            return None
+        try:
+            engineering=self.coach.engineering_snapshot()
+            frozen=self.coach.freeze_stint_summary()
+            if frozen:
+                logger.info("COACH STINT SUMMARY frozen before reset priorities=%s reason=%s",len(frozen),reason)
+            saved=self.setup_engineer.finish_stint(
+                engineering,
+                fuel_end=self.last_fuel,
+                session_time=self.last_session_time,
+                tires_end={},
+                conditions_end={},
+            )
+            if saved:
+                logger.info(
+                    "SETUP ENGINEER STINT RECOVERED before reset number=%s report=%s reason=%s",
+                    saved.get("stintNumber"),
+                    self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,
+                    reason,
+                )
+            return saved
+        except Exception:
+            logger.exception("SETUP ENGINEER emergency finalize failed reason=%s",reason)
+            return None
 
     def reset_session_tracking(self):
         self.last_lap_number=None; self.lap_history=[]; self.last_fuel=None; self.fuel_at_lap_start=None
