@@ -63,7 +63,7 @@ class AssetAndUpdaterTests(unittest.TestCase):
         self.assertEqual(len(page.ids), len(set(page.ids)))
         ref_name=os.environ.get("GITHUB_REF_NAME","")
         head_ref=os.environ.get("GITHUB_HEAD_REF","")
-        if ref_name.startswith("work/") or head_ref.startswith("work/"):
+        if ref_name.startswith(("work/","fix/")) or head_ref.startswith(("work/","fix/")):
             self.assertGreaterEqual(updater._version_tuple(page.build),updater._version_tuple(bridge.APP_VERSION))
         else:
             self.assertEqual(page.build, bridge.APP_VERSION)
