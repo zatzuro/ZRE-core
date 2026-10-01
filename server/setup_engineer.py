@@ -224,6 +224,15 @@ class SetupEngineer:
         self.imported_setup = None
         self.setup_source_preference = "auto"
         self.status = "Esperando stint"
+        recovered = self.store.latest_stint()
+        if recovered:
+            self.last_saved = recovered
+            try:
+                self.export_report(recovered)
+                self.status = f"Último stint recuperado · reporte disponible · {self.last_report_path.name}"
+            except OSError:
+                self.last_report_path = None
+                self.status = f"Último stint recuperado · reporte pendiente"
 
     def import_html_setup(self, html_text, filename=None):
         text=str(html_text or "")
