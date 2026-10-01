@@ -359,7 +359,11 @@ class SetupEngineer:
         self.current = None
         self.last_saved = saved
         self.last_report_path = None
-        self.status=f"Stint {saved.get('stintNumber')} guardado · feedback pendiente"
+        report=self.export_report(saved)
+        if report:
+            self.status=f"Stint {saved.get('stintNumber')} guardado · reporte automático · {report.name}"
+        else:
+            self.status=f"Stint {saved.get('stintNumber')} guardado · reporte no disponible"
         return saved
 
     def update_feedback(self, stint, entry=None, mid=None, exit=None, comment=None):
@@ -377,7 +381,9 @@ class SetupEngineer:
         session = stint.get("session") or {}
         path = self.store.save_stint(stint)
         self.last_saved = self.store._read_json(path, stint)
-        self.status=f"Stint {self.last_saved.get('stintNumber')} · feedback guardado"
+        report=self.export_report(self.last_saved)
+        self.status=(f"Stint {self.last_saved.get('stintNumber')} · feedback guardado · reporte actualizado · {report.name}"
+                     if report else f"Stint {self.last_saved.get('stintNumber')} · feedback guardado")
         return self.last_saved
 
     def export_report(self, stint=None):
