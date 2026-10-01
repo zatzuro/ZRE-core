@@ -224,6 +224,15 @@ class SetupEngineer:
         self.imported_setup = None
         self.setup_source_preference = "auto"
         self.status = "Esperando stint"
+        recovered = self.store.latest_stint()
+        if recovered:
+            self.last_saved = recovered
+            try:
+                self.export_report(recovered)
+                self.status = f"Último stint recuperado · reporte disponible · {self.last_report_path.name}"
+            except OSError:
+                self.last_report_path = None
+                self.status = f"Último stint recuperado · reporte pendiente"
 
     def import_html_setup(self, html_text, filename=None):
         text=str(html_text or "")
@@ -359,7 +368,11 @@ class SetupEngineer:
         self.current = None
         self.last_saved = saved
         self.last_report_path = None
-        self.status=f"Stint {saved.get('stintNumber')} guardado · feedback pendiente"
+        report=self.export_report(saved)
+        if report:
+            self.status=f"Stint {saved.get('stintNumber')} guardado · reporte automático · {report.name}"
+        else:
+            self.status=f"Stint {saved.get('stintNumber')} guardado · reporte no disponible"
         return saved
 
     def update_feedback(self, stint, entry=None, mid=None, exit=None, comment=None):
@@ -377,7 +390,9 @@ class SetupEngineer:
         session = stint.get("session") or {}
         path = self.store.save_stint(stint)
         self.last_saved = self.store._read_json(path, stint)
-        self.status=f"Stint {self.last_saved.get('stintNumber')} · feedback guardado"
+        report=self.export_report(self.last_saved)
+        self.status=(f"Stint {self.last_saved.get('stintNumber')} · feedback guardado · reporte actualizado · {report.name}"
+                     if report else f"Stint {self.last_saved.get('stintNumber')} · feedback guardado")
         return self.last_saved
 
     def export_report(self, stint=None):

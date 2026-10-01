@@ -11,6 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from server import iracing_bridge as bridge
 from server.race_director import select_rival
+from server.setup_engineer import SetupEngineer
 from server.strategy_engine import StrategyInputs, calculate_strategy
 import updater
 
@@ -35,13 +36,34 @@ class PageParser(HTMLParser):
 
 
 class AssetAndUpdaterTests(unittest.TestCase):
+    def test_active_setup_stint_is_recovered_before_session_reset(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = bridge.DashboardSource(force_demo=True)
+            source.setup_engineer = SetupEngineer(folder)
+            source.stint_active = True
+            source.last_fuel = 45.0
+            source.last_session_time = 200.0
+            source.setup_engineer.start_stint(
+                {'car':'McLaren','track':'Spa','layout':'GP','session':'Practice','driver':'Santiago'},
+                {'source':'SDK','parameters':{'Aero':{'Wing':8.5}},'flatParameters':{'Aero.Wing':8.5},'metadata':{'setupName':'test'},'fingerprint':'test'},
+                {},
+                fuel_start=55.0,
+                session_time=100.0,
+            )
+            saved = source.finalize_setup_stint_before_reset('test')
+            self.assertIsNotNone(saved)
+            self.assertIsNone(source.setup_engineer.current)
+            self.assertIsNotNone(source.setup_engineer.last_report_path)
+            self.assertTrue(source.setup_engineer.last_report_path.exists())
+            self.assertEqual(source.setup_engineer.last_report_path.name, 'ZRE_SETUP_REPORT_mclaren_spa_gp_Stint01.md')
+
     def test_html_contract(self):
         page = PageParser()
         page.feed((bridge.WEB_ROOT / 'index.html').read_text(encoding='utf-8'))
         self.assertEqual(len(page.ids), len(set(page.ids)))
         ref_name=os.environ.get("GITHUB_REF_NAME","")
         head_ref=os.environ.get("GITHUB_HEAD_REF","")
-        if ref_name.startswith("work/") or head_ref.startswith("work/"):
+        if ref_name.startswith(("work/","fix/")) or head_ref.startswith(("work/","fix/")):
             self.assertGreaterEqual(updater._version_tuple(page.build),updater._version_tuple(bridge.APP_VERSION))
         else:
             self.assertEqual(page.build, bridge.APP_VERSION)

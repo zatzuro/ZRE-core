@@ -122,6 +122,16 @@ class SetupEngineerBaseTests(unittest.TestCase):
             self.assertEqual(a, b)
             self.assertEqual(len(list(a.parent.glob("setup-*.json"))), 1)
 
+    def test_setup_engineer_recovers_latest_persisted_stint_on_startup(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store = StintStore(Path(folder) / 'data' / 'setup_engineer')
+            store.save_stint({'session':{'car':'McLaren','track':'Spa','layout':'GP'},'stintNumber':1})
+            engineer = SetupEngineer(folder)
+            self.assertIsNotNone(engineer.last_saved)
+            self.assertEqual(engineer.last_saved['stintNumber'], 1)
+            self.assertIsNotNone(engineer.last_report_path)
+            self.assertTrue(engineer.last_report_path.exists())
+            self.assertIn('Último stint recuperado', engineer.status)
     def test_report_names_preserve_separate_layouts(self):
         with tempfile.TemporaryDirectory() as folder:
             engineer = SetupEngineer(folder)
@@ -280,10 +290,17 @@ class SetupEngineerBaseTests(unittest.TestCase):
             self.assertEqual(first["stintNumber"], 1)
             self.assertEqual(first["driverFeedback"]["mid"], "SUELTO")
             self.assertEqual(first["dataQuality"]["telemetrySource"], "LAP_COACH_SUMMARY")
-            report = engineer.export_report(first)
+            report = engineer.last_report_path
+            self.assertIsNotNone(report)
             self.assertTrue(report.exists())
-            self.assertIn("Reporte exportado", engineer.status)
-            self.assertEqual(engineer.last_report_path, report)
+            self.assertIn("reporte automático", engineer.status)
+            before = report.read_text(encoding="utf-8")
+            engineer.update_feedback(first, "NEUTRO", "SUBVIRA", "NEUTRO", "Updated feedback.")
+            self.assertTrue(engineer.last_report_path.exists())
+            self.assertIn("reporte actualizado", engineer.status)
+            after = engineer.last_report_path.read_text(encoding="utf-8")
+            self.assertNotEqual(before, after)
+            self.assertIn("SUBVIRA", after)
 
             setup_b = snapshot_from_sdk({"Aero": {"Wing": 7.5}})
             engineer.start_stint(session, setup_b, {}, 55.0, 500.0)
