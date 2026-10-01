@@ -55,7 +55,7 @@ class AssetAndUpdaterTests(unittest.TestCase):
             self.assertIsNone(source.setup_engineer.current)
             self.assertIsNotNone(source.setup_engineer.last_report_path)
             self.assertTrue(source.setup_engineer.last_report_path.exists())
-            self.assertEqual(source.setup_engineer.last_report_path.name, 'ZRE_SETUP_REPORT_McLaren_Spa_GP_Stint01.md')
+            self.assertEqual(source.setup_engineer.last_report_path.name, 'ZRE_SETUP_REPORT_mclaren_spa_gp_Stint01.md')
 
     def test_html_contract(self):
         page = PageParser()
