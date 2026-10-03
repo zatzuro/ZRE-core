@@ -445,6 +445,8 @@ class DashboardSource:
             player_class_id=player_driver.get("CarClassID")
             lap_pct=self.get("CarIdxLapDistPct",[]) or []
             track_surface=self.get("CarIdxTrackSurface",[]) or []
+            live_overall_pos=self.get("CarIdxPosition",[]) or []
+            live_class_pos=self.get("CarIdxClassPosition",[]) or []
             active_indices=pilot_active_indices(cars,pilot_idx,lap_pct,track_surface)
             raw_player_pct=lap_pct[pilot_idx] if pilot_idx<len(lap_pct) else None
             player_pct=raw_player_pct if raw_player_pct is not None and 0<=raw_player_pct<=1 else None
@@ -462,10 +464,17 @@ class DashboardSource:
                     while delta_laps>.5:delta_laps-=1
                     while delta_laps<-.5:delta_laps+=1
                     gap=delta_laps*track_length/max(speed,1.0)
-                overall_pos=result.get("Position",driver.get("CarIdxPosition",0)) or 0
+                live_overall=live_overall_pos[idx] if idx<len(live_overall_pos) else None
+                live_class=live_class_pos[idx] if idx<len(live_class_pos) else None
+                try:
+                    overall_pos=int(live_overall)+1 if live_overall is not None and int(live_overall)>=0 else int(result.get("Position") or 0)
+                except (TypeError,ValueError):
+                    overall_pos=int(result.get("Position") or 0)
                 class_position=result.get("ClassPosition")
-                try:class_pos=int(class_position)+1 if class_position is not None else overall_pos
-                except (TypeError,ValueError):class_pos=overall_pos
+                try:
+                    class_pos=int(live_class)+1 if live_class is not None and int(live_class)>=0 else (int(class_position)+1 if class_position is not None else overall_pos)
+                except (TypeError,ValueError):
+                    class_pos=int(class_position)+1 if class_position is not None else overall_pos
                 row={"idx":idx,"pos":overall_pos,"classPos":class_pos,"classId":shown_driver.get("CarClassID"),
                      "className":shown_driver.get("CarClassShortName") or "","number":str(shown_driver.get("CarNumber","—")),
                      "car":car_label(shown_driver),"brand":car_brand(shown_driver),"driver":shown_driver.get("UserName") or "—" if idx==pilot_idx or idx not in roster_conflicts else "—",
@@ -479,6 +488,14 @@ class DashboardSource:
             overall_player=next((row for row in standing_rows if row["isPlayer"]),None)
             category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text)
             for row in category_rows:
+                idx=row.get("idx")
+                live_class=live_class_pos[idx] if isinstance(idx,int) and idx<len(live_class_pos) else None
+                try:
+                    if live_class is not None and int(live_class)>=0:
+                        row["pos"]=int(live_class)+1
+                        row["classPos"]=int(live_class)+1
+                except (TypeError,ValueError):
+                    pass
                 if row["idx"]==pilot_idx:
                     row["driver"]=player_driver.get("UserName") or "Piloto";row["car"]=car_label(player_driver);row["brand"]=car_brand(player_driver);row["number"]=str(player_driver.get("CarNumber","—"))
             player = next((row for row in category_rows if row["isPlayer"]), None)
