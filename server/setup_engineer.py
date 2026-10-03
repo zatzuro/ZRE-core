@@ -401,10 +401,15 @@ class SetupEngineer:
             return None
         session = record.get("session") or {}
         number = int(record.get("stintNumber") or 0)
-        filename = "ZRE_SETUP_REPORT_{}_{}_{}_Stint{:02d}.md".format(
+        setup = record.get("setup") or {}
+        meta = setup.get("metadata") or {}
+        setup_name = meta.get("setupName") or meta.get("filename")
+        setup_label = slug(setup_name, "setup-unidentified")
+        filename = "ZRE_SETUP_REPORT_{}_{}_{}_{}_Stint{:02d}.md".format(
             slug(session.get("car")),
             slug(session.get("track")),
             slug(session.get("layout"), "default"),
+            setup_label,
             number,
         )
         path = self.root / "reports" / filename
