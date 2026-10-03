@@ -93,7 +93,17 @@ def render_setup_report(stint, previous=None, setup_changes=None):
     comparison = stint.get("comparison") or {}
     setup_changes = setup_changes or stint.get("setupChanges") or []
 
+    meta = setup.get("metadata") or {}
+    setup_name = meta.get("setupName") or meta.get("filename")
+    setup_identity = {
+        "name": setup_name or "UNAVAILABLE",
+        "source": setup.get("source") or "UNAVAILABLE",
+        "fingerprint": setup.get("fingerprint") or "UNAVAILABLE",
+        "modified": meta.get("setupModified"),
+    }
+
     lines = ["# ZRE SETUP ENGINEER REPORT", ""]
+    lines += _section_map("SETUP IDENTITY", setup_identity)
     lines += _section_map("SESSION", session)
     lines += ["## CONDITIONS", ""]
     conditions=stint.get("conditions") or {}
@@ -109,7 +119,6 @@ def render_setup_report(stint, previous=None, setup_changes=None):
     lines += _section_map("TRACK PROFILE", profile)
 
     lines += ["## CURRENT SETUP", ""]
-    meta = setup.get("metadata") or {}
     if meta:
         for key, value in meta.items():
             lines.append(f"- **{key}:** {_value(value)}")
