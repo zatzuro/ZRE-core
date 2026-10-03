@@ -936,17 +936,20 @@ class DashboardSource:
             self.pending_lap={"lap":lap_number,"usage":usage,"sectors":[],"previousTime":self.last_recorded_lap_time,"valid":self.personal_lap_clean}
             self.personal_lap_clean=clean_now;self.personal_incidents=incidents;self.fuel_at_lap_start=fuel
             self.last_lap_number=lap_number
-        if self.pending_lap and completed:
-            numbered_confirmation=(result.get("LapsComplete")==self.pending_lap["lap"] and seconds(result.get("LastTime")) is not None and abs(float(result["LastTime"])-completed)<.001)
-            if completed!=self.pending_lap["previousTime"] or numbered_confirmation:
+        if self.pending_lap:
+            official_time=seconds(result.get("LastTime"))
+            official_match=(result.get("LapsComplete")==self.pending_lap["lap"] and official_time is not None)
+            candidate=official_time if official_match else completed
+            if candidate and (candidate!=self.pending_lap["previousTime"] or official_match):
                 sdk_best=seconds(self.get("LapBestLapTime"))
-                if self.get("LapBestLap")==self.pending_lap["lap"] and sdk_best is not None and abs(sdk_best-completed)<.001:
+                if self.get("LapBestLap")==self.pending_lap["lap"] and sdk_best is not None and abs(sdk_best-candidate)<.001:
                     self.pending_lap["valid"]=True
-                self.finalize_lap(self.pending_lap,completed,session_best)
-                logger.info("LAP COMPLETED %s valid=%s time=%.3f",self.pending_lap["lap"],self.pending_lap["valid"],completed)
+                self.finalize_lap(self.pending_lap,candidate,session_best)
+                logger.info("LAP COMPLETED %s valid=%s time=%.3f",self.pending_lap["lap"],self.pending_lap["valid"],candidate)
                 self.pending_lap=None
 
     def finalize_lap(self,pending,completed,session_best):
+        self.last_recorded_lap_time=completed
         usage=pending["usage"]
         if usage and 0<usage<30:
             self.fuel_per_lap.append(usage);self.fuel_per_lap=self.fuel_per_lap[-10:]
