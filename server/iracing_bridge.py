@@ -455,6 +455,7 @@ class DashboardSource:
         self.race_plan_audio_state=None
         self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
+        self.last_strategy_log_signature=None
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
@@ -614,8 +615,15 @@ class DashboardSource:
             if self.session_state.observe_identity(identity,ignore_car_idx=True):
                 logger.info("SESSION CHANGED")
                 self.finalize_setup_stint_before_reset("session-change")
+                self.recorder.finish_session("session-change")
                 self.reset_session_tracking()
+                self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
+                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID")})
+                self.last_strategy_log_signature=None
             self.session_key=identity;self.last_session_time=session_time
+            if self.recorder.session_id is None:
+                self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
+                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID")})
             if context.local_driving and context.car_idx is not None:
                 if not self.strategy_settings.get('tankCapacityLiters'):
                     measured_capacity=number(driver_info.get('DriverCarFuelMaxLtr'))
@@ -807,6 +815,15 @@ class DashboardSource:
             payload["rivalStrategy"]=rival_strategy_intelligence(
                 intel_comp,lap_number,fuel,self.fuel_per_lap,
                 {"nextStop":stop_lap,"window":stop_time})
+            primary_strategy=(payload["rivalStrategy"] or {}).get("primary")
+            if primary_strategy:
+                signature=(primary_strategy.get("carIdx"),primary_strategy.get("action"),primary_strategy.get("confidence"),
+                           (primary_strategy.get("rivalPitWindow") or {}).get("fromLap"),
+                           (primary_strategy.get("rivalPitWindow") or {}).get("toLap"))
+                if signature!=self.last_strategy_log_signature:
+                    self.recorder.write({"type":"strategy_prediction","sessionTime":session_time,"lap":lap_number,
+                        "prediction":primary_strategy,"source":"ZRE_INFERRED_FROM_OBSERVED_SESSION_DATA"})
+                    self.last_strategy_log_signature=signature
             payload["racePlanVNext"]=self.race_plan_vnext_payload(
                 context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
                 fuel,'REAL LOCAL' if fuel is not None else 'SIN DATO',lap_number,completed_for_strategy,
@@ -1145,6 +1162,7 @@ class DashboardSource:
             return None
 
     def reset_session_tracking(self):
+        self.last_strategy_log_signature=None
         if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
         self.last_lap_number=None; self.lap_history=[]; self.last_fuel=None; self.fuel_at_lap_start=None
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
