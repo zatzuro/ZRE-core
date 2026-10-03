@@ -166,87 +166,104 @@ def _sdk_number(value):
         return None
 
 def session_intelligence(get, weekend, session, cars, results, player_idx, player_class_id, lap_pct, track_surface, history=None):
-    """Normalize SDK-observed environment/session/traffic data without inventing rival state."""
+    """SDK observations plus conservative rival pit/stint inference."""
     env_keys=("AirTemp","TrackTemp","AirPressure","AirDensity","RelativeHumidity","FogLevel",
               "WindVel","WindDir","Skies","TrackWetness","Precipitation","WeatherDeclaredWet")
     environment={key:get(key) for key in env_keys if get(key) is not None}
-    session_data={
-        "type":session.get("SessionType"),"name":session.get("SessionName"),
+    session_data={"type":session.get("SessionType"),"name":session.get("SessionName"),
         "timeRemain":get("SessionTimeRemain"),"lapsRemain":get("SessionLapsRemain"),
-        "lapsRemainEx":get("SessionLapsRemainEx"),"flags":get("SessionFlags"),
-        "state":get("SessionState"),"pitsOpen":get("PitsOpen"),
-        "incidentLimit":weekend.get("WeekendOptions",{}).get("IncidentLimit"),
+        "lapsRemainEx":get("SessionLapsRemainEx"),"flags":get("SessionFlags"),"state":get("SessionState"),
+        "pitsOpen":get("PitsOpen"),"incidentLimit":weekend.get("WeekendOptions",{}).get("IncidentLimit"),
         "standingStart":weekend.get("WeekendOptions",{}).get("StandingStart"),
-        "teamRacing":weekend.get("TeamRacing"),"numCarClasses":weekend.get("NumCarClasses"),
-    }
+        "teamRacing":weekend.get("TeamRacing"),"numCarClasses":weekend.get("NumCarClasses")}
     pit_flags=get("CarIdxOnPitRoad",[]) or [];laps=get("CarIdxLap",[]) or []
     last_laps=get("CarIdxLastLapTime",[]) or [];best_laps=get("CarIdxBestLapTime",[]) or []
-    history=history if isinstance(history,dict) else {}
-    now=_sdk_number(get("SessionTime")) or 0.0
+    history=history if isinstance(history,dict) else {};now=_sdk_number(get("SessionTime")) or 0.0
     competitors=[];player_pct=_sdk_number(lap_pct[player_idx]) if player_idx<len(lap_pct) else None
     for idx,car in (cars or {}).items():
         if idx==player_idx or car.get("CarIsPaceCar"):continue
         pct=_sdk_number(lap_pct[idx]) if idx<len(lap_pct) else None
         surface=track_surface[idx] if idx<len(track_surface) else None
-        in_world=not (surface is not None and _sdk_number(surface) is not None and _sdk_number(surface)<0)
+        surface_num=_sdk_number(surface);in_world=not(surface_num is not None and surface_num<0)
         if pct is None and surface is None:in_world=False
+        result=results.get(idx,{})
+        current_lap=laps[idx] if idx<len(laps) else None
+        current_last=_sdk_number(last_laps[idx]) if idx<len(last_laps) else None
+        on_pit=bool(pit_flags[idx]) if idx<len(pit_flags) else False
+        previous=history.get(idx,{})
+        pit_history=list(previous.get("pitHistory") or [])
+        lap_times=list(previous.get("lapTimes") or [])
+        prev_lap=previous.get("lap")
+        if in_world and current_lap is not None and current_lap!=prev_lap and current_last and current_last>0:
+            lap_times.append({"lap":current_lap-1 if isinstance(current_lap,(int,float)) else current_lap,"time":current_last,"sessionTime":now})
+            lap_times=lap_times[-12:]
+        baseline_times=[x["time"] for x in lap_times[-8:] if _sdk_number(x.get("time")) and x["time"]>0]
+        baseline=sorted(baseline_times)[len(baseline_times)//2] if len(baseline_times)>=3 else None
+        prev_pit=bool(previous.get("onPitRoad"))
+        if on_pit and not prev_pit:
+            pit_history.append({"lap":current_lap,"sessionTime":now,"confidence":"CONFIRMED",
+                                "source":"SDK_PIT_ROAD","lapTime":current_last})
+        # If pit-road telemetry was missed, require a large lap-time anomaly plus stale/reappearance evidence.
+        reappeared=in_world and previous.get("presence")=="STALE"
+        anomalous=bool(baseline and current_last and current_last>baseline*1.28 and current_last-baseline>12.0)
+        duplicate_lap=any(p.get("lap")==current_lap for p in pit_history[-3:])
+        if anomalous and reappeared and not duplicate_lap:
+            pit_history.append({"lap":current_lap,"sessionTime":now,"confidence":"HIGH",
+                                "source":"LAP_ANOMALY_REAPPEARANCE","lapTime":current_last,"baselineLap":baseline})
+        pit_history=pit_history[-10:]
+        stops=[p.get("lap") for p in pit_history if isinstance(p.get("lap"),(int,float))]
+        stint_lengths=[b-a for a,b in zip(stops,stops[1:]) if b>a and b-a>=2]
+        next_stop=None
+        if stops and stint_lengths:
+            recent=stint_lengths[-3:];typical=sum(recent)/len(recent)
+            spread=max(1.0,(max(recent)-min(recent))/2 if len(recent)>1 else 2.0)
+            next_stop={"lap":round(stops[-1]+typical),"fromLap":round(stops[-1]+typical-spread),
+                       "toLap":round(stops[-1]+typical+spread),
+                       "confidence":"HIGH" if len(recent)>=3 and spread<=2 else ("MEDIUM" if len(recent)>=2 else "LOW"),
+                       "source":"OBSERVED_STINT_PATTERN","typicalStintLaps":round(typical,1)}
         observed_delta=None
         if player_pct is not None and pct is not None:
             observed_delta=pct-player_pct
             while observed_delta>.5:observed_delta-=1
             while observed_delta<-.5:observed_delta+=1
-        result=results.get(idx,{})
-        competitors.append({
-            "carIdx":idx,"number":str(car.get("CarNumber","—")),"driver":car.get("UserName") or "—",
+        row={"carIdx":idx,"number":str(car.get("CarNumber","—")),"driver":car.get("UserName") or "—",
             "team":car.get("TeamName") or "—","car":car_label(car),"classId":car.get("CarClassID"),
-            "sameClass":car.get("CarClassID")==player_class_id,"lapDistPct":pct,
-            "relativeLapFraction":observed_delta,"surface":surface,
-            "onPitRoad":bool(pit_flags[idx]) if idx<len(pit_flags) else None,
-            "lap":laps[idx] if idx<len(laps) else None,
-            "lastLap":_sdk_number(last_laps[idx]) if idx<len(last_laps) else None,
+            "sameClass":car.get("CarClassID")==player_class_id,"lapDistPct":pct,"relativeLapFraction":observed_delta,
+            "surface":surface,"onPitRoad":on_pit,"lap":current_lap,"lastLap":current_last,
             "bestLap":_sdk_number(best_laps[idx]) if idx<len(best_laps) else None,
-            "lapsComplete":result.get("LapsComplete"),
-            "source":"SDK_OBSERVED","presence":"LIVE" if in_world else "STALE"
-        }
-        previous=history.get(idx,{})
+            "lapsComplete":result.get("LapsComplete"),"presence":"LIVE" if in_world else "STALE",
+            "pitHistory":pit_history,"lastPit":pit_history[-1] if pit_history else None,
+            "stintLengths":stint_lengths[-5:],"nextPitEstimate":next_stop,"lapTimes":lap_times}
         if in_world:
-            row["lastSeenSessionTime"]=now;row["lastSeenAgo"]=0.0
-            row["lastKnownLapDistPct"]=pct
-            previous_lap=previous.get("lap")
-            if row.get("lap") is not None and row.get("lap")!=previous_lap:
-                row["lastLapMarkerSessionTime"]=now
+            row.update(source="SDK_OBSERVED",lastSeenSessionTime=now,lastSeenAgo=0.0,lastKnownLapDistPct=pct)
+            if current_lap is not None and current_lap!=prev_lap:row["lastLapMarkerSessionTime"]=now
             else:row["lastLapMarkerSessionTime"]=previous.get("lastLapMarkerSessionTime")
             history[idx]=dict(row)
         else:
             last_seen=_sdk_number(previous.get("lastSeenSessionTime"))
-            row.update({
-                "lastSeenSessionTime":last_seen,
-                "lastSeenAgo":max(0.0,now-last_seen) if last_seen is not None else None,
-                "lastKnownLapDistPct":previous.get("lastKnownLapDistPct"),
-                "lastLapMarkerSessionTime":previous.get("lastLapMarkerSessionTime"),
-                "lastLap":previous.get("lastLap",row.get("lastLap")),
-                "bestLap":previous.get("bestLap",row.get("bestLap")),
-                "lap":previous.get("lap",row.get("lap")),
-                "lapsComplete":previous.get("lapsComplete",row.get("lapsComplete")),
-                "source":"LAST_KNOWN_OBSERVATION"
-            })
+            row.update(source="LAST_KNOWN_OBSERVATION",lastSeenSessionTime=last_seen,
+                lastSeenAgo=max(0.0,now-last_seen) if last_seen is not None else None,
+                lastKnownLapDistPct=previous.get("lastKnownLapDistPct"),
+                lastLapMarkerSessionTime=previous.get("lastLapMarkerSessionTime"),
+                lastLap=previous.get("lastLap",row.get("lastLap")),bestLap=previous.get("bestLap",row.get("bestLap")),
+                lap=previous.get("lap",row.get("lap")),lapsComplete=previous.get("lapsComplete",row.get("lapsComplete")),
+                pitHistory=previous.get("pitHistory",pit_history),lastPit=previous.get("lastPit"),
+                stintLengths=previous.get("stintLengths",stint_lengths),nextPitEstimate=previous.get("nextPitEstimate"),
+                lapTimes=previous.get("lapTimes",lap_times))
         marker=_sdk_number(row.get("lastLapMarkerSessionTime"))
         row["lastLapMarkerAgo"]=max(0.0,now-marker) if marker is not None else None
         competitors.append(row)
-    # Forget stale observations when iRacing starts a different session/subsession.
     active_ids={idx for idx in cars if isinstance(idx,int)}
     for stale_idx in list(history):
         if stale_idx not in active_ids:history.pop(stale_idx,None)
     competitors.sort(key=lambda x:(x["presence"]!="LIVE",x["relativeLapFraction"] is None,abs(x["relativeLapFraction"] or 0)))
     traffic=[x for x in competitors if x["presence"]=="LIVE" and x["relativeLapFraction"] is not None and not x["onPitRoad"]]
     ahead=[x for x in traffic if x["relativeLapFraction"]>0];behind=[x for x in traffic if x["relativeLapFraction"]<0]
-    return {
-        "environment":{"observed":environment,"source":"SDK_OBSERVED"},
+    return {"environment":{"observed":environment,"source":"SDK_OBSERVED"},
         "session":{"observed":session_data,"source":"SDK_OBSERVED"},
         "traffic":{"observed":{"carsInWorld":len(traffic),"nearestAhead":min(ahead,key=lambda x:x["relativeLapFraction"],default=None),
-                               "nearestBehind":max(behind,key=lambda x:x["relativeLapFraction"],default=None)},"source":"SDK_OBSERVED"},
-        "competitors":{"observed":competitors,"source":"SDK_OBSERVED"},
-    }
+            "nearestBehind":max(behind,key=lambda x:x["relativeLapFraction"],default=None)},"source":"SDK_OBSERVED"},
+        "competitors":{"observed":competitors,"source":"SDK_OBSERVED_AND_INFERRED"}}
 
 def pilot_active_indices(cars, player_idx, lap_pct=None, track_surface=None):
     """Live PILOTO boards show cars currently in-world plus the local car.
