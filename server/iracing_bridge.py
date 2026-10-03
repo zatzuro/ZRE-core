@@ -29,6 +29,7 @@ try:
     from server.lap_coach import LapCoach, number
     from server.audio_coach import AudioCoach
     from server.session_recorder import SessionRecorder
+    from server.session_uploader import upload_pending_background
     from server.race_director import RaceDirector
     from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from server.race_state import RaceIdentity
@@ -44,6 +45,7 @@ except ModuleNotFoundError:
     from lap_coach import LapCoach, number
     from audio_coach import AudioCoach
     from session_recorder import SessionRecorder
+    from session_uploader import upload_pending_background
     from race_director import RaceDirector
     from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from race_state import RaceIdentity
@@ -617,6 +619,7 @@ class DashboardSource:
                 logger.info("SESSION CHANGED")
                 self.finalize_setup_stint_before_reset("session-change")
                 self.recorder.finish_session("session-change")
+                upload_pending_background(self.recorder.queue_path)
                 self.reset_session_tracking()
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID")})
