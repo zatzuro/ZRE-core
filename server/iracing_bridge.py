@@ -164,6 +164,30 @@ def pilot_active_indices(cars, player_idx, lap_pct=None, track_surface=None):
     return active
 
 
+def official_static_gap(player_result, other_result):
+    """Best-effort official interval from ResultsPositions when a car is not live.
+
+    ResultsPositions.Time is cumulative session/race time where available. Never
+    convert lap-time differences into a fake relative gap.
+    """
+    if not isinstance(player_result,dict) or not isinstance(other_result,dict):
+        return None
+    own_laps=player_result.get("LapsComplete");other_laps=other_result.get("LapsComplete")
+    try:
+        own_laps=int(own_laps);other_laps=int(other_laps)
+    except (TypeError,ValueError):
+        return None
+    lap_delta=other_laps-own_laps
+    if abs(lap_delta)>=1:
+        return (None,f"{lap_delta:+d} VUELTA" + ("S" if abs(lap_delta)!=1 else ""), "OFFICIAL_STATIC")
+    own_time=seconds(player_result.get("Time"));other_time=seconds(other_result.get("Time"))
+    if own_time is None or other_time is None:
+        return None
+    # Lower cumulative time is ahead in the official classification.
+    gap=own_time-other_time
+    return (gap,f"≈ {gap:+.3f} · OFICIAL", "OFFICIAL_STATIC")
+
+
 def class_results_rows(results, cars, conflicts, class_id, team_idx, last_laps, lap_text):
     """Official zero-based ClassPosition from ResultsPositions, class by CarIdx."""
     rows=[]
@@ -439,13 +463,36 @@ class DashboardSource:
             standing_rows.sort(key=lambda row:(row["pos"]==0,row["pos"]))
             overall_player=next((row for row in standing_rows if row["isPlayer"]),None)
             category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text)
-            category_rows=[row for row in category_rows if row["idx"] in active_indices]
             for row in category_rows:
                 if row["idx"]==pilot_idx:
                     row["driver"]=player_driver.get("UserName") or "Piloto";row["car"]=car_label(player_driver);row["brand"]=car_brand(player_driver);row["number"]=str(player_driver.get("CarNumber","—"))
             player = next((row for row in category_rows if row["isPlayer"]), None)
             relative_player = next((row for row in relative_candidates if row["isPlayer"]), None)
             relative = self.relative_rows(relative_candidates, relative_player) if relative_player else []
+            # ResultsPositions remains the source of truth for the class order.
+            # If the immediate classified rival is not loaded in the live arrays,
+            # keep that rival visible and use only an official cumulative-time
+            # interval when the SDK provides one.
+            if player and player.get("pos") is not None:
+                by_relative_idx={row.get("idx"):row for row in relative}
+                own_result=results.get(pilot_idx,{})
+                for target_pos in (player["pos"]-1,player["pos"]+1):
+                    official=next((row for row in category_rows if row.get("pos")==target_pos),None)
+                    if not official or official.get("idx") in by_relative_idx:
+                        continue
+                    fallback=dict(official)
+                    static=official_static_gap(own_result,results.get(official.get("idx"),{}))
+                    if static:
+                        gap,label,source=static
+                        fallback["gapSeconds"]=gap
+                        fallback["gap"]=label
+                        fallback["gapSource"]=source
+                    else:
+                        fallback["gapSeconds"]=None
+                        fallback["gap"]="ESTÁTICO · SIN INTERVALO"
+                        fallback["gapSource"]="OFFICIAL_POSITION_ONLY"
+                    relative.append(fallback)
+                relative.sort(key=lambda row:(row.get("pos") is None,row.get("pos") or 99999))
             # Never replay cached driver names from a previous roster snapshot.
             weekend = self.get("WeekendInfo", {})
             lap_number = int(self.get("Lap", 0))
