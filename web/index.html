@@ -38,7 +38,7 @@
       <article class="data-card fuel-card"><h2>COMBUSTIBLE</h2><div class="fuel-current-metric"><span>ACTUAL</span><strong id="fuel">—</strong><small id="fuel-source" class="metric-meta">—</small></div><div><span>PROMEDIO / VTA</span><strong id="last-use">—</strong></div><div><span>MEJOR</span><strong id="best-use">—</strong></div><div><span>PEOR</span><strong id="worst-use">—</strong></div></article>
       <article class="data-card pit"><h2>PARADA</h2><div><span>ESTADO</span><strong id="pit">—</strong></div><div><span>DENTRO DE</span><strong id="pit-window">—</strong></div><div><span>VUELTA EST.</span><strong id="next-stop">—</strong></div></article>
     </section>
-    <section class="race-tools-grid">
+    <section id="race-tools-grid" class="race-tools-grid">
       <article class="focus-card live-rival-card">
         <div class="card-title rival-title"><h2>RIVAL ESTRATÉGICO</h2><select id="rival-select"><option value="auto">AUTO</option></select></div>
         <div class="rival-main"><span id="rival-mode">AUTO</span><strong id="rival-name">—</strong><b id="rival-status">Esperando rivales de clase</b></div>
@@ -57,10 +57,11 @@
         <details class="strategy-config pilot-strategy-config"><summary>AJUSTAR</summary><div class="strategy-config-grid"><label>BASE<input id="strategy-base-input" type="number" min="1" value="37"></label><label>EXT.<input id="strategy-extended-input" type="number" min="1" value="38"></label><label>PÉRDIDA BOX (s)<input id="strategy-pit-loss-input" type="number" min="0" value="30"></label><label>DURACIÓN (h)<input id="strategy-race-hours-input" type="number" min=".1" step=".5" value="10"></label><label>RITMO (s, 0=AUTO)<input id="strategy-lap-input" type="number" min="0" step=".001" value="0"></label><label>CONSUMO (VACÍO=AUTO)<input id="strategy-consumption-input" type="number" min="0" step=".01"></label><label>TANQUE L (VACÍO=AUTO)<input id="strategy-tank-input" type="number" min="0" step=".1"></label><label class="drivers-input">PILOTOS<input id="strategy-drivers-input" type="text" value="Santiago, David, Herney"></label></div><p>Compatibilidad con la estrategia anterior. Race Plan vNext calcula minimumStops automáticamente.</p></details>
       </article>
     </section>
-    <section class="boards-grid">
+    <section class="boards-grid practice-boards">
       <article class="timing-card loss-map-card"><div class="card-title"><h2>MAPA · RECOMENDACIONES GENERALES</h2><span id="live-map-location">CONSTRUYENDO STINT</span></div><div class="live-map-wrap"><svg id="live-track-map" viewBox="0 0 100 100"><polyline id="live-track-line" points=""/><g id="live-track-markers"></g></svg><p id="live-map-empty">Completa vueltas válidas para construir el mapa y localizar dónde estás perdiendo tiempo.</p></div></article>
+      <article id="practice-curve-coach" class="timing-card curve-coach-card"><div class="card-title"><h2>COACH · CURVA POR CURVA</h2><span id="curve-coach-status">CONSTRUYENDO REFERENCIA</span></div><div id="curve-coach-rows" class="curve-coach-rows"><p class="curve-coach-empty">Completa vueltas válidas. ZRE irá construyendo recomendaciones concretas para cada curva.</p></div></article>
       <article class="timing-card switchable-timing"><div class="card-title timing-switch-title"><h2 id="timing-title">RELATIVO</h2><select id="timing-mode"><option value="relative">RELATIVO</option><option value="standing">CLASIFICACIÓN</option></select></div><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ MEJOR</span></div><div id="timing-rows"></div></article>
-      <article class="pace-card"><div class="card-title"><h2>HISTORIAL DE VUELTAS</h2><span>ÚLTIMAS 10</span></div><div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANT.</span><span>CONSUMO</span></div><div id="pace-rows"></div></article>
+      <article class="pace-card practice-history"><div class="card-title"><h2>HISTORIAL DE VUELTAS</h2><span>ÚLTIMAS 10</span></div><div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANT.</span><span>CONSUMO</span></div><div id="pace-rows"></div></article>
     </section>
   </section>
 
