@@ -827,8 +827,30 @@ class DashboardSource:
                 'relativeDelta':gap,'lastLap':self.lap_text(at('CarIdxLastLapTime',other) or race.get('LastTime')),
                 'pace':'—','isPlayer':other==idx})
         relative=relative_window(live,idx) if idx is not None else []
-        ahead=min((row for row in relative if row.get('relativeDelta') is not None and row['relativeDelta']>0),key=lambda row:row['relativeDelta'],default=None)
-        behind=max((row for row in relative if row.get('relativeDelta') is not None and row['relativeDelta']<0),key=lambda row:row['relativeDelta'],default=None)
+        # Preserve the official classified car immediately ahead/behind even when
+        # iRacing has not loaded that car into the dynamic CarIdx arrays.
+        if own and own.get("pos") is not None:
+            present={row.get("idx") for row in relative}
+            own_result=results.get(idx,{})
+            for target_pos in (own["pos"]-1,own["pos"]+1):
+                official=next((row for row in class_rows if row.get("pos")==target_pos),None)
+                if not official or official.get("idx") in present:
+                    continue
+                fallback=dict(official)
+                static=official_static_gap(own_result,results.get(official.get("idx"),{}))
+                if static:
+                    gap,label,source=static
+                    fallback["relativeDelta"]=gap
+                    fallback["gap"]=label
+                    fallback["gapSource"]=source
+                else:
+                    fallback["relativeDelta"]=None
+                    fallback["gap"]="ESTÁTICO · SIN INTERVALO"
+                    fallback["gapSource"]="OFFICIAL_POSITION_ONLY"
+                relative.append(fallback)
+            relative.sort(key=lambda row:(row.get("pos") is None,row.get("pos") or 99999))
+        ahead=next((row for row in relative if own and row.get("pos")==own.get("pos")-1),None)
+        behind=next((row for row in relative if own and row.get("pos")==own.get("pos")+1),None)
         driver=self.manual_team_driver or self.confirmed_driver_name or 'AUTO · no confirmado'
         team_choices=[{'idx':d.get('CarIdx'),'number':str(d.get('CarNumber','')),'label':f"#{d.get('CarNumber','—')} · {d.get('TeamName') or d.get('UserName') or '—'}"}
                       for d in drivers if isinstance(d,dict) and d.get('CarIdx') is not None
