@@ -103,3 +103,14 @@ function makeContext() {
   assert(js.includes("if(activeRole==='spotter')return'spotter'"),'SPOTTER routing guard must remain');
   console.log('Setup Engineer UI regression: OK');
 })();
+
+const kpiHtml=fs.readFileSync('web/index.html','utf8');
+const kpiCss=fs.readFileSync('web/style.css','utf8');
+const kpiJs=fs.readFileSync('web/app.js','utf8');
+assert(kpiHtml.includes('id="fuel-source"'),'fuel source must have its own KPI line');
+assert(kpiHtml.includes('class="fuel-current-metric"'),'fuel current metric wrapper missing');
+assert(kpiCss.includes('grid-template-columns:repeat(4,minmax(0,1fr))'),'top KPI grid must allow columns to shrink safely');
+assert(kpiCss.includes('text-overflow:ellipsis'),'KPI overflow protection missing');
+assert.match(kpiJs,/setText\('fuel-source',fuelSource\)/);
+assert.match(kpiJs,/fuelValue=data\.self\?\.fuelValue/);
+console.log('Fuel KPI layout regression: OK');
