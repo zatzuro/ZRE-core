@@ -1,0 +1,46 @@
+name: Verify published ZRE 2.6.3 updater
+on:
+  push:
+    branches: ['qa/updater-2.6.3']
+permissions:
+  contents: read
+jobs:
+  updater:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 189028992c5245d3f4665ddef1ae3a85020c4527
+      - name: Real production update preserves user data
+        run: |
+          python - <<'PY'
+          import hashlib,json,subprocess,tempfile,time
+          from pathlib import Path
+          import updater
+          for attempt in range(10):
+              manifest=updater._fetch_json(updater.REMOTE_VERSION_URL)
+              if manifest.get("version")=="2.6.3":break
+              print("Waiting for raw CDN publication",manifest,flush=True)
+              time.sleep(30)
+          assert manifest["version"]=="2.6.3",manifest
+          with tempfile.TemporaryDirectory() as folder:
+              updater.ROOT=Path(folder)
+              (updater.ROOT/"version.json").write_text(json.dumps({"version":"2.6.2"}))
+              for name in ("data","data/setup-engineer",".venv",".zre-backup"):
+                  (updater.ROOT/name).mkdir(parents=True,exist_ok=True)
+                  (updater.ROOT/name/"keep.txt").write_text("KEEP")
+              assert updater.update_if_available()
+              assert json.loads((updater.ROOT/"version.json").read_text())["version"]=="2.6.3"
+              paths=subprocess.check_output(["git","ls-tree","-r","--name-only","HEAD"],text=True).splitlines()
+              count=0
+              for path in paths:
+                  src=Path(path)
+                  if src.is_file() and path.split("/")[0] not in updater.PROTECTED_TOP_LEVEL:
+                      assert hashlib.sha256(src.read_bytes()).digest()==hashlib.sha256((updater.ROOT/path).read_bytes()).digest(),path
+                      count+=1
+              for name in ("data","data/setup-engineer",".venv",".zre-backup"):
+                  assert (updater.ROOT/name/"keep.txt").read_text()=="KEEP"
+              assert not updater.update_if_available()
+              print("PASS: production updater 2.6.2 -> 2.6.3; verified files:",count,"; user data preserved; repeated update skipped.")
+          PY
