@@ -185,7 +185,9 @@ function renderSessionIntelligence(data,mode){
    context=strategic.slice(0,3).map(x=>{
      const last=x.lastPit?'última parada V'+(x.lastPit.lap??'—')+' · '+(x.lastPit.confidence==='CONFIRMED'?'CONFIRMADA':'INFERIDA'):'sin parada registrada';
      const next=x.nextPitEstimate?'próxima V'+x.nextPitEstimate.fromLap+'–'+x.nextPitEstimate.toLap+' · '+x.nextPitEstimate.confidence:'';
-     return '#'+x.number+' '+last+(next?' · '+next:'');
+     const loss=x.pitLossEstimate?'pit-loss ~'+Number(x.pitLossEstimate.seconds).toFixed(1)+'s · '+x.pitLossEstimate.confidence:'';
+     const rejoin=x.rejoinProjection?'rejoin '+(x.rejoinProjection.position==='AHEAD'?'delante':'detrás')+' ('+(x.rejoinProjection.projectedGapAfterPit>0?'+':'')+Number(x.rejoinProjection.projectedGapAfterPit).toFixed(1)+'s)':'';
+     return '#'+x.number+' '+[last,next,loss,rejoin].filter(Boolean).join(' · ');
    }).join(' | ');
  }
  if(mode==='qualifying'&&traffic.nearestAhead)context='Quali: tráfico observado delante. ZRE no infiere intención ni estrategia del rival.';
