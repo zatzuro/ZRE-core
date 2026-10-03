@@ -258,7 +258,10 @@ class LapCoach:
         best,optimal=self.best_lap,self.optimal
         def priority(item):return {'zone':f"{self.location_label(item[0],item[4] if len(item)>4 else None,item[5] if len(item)>5 else None)} +{item[1]:.2f}",'title':item[2],'advice':item[3],'phase':item[5] if len(item)>5 else 'GENERAL'}
         primary=priority(self.advice[0]) if self.advice else None;pattern,pattern_advice,pattern_confidence=self._pattern()
-        return {'reference':'ÓPTIMA SESIÓN','bestLap':format_lap(best),'optimalLap':format_lap(optimal),'potential':f'{max(0,best-optimal):.3f}' if best and optimal else '—','lapMessage':f"{primary['zone']}: {primary['advice']}" if primary else '','primary':primary,'secondary':priority(self.advice[1]) if len(self.advice)>1 else None,'pattern':pattern,'patternAdvice':pattern_advice,'patternConfidence':pattern_confidence,'validPatternLaps':len(self.recent_valid_advice),'diagnostics':self.last_diagnostics,'trackMap':self._track_map_payload()}
+        curve_recommendations=self.summary_priorities(limit=8)
+        if not curve_recommendations and self.advice:
+            curve_recommendations=[{**priority(item),'confidence':'BAJA','occurrences':1,'sampleLaps':1} for item in self.advice[:8]]
+        return {'reference':'ÓPTIMA SESIÓN','bestLap':format_lap(best),'optimalLap':format_lap(optimal),'potential':f'{max(0,best-optimal):.3f}' if best and optimal else '—','lapMessage':f"{primary['zone']}: {primary['advice']}" if primary else '','primary':primary,'secondary':priority(self.advice[1]) if len(self.advice)>1 else None,'curveRecommendations':curve_recommendations,'pattern':pattern,'patternAdvice':pattern_advice,'patternConfidence':pattern_confidence,'validPatternLaps':len(self.recent_valid_advice),'diagnostics':self.last_diagnostics,'trackMap':self._track_map_payload()}
 
 def _metric(metrics,index):return metrics[index] if len(metrics)>index else None
 def _direction(sign):
