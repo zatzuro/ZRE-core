@@ -211,6 +211,19 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
             pit_history.append({"lap":current_lap,"sessionTime":now,"confidence":"HIGH",
                                 "source":"LAP_ANOMALY_REAPPEARANCE","lapTime":current_last,"baselineLap":baseline})
         pit_history=pit_history[-10:]
+        # Estimate observed pit loss only from a completed anomalous lap around a detected stop.
+        for pit in pit_history:
+            if pit.get("pitLossSeconds") is not None:continue
+            pit_lap=pit.get("lap")
+            candidates=[x for x in lap_times if isinstance(pit_lap,(int,float)) and isinstance(x.get("lap"),(int,float)) and abs(x["lap"]-pit_lap)<=1]
+            slow=max(candidates,key=lambda x:x.get("time") or 0,default=None)
+            if baseline and slow and _sdk_number(slow.get("time")) and slow["time"]>baseline+8.0:
+                pit["pitLossSeconds"]=round(max(0.0,slow["time"]-baseline),1)
+                pit["pitLossSource"]="OBSERVED_LAP_DELTA"
+        observed_losses=[p["pitLossSeconds"] for p in pit_history if _sdk_number(p.get("pitLossSeconds")) is not None]
+        pit_loss=None
+        if observed_losses:
+            recent_losses=observed_losses[-3:];pit_loss=round(sum(recent_losses)/len(recent_losses),1)
         stops=[p.get("lap") for p in pit_history if isinstance(p.get("lap"),(int,float))]
         stint_lengths=[b-a for a,b in zip(stops,stops[1:]) if b>a and b-a>=2]
         next_stop=None
@@ -233,7 +246,8 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
             "bestLap":_sdk_number(best_laps[idx]) if idx<len(best_laps) else None,
             "lapsComplete":result.get("LapsComplete"),"presence":"LIVE" if in_world else "STALE",
             "pitHistory":pit_history,"lastPit":pit_history[-1] if pit_history else None,
-            "stintLengths":stint_lengths[-5:],"nextPitEstimate":next_stop,"lapTimes":lap_times}
+            "stintLengths":stint_lengths[-5:],"nextPitEstimate":next_stop,"lapTimes":lap_times,
+            "pitLossEstimate":{"seconds":pit_loss,"samples":len(observed_losses),"confidence":"HIGH" if len(observed_losses)>=3 else ("MEDIUM" if len(observed_losses)>=2 else "LOW"),"source":"OBSERVED_PIT_LAP_DELTA"} if pit_loss is not None else None}
         if in_world:
             row.update(source="SDK_OBSERVED",lastSeenSessionTime=now,lastSeenAgo=0.0,lastKnownLapDistPct=pct)
             if current_lap is not None and current_lap!=prev_lap:row["lastLapMarkerSessionTime"]=now
@@ -249,7 +263,7 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
                 lap=previous.get("lap",row.get("lap")),lapsComplete=previous.get("lapsComplete",row.get("lapsComplete")),
                 pitHistory=previous.get("pitHistory",pit_history),lastPit=previous.get("lastPit"),
                 stintLengths=previous.get("stintLengths",stint_lengths),nextPitEstimate=previous.get("nextPitEstimate"),
-                lapTimes=previous.get("lapTimes",lap_times))
+                pitLossEstimate=previous.get("pitLossEstimate"),lapTimes=previous.get("lapTimes",lap_times))
         marker=_sdk_number(row.get("lastLapMarkerSessionTime"))
         row["lastLapMarkerAgo"]=max(0.0,now-marker) if marker is not None else None
         competitors.append(row)
