@@ -271,3 +271,6 @@
 .race-session .practice-boards{grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr)}
 .race-session .race-tools-grid{display:grid}
 @media(max-width:1100px){.qualifying-session .practice-boards,.race-session .practice-boards{grid-template-columns:1fr}.qualifying-session .practice-history{grid-column:auto}.quali-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* 2.6.4 Session Intelligence */
+.session-intelligence-card{min-width:0}.intel-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line)}.intel-grid>div{background:var(--panel2);padding:9px;display:flex;flex-direction:column;gap:3px}.intel-grid span{font-size:8px;color:var(--muted);font-weight:900}.intel-grid strong{font-size:13px}.session-intelligence-card>p{margin:0;padding:9px 11px;font-size:10px;line-height:1.35;color:#b9cbd5}.practice-session .session-intelligence-card,.qualifying-session .session-intelligence-card{grid-column:1/-1}.race-session .session-intelligence-card{grid-column:1/-1}@media(max-width:700px){.intel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
