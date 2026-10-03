@@ -85,6 +85,26 @@ def valid_fuel(value):
     reading=number(value)
     return reading if reading is not None and reading>0 else None
 
+def driver_controls(get):
+    """Read live in-car adjustments exposed by iRacing when available."""
+    values={}
+    for label,keys in {
+        "BrakeBias":("dcBrakeBias","BrakeBias"),
+        "TractionControl":("dcTractionControl","dcTractionControl2","TractionControl"),
+    }.items():
+        for key in keys:
+            value=get(key)
+            if value is None:
+                continue
+            try:
+                number_value=float(value)
+                if math.isfinite(number_value):
+                    values[label]=number_value
+                    break
+            except (TypeError,ValueError):
+                continue
+    return values
+
 def car_label(driver):
     return driver.get("CarScreenName") or driver.get("CarScreenNameShort") or driver.get("CarPath") or "—"
 
@@ -562,8 +582,11 @@ class DashboardSource:
                 setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID")}
                 setup_conditions=capture_conditions(self.get)
                 setup_tires=capture_tires(self.get)
-                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires)
+                setup_controls=driver_controls(self.get)
+                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls)
                 logger.info("COACH STINT START setup=%s source=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"))
+            if driving_stint and self.setup_engineer.current is not None:
+                self.setup_engineer.observe_controls(driver_controls(self.get),session_time=session_time,lap=lap_number)
             self.stint_active = driving_stint
             completed_for_strategy=completed_laps if completed_laps is not None else max(0,lap_number-1)
             if driving_stint and self.strategy_stint_start_lap is None:self.strategy_stint_start_lap=completed_for_strategy
