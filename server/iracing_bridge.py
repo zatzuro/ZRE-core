@@ -291,6 +291,48 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
             "nearestBehind":max(behind,key=lambda x:x["relativeLapFraction"],default=None)},"source":"SDK_OBSERVED"},
         "competitors":{"observed":competitors,"source":"SDK_OBSERVED_AND_INFERRED"}}
 
+def rival_strategy_intelligence(competitors, player_lap, player_fuel, fuel_per_lap, player_pit_window=None):
+    """Conservative undercut/overcut signal using only observed/derived session evidence."""
+    consumption=None
+    valid=[_sdk_number(x) for x in (fuel_per_lap or [])]
+    valid=[x for x in valid if x is not None and x>0]
+    if valid:consumption=sum(valid[-5:])/len(valid[-5:])
+    fuel_laps=(player_fuel/consumption) if player_fuel is not None and consumption else None
+    rows=[]
+    for rival in competitors or []:
+        if not rival.get("sameClass") or rival.get("presence")!="LIVE":continue
+        nxt=rival.get("nextPitEstimate") or {};loss=rival.get("pitLossEstimate") or {};rejoin=rival.get("rejoinProjection") or {}
+        if not nxt or loss.get("seconds") is None:continue
+        laps_to_stop=(nxt.get("fromLap")-player_lap) if isinstance(nxt.get("fromLap"),(int,float)) and isinstance(player_lap,(int,float)) else None
+        feasible=bool(fuel_laps is not None and laps_to_stop is not None and fuel_laps>=max(1.0,laps_to_stop))
+        projected=_sdk_number(rejoin.get("projectedGapAfterPit"))
+        confidence="LOW";action="HOLD";reason="Evidencia insuficiente para ordenar una maniobra."
+        if projected is not None and feasible:
+            if projected<0 and abs(projected)<=5.0:
+                action="UNDERCUT";reason="Rival proyectado cerca detrás tras su parada; nuestra autonomía permite adelantar la secuencia."
+            elif projected>0 and projected<=5.0:
+                action="OVERCUT";reason="Rival proyectado cerca delante; extender puede crear oportunidad si mantenemos ritmo."
+            else:
+                action="HOLD";reason="La proyección de rejoin no justifica cambiar la secuencia actual."
+            samples=loss.get("samples") or 0
+            confidence="HIGH" if samples>=3 and nxt.get("confidence")=="HIGH" else ("MEDIUM" if samples>=2 else "LOW")
+        elif fuel_laps is None:
+            reason="Sin autonomía local fiable para validar la maniobra."
+        elif not feasible:
+            reason="La autonomía local no cubre con margen la ventana estimada del rival."
+        rows.append({"carIdx":rival.get("carIdx"),"number":rival.get("number"),"driver":rival.get("driver"),
+            "action":action,"confidence":confidence,"reason":reason,"lapsToRivalWindow":laps_to_stop,
+            "ownFuelLaps":round(fuel_laps,1) if fuel_laps is not None else None,
+            "rivalPitWindow":nxt,"rivalPitLoss":loss,"rejoinProjection":rejoin,
+            "source":"ZRE_INFERRED_FROM_OBSERVED_SESSION_DATA"})
+    rank={"HIGH":0,"MEDIUM":1,"LOW":2}
+    rows.sort(key=lambda x:(rank.get(x["confidence"],3),x["action"]=="HOLD",abs((x.get("rejoinProjection") or {}).get("projectedGapAfterPit") or 999)))
+    return {"available":bool(rows),"recommendations":rows[:5],
+            "primary":rows[0] if rows else None,
+            "own":{"fuelLaps":round(fuel_laps,1) if fuel_laps is not None else None,"consumption":round(consumption,3) if consumption else None,
+                   "pitWindow":player_pit_window},
+            "source":"ZRE_INFERRED_FROM_OBSERVED_SESSION_DATA"}
+
 def pilot_active_indices(cars, player_idx, lap_pct=None, track_surface=None):
     """Live PILOTO boards show cars currently in-world plus the local car.
 
@@ -761,6 +803,10 @@ class DashboardSource:
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
             payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
+            intel_comp=((payload.get("sessionIntelligence") or {}).get("competitors") or {}).get("observed") or []
+            payload["rivalStrategy"]=rival_strategy_intelligence(
+                intel_comp,lap_number,fuel,self.fuel_per_lap,
+                {"nextStop":stop_lap,"window":stop_time})
             payload["racePlanVNext"]=self.race_plan_vnext_payload(
                 context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
                 fuel,'REAL LOCAL' if fuel is not None else 'SIN DATO',lap_number,completed_for_strategy,
