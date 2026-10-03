@@ -7,7 +7,7 @@ class SessionRecorder:
     def __init__(self, path, max_bytes=5_000_000):
         self.path=Path(path);self.max_bytes=max_bytes
         self.root=self.path.parent/"session_logs";self.root.mkdir(parents=True,exist_ok=True)
-        self.queue_path=self.root/"upload_queue.jsonl"
+        self.retention_days=7
         self.session_id=None;self.session_dir=None;self.timeline_path=None
         self.summary={"events":0,"laps":0,"predictions":0,"outcomes":0}
 
@@ -60,14 +60,24 @@ class SessionRecorder:
             f"- Cierre: {reason}","","> Datos SDK observados e inferencias ZRE se distinguen por el campo source."]
         try:(self.session_dir/"summary.md").write_text("\n".join(md)+"\n",encoding="utf-8")
         except OSError:pass
-        self.enqueue_upload(self.session_dir)
+        self.cleanup_old_sessions()
         finished=self.session_dir
         self.session_id=None;self.session_dir=None;self.timeline_path=None
         return finished
 
-    def enqueue_upload(self, session_dir):
-        item={"sessionId":Path(session_dir).name,"path":str(Path(session_dir).resolve()),
-              "queuedAt":datetime.now(timezone.utc).isoformat(),"status":"PENDING"}
+    def cleanup_old_sessions(self):
+        """Delete completed local journals older than the retention window."""
+        now=datetime.now(timezone.utc).timestamp();cutoff=max(1,int(self.retention_days))*86400
         try:
-            with self.queue_path.open("a",encoding="utf-8") as handle:handle.write(json.dumps(item,ensure_ascii=False,separators=(',',':'))+"\n")
+            for folder in self.root.iterdir():
+                if not folder.is_dir() or folder==self.session_dir:continue
+                summary=folder/"summary.json"
+                marker=summary if summary.exists() else folder
+                try:
+                    if now-marker.stat().st_mtime<=cutoff:continue
+                    for child in folder.iterdir():
+                        if child.is_file():child.unlink()
+                    folder.rmdir()
+                except OSError:pass
         except OSError:pass
+
