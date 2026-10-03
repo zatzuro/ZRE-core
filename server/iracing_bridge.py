@@ -456,6 +456,7 @@ class DashboardSource:
         self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
         self.last_strategy_log_signature=None
+        self.strategy_prediction_audit={}
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
@@ -823,7 +824,22 @@ class DashboardSource:
                 if signature!=self.last_strategy_log_signature:
                     self.recorder.write({"type":"strategy_prediction","sessionTime":session_time,"lap":lap_number,
                         "prediction":primary_strategy,"source":"ZRE_INFERRED_FROM_OBSERVED_SESSION_DATA"})
+                    rival_idx=primary_strategy.get("carIdx")
+                    if rival_idx is not None:self.strategy_prediction_audit[rival_idx]={"prediction":primary_strategy,"loggedLap":lap_number}
                     self.last_strategy_log_signature=signature
+            for rival in intel_comp:
+                rival_idx=rival.get("carIdx");audit=self.strategy_prediction_audit.get(rival_idx)
+                last_pit=rival.get("lastPit") or {}
+                if not audit or audit.get("evaluated") or last_pit.get("lap") is None:continue
+                pred=audit.get("prediction") or {};window=pred.get("rivalPitWindow") or {}
+                lo,hi=window.get("fromLap"),window.get("toLap");actual=last_pit.get("lap")
+                if isinstance(lo,(int,float)) and isinstance(hi,(int,float)) and isinstance(actual,(int,float)) and actual>=audit.get("loggedLap",0):
+                    hit=lo<=actual<=hi
+                    self.recorder.write({"type":"prediction_outcome","sessionTime":session_time,"lap":lap_number,
+                        "carIdx":rival_idx,"predictedWindow":[lo,hi],"actualPitLap":actual,"hit":hit,
+                        "errorLaps":0 if hit else min(abs(actual-lo),abs(actual-hi)),
+                        "source":last_pit.get("source") or "OBSERVED_OR_INFERRED_PIT"})
+                    audit["evaluated"]=True
             payload["racePlanVNext"]=self.race_plan_vnext_payload(
                 context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
                 fuel,'REAL LOCAL' if fuel is not None else 'SIN DATO',lap_number,completed_for_strategy,
@@ -1163,6 +1179,7 @@ class DashboardSource:
 
     def reset_session_tracking(self):
         self.last_strategy_log_signature=None
+        self.strategy_prediction_audit={}
         if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
         self.last_lap_number=None; self.lap_history=[]; self.last_fuel=None; self.fuel_at_lap_start=None
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
