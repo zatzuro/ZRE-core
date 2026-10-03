@@ -22,3 +22,9 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+
+# Local session journals and reports
+session_logs/
+session_replay.jsonl
+data/
+reports/

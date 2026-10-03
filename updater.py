@@ -20,7 +20,7 @@ REPO = "zatzuro/ZRE-core"
 BRANCH = "main"
 REMOTE_VERSION_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json"
 CHECK_INTERVAL_SECONDS = 120
-PROTECTED_TOP_LEVEL = {".venv", ".git", ".zre-backup", "data"}
+PROTECTED_TOP_LEVEL = {".venv", ".git", ".zre-backup", "data", "session_logs", "reports"}
 PROTECTED_NAMES = {"dashboard.log", "session_replay.jsonl"}
 
 def _version_tuple(value: str) -> tuple[int, ...]:
@@ -61,6 +61,14 @@ def _archive_url(ref: str) -> str:
     return f"https://codeload.github.com/{REPO}/zip/refs/heads/{ref}"
 
 def _copy_program_tree(source: Path) -> None:
+    # Remove the retired uploader after applying 2.6.4; never remove session logs.
+    if not (source / "server" / "session_uploader.py").exists():
+        for retired in (ROOT / "server" / "session_uploader.py", ROOT / "upload_queue.jsonl"):
+            if retired.is_file():retired.unlink()
+        cache=ROOT / "server" / "__pycache__"
+        if cache.is_dir():
+            for retired in cache.glob("session_uploader.*.pyc"):retired.unlink()
+
     # version.json is the commit marker: publish it only after every asset is in place.
     items=[item for item in source.iterdir() if item.name not in PROTECTED_TOP_LEVEL and item.name not in PROTECTED_NAMES]
     items.sort(key=lambda item:(item.name=="version.json",item.name))

@@ -57,10 +57,11 @@ driverIds.forEach(id=>assert(html.includes('id="'+id+'"'),'missing PILOTO Race P
 
 const pilotCode=code.slice(code.indexOf('function renderEnduranceStrategy('),code.indexOf('function priorityParts('));
 const pilotNodes=new Map();
-const pilotEl=id=>{if(!pilotNodes.has(id))pilotNodes.set(id,{hidden:false,value:'',textContent:'',dataset:{},style:{},classList:{toggle(){}},replaceChildren(){}});return pilotNodes.get(id);};
+const pilotEl=id=>{if(!pilotNodes.has(id))pilotNodes.set(id,{hidden:false,value:'',textContent:'',dataset:{},style:{},classList:{toggle(){}},querySelector(){return null;},replaceChildren(){}});return pilotNodes.get(id);};
 const pilotUi={
   $:pilotEl,
-  document:{activeElement:null},
+  document:{activeElement:null,body:{classList:{toggle(){}},dataset:{}},querySelector(){return null;},createElement(){return {hidden:false};}},
+  renderCurveCoach(){},
   strategyConfig:{baseStintLaps:37,extendedStintLaps:38,pitLossSeconds:30},
   setText(id,value){pilotEl(id).textContent=String(value??'—');},
   strategyInputValue(){},

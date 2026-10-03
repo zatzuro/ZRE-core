@@ -119,10 +119,10 @@ class Release263Tests(unittest.TestCase):
         for name,expected in [('Practice','practice'),('Test','practice'),('Open Practice','practice'),('Qualify','qualifying'),('Lone Qualify','qualifying'),('Race','race_engineer')]:
             self.assertEqual(b.DashboardSource.coach_mode_for_session(name),expected)
 
-    def test_qualifying_does_not_analyze_or_speak(self):
+    def test_qualifying_analyzes_current_session_without_speaking(self):
         s=self.source();s.coach_session_mode='qualifying';s.coach.finish=Mock()
         self.lap(s,0,None);self.lap(s,1,90)
-        s.coach.finish.assert_not_called();s.audio_coach.say.assert_not_called()
+        s.coach.finish.assert_called_once();s.audio_coach.say.assert_not_called()
 
     def test_race_own_time_is_short(self):
         s=self.source();s.coach_session_mode='race_engineer'
