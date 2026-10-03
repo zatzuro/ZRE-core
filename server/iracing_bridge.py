@@ -239,6 +239,16 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
             observed_delta=pct-player_pct
             while observed_delta>.5:observed_delta-=1
             while observed_delta<-.5:observed_delta+=1
+        rejoin=None
+        if pit_loss is not None and observed_delta is not None:
+            player_lap_ref=_sdk_number(get("LapBestLapTime")) or _sdk_number(get("LapLastLapTime"))
+            if player_lap_ref and player_lap_ref>0:
+                current_gap=observed_delta*player_lap_ref
+                projected_gap=current_gap-pit_loss
+                rejoin={"currentGapEstimate":round(current_gap,1),"projectedGapAfterPit":round(projected_gap,1),
+                        "position":"AHEAD" if projected_gap>0 else "BEHIND",
+                        "confidence":"MEDIUM" if len(observed_losses)>=2 else "LOW",
+                        "source":"TRACK_FRACTION_PLUS_OBSERVED_PIT_LOSS"}
         row={"carIdx":idx,"number":str(car.get("CarNumber","—")),"driver":car.get("UserName") or "—",
             "team":car.get("TeamName") or "—","car":car_label(car),"classId":car.get("CarClassID"),
             "sameClass":car.get("CarClassID")==player_class_id,"lapDistPct":pct,"relativeLapFraction":observed_delta,
@@ -247,7 +257,8 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
             "lapsComplete":result.get("LapsComplete"),"presence":"LIVE" if in_world else "STALE",
             "pitHistory":pit_history,"lastPit":pit_history[-1] if pit_history else None,
             "stintLengths":stint_lengths[-5:],"nextPitEstimate":next_stop,"lapTimes":lap_times,
-            "pitLossEstimate":{"seconds":pit_loss,"samples":len(observed_losses),"confidence":"HIGH" if len(observed_losses)>=3 else ("MEDIUM" if len(observed_losses)>=2 else "LOW"),"source":"OBSERVED_PIT_LAP_DELTA"} if pit_loss is not None else None}
+            "pitLossEstimate":{"seconds":pit_loss,"samples":len(observed_losses),"confidence":"HIGH" if len(observed_losses)>=3 else ("MEDIUM" if len(observed_losses)>=2 else "LOW"),"source":"OBSERVED_PIT_LAP_DELTA"} if pit_loss is not None else None,
+            "rejoinProjection":rejoin}
         if in_world:
             row.update(source="SDK_OBSERVED",lastSeenSessionTime=now,lastSeenAgo=0.0,lastKnownLapDistPct=pct)
             if current_lap is not None and current_lap!=prev_lap:row["lastLapMarkerSessionTime"]=now
@@ -263,7 +274,8 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
                 lap=previous.get("lap",row.get("lap")),lapsComplete=previous.get("lapsComplete",row.get("lapsComplete")),
                 pitHistory=previous.get("pitHistory",pit_history),lastPit=previous.get("lastPit"),
                 stintLengths=previous.get("stintLengths",stint_lengths),nextPitEstimate=previous.get("nextPitEstimate"),
-                pitLossEstimate=previous.get("pitLossEstimate"),lapTimes=previous.get("lapTimes",lap_times))
+                pitLossEstimate=previous.get("pitLossEstimate"),rejoinProjection=previous.get("rejoinProjection"),
+                lapTimes=previous.get("lapTimes",lap_times))
         marker=_sdk_number(row.get("lastLapMarkerSessionTime"))
         row["lastLapMarkerAgo"]=max(0.0,now-marker) if marker is not None else None
         competitors.append(row)
