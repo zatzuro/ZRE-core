@@ -165,7 +165,7 @@ def _sdk_number(value):
     except (TypeError,ValueError):
         return None
 
-def session_intelligence(get, weekend, session, cars, results, player_idx, player_class_id, lap_pct, track_surface):
+def session_intelligence(get, weekend, session, cars, results, player_idx, player_class_id, lap_pct, track_surface, history=None):
     """Normalize SDK-observed environment/session/traffic data without inventing rival state."""
     env_keys=("AirTemp","TrackTemp","AirPressure","AirDensity","RelativeHumidity","FogLevel",
               "WindVel","WindDir","Skies","TrackWetness","Precipitation","WeatherDeclaredWet")
@@ -181,12 +181,15 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
     }
     pit_flags=get("CarIdxOnPitRoad",[]) or [];laps=get("CarIdxLap",[]) or []
     last_laps=get("CarIdxLastLapTime",[]) or [];best_laps=get("CarIdxBestLapTime",[]) or []
+    history=history if isinstance(history,dict) else {}
+    now=_sdk_number(get("SessionTime")) or 0.0
     competitors=[];player_pct=_sdk_number(lap_pct[player_idx]) if player_idx<len(lap_pct) else None
     for idx,car in (cars or {}).items():
         if idx==player_idx or car.get("CarIsPaceCar"):continue
         pct=_sdk_number(lap_pct[idx]) if idx<len(lap_pct) else None
         surface=track_surface[idx] if idx<len(track_surface) else None
-        if pct is None and surface is None:continue
+        in_world=not (surface is not None and _sdk_number(surface) is not None and _sdk_number(surface)<0)
+        if pct is None and surface is None:in_world=False
         observed_delta=None
         if player_pct is not None and pct is not None:
             observed_delta=pct-player_pct
@@ -203,10 +206,35 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
             "lastLap":_sdk_number(last_laps[idx]) if idx<len(last_laps) else None,
             "bestLap":_sdk_number(best_laps[idx]) if idx<len(best_laps) else None,
             "lapsComplete":result.get("LapsComplete"),
-            "source":"SDK_OBSERVED"
-        })
+            "source":"SDK_OBSERVED","presence":"LIVE" if in_world else "STALE"
+        }
+        previous=history.get(idx,{})
+        if in_world:
+            row["lastSeenSessionTime"]=now;row["lastSeenAgo"]=0.0
+            row["lastKnownLapDistPct"]=pct
+            previous_lap=previous.get("lap")
+            if row.get("lap") is not None and row.get("lap")!=previous_lap:
+                row["lastLapMarkerSessionTime"]=now
+            else:row["lastLapMarkerSessionTime"]=previous.get("lastLapMarkerSessionTime")
+            history[idx]=dict(row)
+        else:
+            last_seen=_sdk_number(previous.get("lastSeenSessionTime"))
+            row.update({
+                "lastSeenSessionTime":last_seen,
+                "lastSeenAgo":max(0.0,now-last_seen) if last_seen is not None else None,
+                "lastKnownLapDistPct":previous.get("lastKnownLapDistPct"),
+                "lastLapMarkerSessionTime":previous.get("lastLapMarkerSessionTime"),
+                "lastLap":previous.get("lastLap",row.get("lastLap")),
+                "bestLap":previous.get("bestLap",row.get("bestLap")),
+                "lap":previous.get("lap",row.get("lap")),
+                "lapsComplete":previous.get("lapsComplete",row.get("lapsComplete")),
+                "source":"LAST_KNOWN_OBSERVATION"
+            })
+        marker=_sdk_number(row.get("lastLapMarkerSessionTime"))
+        row["lastLapMarkerAgo"]=max(0.0,now-marker) if marker is not None else None
+        competitors.append(row)
     competitors.sort(key=lambda x:(x["relativeLapFraction"] is None,abs(x["relativeLapFraction"] or 0)))
-    traffic=[x for x in competitors if x["relativeLapFraction"] is not None and not x["onPitRoad"]]
+    traffic=[x for x in competitors if x["presence"]=="LIVE" and x["relativeLapFraction"] is not None and not x["onPitRoad"]]
     ahead=[x for x in traffic if x["relativeLapFraction"]>0];behind=[x for x in traffic if x["relativeLapFraction"]<0]
     return {
         "environment":{"observed":environment,"source":"SDK_OBSERVED"},
@@ -330,7 +358,7 @@ class DashboardSource:
         self.coach_session_mode = "practice"
         self.race_engineer_neighbors = {}
         self.race_engineer_car_laps = {}
-        self.observed_team_history = {}
+        self.observed_team_history = {}\n        self.competitor_presence_history = {}
         self.last_observed_lap_time = None
         self.race_engineer_audio = []
         self.audio_coach = AudioCoach()
@@ -682,7 +710,7 @@ class DashboardSource:
             payload["sessionMode"] = session_coach_mode
             payload["sessionType"] = session.get("SessionType")
             payload["coach"] = coach
-            payload["sessionIntelligence"]=session_intelligence(self.get,weekend,session,cars,results,pilot_idx,player_class_id,lap_pct,track_surface)
+            payload["sessionIntelligence"]=session_intelligence(self.get,weekend,session,cars,results,pilot_idx,player_class_id,lap_pct,track_surface,self.competitor_presence_history)
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
             payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
