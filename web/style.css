@@ -245,3 +245,16 @@
 @media(max-width:1100px){
   .pilot-race-plan-main{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* 2.6.4 · Practice-specific driver workspace */
+.practice-session .practice-boards{grid-template-columns:minmax(260px,.9fr) minmax(360px,1.35fr) minmax(360px,1.15fr)}
+.practice-session .practice-history{grid-column:1/-1}
+.curve-coach-card{min-width:0}
+.curve-coach-rows{display:grid;gap:8px;max-height:360px;overflow:auto;padding-right:3px}
+.curve-coach-row{padding:10px 12px;border:1px solid rgba(255,255,255,.09);border-radius:8px;background:rgba(255,255,255,.025)}
+.curve-coach-row>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.curve-coach-row strong{font-size:13px}
+.curve-coach-row span{font-size:9px;opacity:.65}
+.curve-coach-row b{display:block;margin-top:5px;font-size:12px}
+.curve-coach-row p,.curve-coach-empty{margin:4px 0 0;font-size:11px;line-height:1.35;opacity:.82}
+@media(max-width:1100px){.practice-session .practice-boards{grid-template-columns:1fr}.practice-session .practice-history{grid-column:auto}}
