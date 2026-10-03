@@ -274,7 +274,7 @@ class SetupEngineer:
             return html
         return sdk
 
-    def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None, tires_start=None):
+    def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None, tires_start=None, controls_start=None):
         self.current = {
             "startedAt": datetime.now().isoformat(timespec="seconds"),
             "session": dict(session or {}),
@@ -283,11 +283,29 @@ class SetupEngineer:
             "fuelStart": fuel_start,
             "startSessionTime": session_time,
             "tiresStart": tires_start or {},
+            "controlsStart": dict(controls_start or {}),
+            "controlsLast": dict(controls_start or {}),
+            "controlChanges": [],
             "driverFeedback": {},
         }
         setup_name=(setup_snapshot or {}).get("metadata",{}).get("setupName")
         self.status=f"Stint en curso · {setup_name or (setup_snapshot or {}).get('fingerprint') or 'setup sin identificar'}"
         return self.current
+
+    def observe_controls(self, controls, session_time=None, lap=None):
+        if self.current is None or not isinstance(controls,dict):
+            return False
+        last=self.current.setdefault("controlsLast",{})
+        changes=self.current.setdefault("controlChanges",[])
+        for key,value in controls.items():
+            if value is None:
+                continue
+            previous=last.get(key)
+            if previous is not None and previous!=value:
+                changes.append({"control":key,"before":previous,"after":value,"sessionTime":session_time,"lap":lap})
+                del changes[:-50]
+            last[key]=value
+        return True
 
     def set_feedback(self, entry=None, mid=None, exit=None, comment=None):
         if self.current is None:
@@ -337,6 +355,7 @@ class SetupEngineer:
             "stintPerformance": performance,
             "corners": build_corner_analysis(engineering),
             "tires": {"start":base.get("tiresStart") or {},"end":tires_end or {},"delta":compare_tires(base.get("tiresStart") or {},tires_end or {})},
+            "driverControls": {"start":base.get("controlsStart") or {},"end":base.get("controlsLast") or {},"changes":base.get("controlChanges") or []},
             "balancePatterns": build_balance_patterns(repeated,feedback),
             "repeatedBehavior": repeated,
             "driverFeedback": feedback,

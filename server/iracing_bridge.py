@@ -85,6 +85,26 @@ def valid_fuel(value):
     reading=number(value)
     return reading if reading is not None and reading>0 else None
 
+def driver_controls(get):
+    """Read live in-car adjustments exposed by iRacing when available."""
+    values={}
+    for label,keys in {
+        "BrakeBias":("dcBrakeBias","BrakeBias"),
+        "TractionControl":("dcTractionControl","dcTractionControl2","TractionControl"),
+    }.items():
+        for key in keys:
+            value=get(key)
+            if value is None:
+                continue
+            try:
+                number_value=float(value)
+                if math.isfinite(number_value):
+                    values[label]=number_value
+                    break
+            except (TypeError,ValueError):
+                continue
+    return values
+
 def car_label(driver):
     return driver.get("CarScreenName") or driver.get("CarScreenNameShort") or driver.get("CarPath") or "—"
 
@@ -445,6 +465,8 @@ class DashboardSource:
             player_class_id=player_driver.get("CarClassID")
             lap_pct=self.get("CarIdxLapDistPct",[]) or []
             track_surface=self.get("CarIdxTrackSurface",[]) or []
+            live_overall_pos=self.get("CarIdxPosition",[]) or []
+            live_class_pos=self.get("CarIdxClassPosition",[]) or []
             active_indices=pilot_active_indices(cars,pilot_idx,lap_pct,track_surface)
             raw_player_pct=lap_pct[pilot_idx] if pilot_idx<len(lap_pct) else None
             player_pct=raw_player_pct if raw_player_pct is not None and 0<=raw_player_pct<=1 else None
@@ -462,10 +484,17 @@ class DashboardSource:
                     while delta_laps>.5:delta_laps-=1
                     while delta_laps<-.5:delta_laps+=1
                     gap=delta_laps*track_length/max(speed,1.0)
-                overall_pos=result.get("Position",driver.get("CarIdxPosition",0)) or 0
+                live_overall=live_overall_pos[idx] if idx<len(live_overall_pos) else None
+                live_class=live_class_pos[idx] if idx<len(live_class_pos) else None
+                try:
+                    overall_pos=int(live_overall)+1 if live_overall is not None and int(live_overall)>=0 else int(result.get("Position") or 0)
+                except (TypeError,ValueError):
+                    overall_pos=int(result.get("Position") or 0)
                 class_position=result.get("ClassPosition")
-                try:class_pos=int(class_position)+1 if class_position is not None else overall_pos
-                except (TypeError,ValueError):class_pos=overall_pos
+                try:
+                    class_pos=int(live_class)+1 if live_class is not None and int(live_class)>=0 else (int(class_position)+1 if class_position is not None else overall_pos)
+                except (TypeError,ValueError):
+                    class_pos=int(class_position)+1 if class_position is not None else overall_pos
                 row={"idx":idx,"pos":overall_pos,"classPos":class_pos,"classId":shown_driver.get("CarClassID"),
                      "className":shown_driver.get("CarClassShortName") or "","number":str(shown_driver.get("CarNumber","—")),
                      "car":car_label(shown_driver),"brand":car_brand(shown_driver),"driver":shown_driver.get("UserName") or "—" if idx==pilot_idx or idx not in roster_conflicts else "—",
@@ -479,6 +508,14 @@ class DashboardSource:
             overall_player=next((row for row in standing_rows if row["isPlayer"]),None)
             category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text)
             for row in category_rows:
+                idx=row.get("idx")
+                live_class=live_class_pos[idx] if isinstance(idx,int) and idx<len(live_class_pos) else None
+                try:
+                    if live_class is not None and int(live_class)>=0:
+                        row["pos"]=int(live_class)+1
+                        row["classPos"]=int(live_class)+1
+                except (TypeError,ValueError):
+                    pass
                 if row["idx"]==pilot_idx:
                     row["driver"]=player_driver.get("UserName") or "Piloto";row["car"]=car_label(player_driver);row["brand"]=car_brand(player_driver);row["number"]=str(player_driver.get("CarNumber","—"))
             player = next((row for row in category_rows if row["isPlayer"]), None)
@@ -506,12 +543,13 @@ class DashboardSource:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
             self.update_race_engineer_audio(session_coach_mode,pilot_idx,category_rows,live_last,car_completed,results)
             self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
-            self.coach.capture(self.get("LapDistPct", player_pct), session_time,
-                               self.get("Speed"), self.get("Brake"), self.get("Throttle"),
-                               on_track=session_coach_mode!="qualifying" and bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
-                               steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
-                               yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"),
-                               lat=self.get("Lat"),lon=self.get("Lon"),yaw_north=self.get("YawNorth"))
+            if session_coach_mode=="practice":
+                self.coach.capture(self.get("LapDistPct", player_pct), session_time,
+                                   self.get("Speed"), self.get("Brake"), self.get("Throttle"),
+                                   on_track=bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
+                                   steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
+                                   yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"),
+                                   lat=self.get("Lat"),lon=self.get("Lon"),yaw_north=self.get("YawNorth"))
             if player:
                 player["lastLap"] = self.lap_text(last_lap)
             if self.confirmed_session_best is not None:
@@ -544,8 +582,11 @@ class DashboardSource:
                 setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID")}
                 setup_conditions=capture_conditions(self.get)
                 setup_tires=capture_tires(self.get)
-                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires)
+                setup_controls=driver_controls(self.get)
+                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls)
                 logger.info("COACH STINT START setup=%s source=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"))
+            if driving_stint and self.setup_engineer.current is not None:
+                self.setup_engineer.observe_controls(driver_controls(self.get),session_time=session_time,lap=lap_number)
             self.stint_active = driving_stint
             completed_for_strategy=completed_laps if completed_laps is not None else max(0,lap_number-1)
             if driving_stint and self.strategy_stint_start_lap is None:self.strategy_stint_start_lap=completed_for_strategy
@@ -976,10 +1017,10 @@ class DashboardSource:
 
     @staticmethod
     def coach_mode_for_session(value):
-        text=str(value or "").strip().lower()
-        if text in ("qualify","qualifying","lone qualify"):
+        text=" ".join(str(value or "").strip().lower().split())
+        if "qual" in text:
             return "qualifying"
-        if text=="race":
+        if "race" in text:
             return "race_engineer"
         return "practice"
 
@@ -1080,15 +1121,12 @@ class DashboardSource:
         self.confirmed_session_best=min(self.confirmed_session_best,completed) if self.confirmed_session_best else completed
         self.last_lap_summary={"lap":pending["lap"],"time":self.lap_text(completed),"sessionBest":self.lap_text(prior_best),"delta":self.delta_text(completed,prior_best),"expiresAt":time.time()+6}
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
-        coach_ok=self.coach.finish(completed,pending.get("valid")) if self.coach_session_mode!="qualifying" else False
+        coach_ok=self.coach.finish(completed,pending.get("valid")) if self.coach_session_mode=="practice" else False
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"telemetry":self.coach.last_lap_record})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
             on_pit=bool(self.get("OnPitRoad",False)),caution=is_caution_flag(self.get("SessionFlags")))
-        if self.coach_session_mode=="race_engineer":
-            if not self.race_plan_suppresses_coach_audio():
-                self.race_engineer_audio.append(self.lap_text(completed))
-        elif self.coach_session_mode=="practice" and coach_ok:
+        if self.coach_session_mode=="practice" and coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
             if not self.race_plan_suppresses_coach_audio():
                 if self.coach.advice:

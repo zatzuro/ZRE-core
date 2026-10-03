@@ -138,6 +138,27 @@ def render_setup_report(stint, previous=None, setup_changes=None):
         lines.append("No previous comparable setup or no detected changes.")
     lines.append("")
 
+    lines += ["## IN-CAR CONTROL CHANGES", ""]
+    controls=stint.get("driverControls") or {}
+    start_controls=controls.get("start") or {}
+    end_controls=controls.get("end") or {}
+    changes=controls.get("changes") or []
+    if start_controls or end_controls:
+        lines.append(f"- **Start:** {_value(start_controls)}")
+        lines.append(f"- **End:** {_value(end_controls)}")
+    if changes:
+        for change in changes:
+            where=[]
+            if change.get("lap") is not None:where.append(f"lap {change.get('lap')}")
+            if change.get("sessionTime") is not None:where.append(f"t={round(change.get('sessionTime'),1)}s")
+            suffix=f" ({' · '.join(where)})" if where else ""
+            lines.append(f"- **{change.get('control')}:** {_value(change.get('before'))} → {_value(change.get('after'))}{suffix}")
+    elif not start_controls and not end_controls:
+        lines.append("UNAVAILABLE")
+    else:
+        lines.append("No in-car control changes detected during this stint.")
+    lines.append("")
+
     lines += _section_map("STINT PERFORMANCE", performance)
 
     lines += ["## TIRE SNAPSHOT", ""]
