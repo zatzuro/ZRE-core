@@ -41,7 +41,10 @@ class Release263Tests(unittest.TestCase):
                   'CarIdxLapDistPct':[None,.3,None],'CarIdxLapCompleted':[0]*3,'CarIdxLastLapTime':[None]*3,
                   'SessionTimeRemain':1000,'IsOnTrack':True}
         s.get=lambda key,default=None:readings.get(key,default)
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        s.setup_engineer=SetupEngineer(folder.name)
         packet=s.live_payload(force_driver=True)
+        self.assertEqual(s.setup_engineer.current['session']['session'],'Race')
         self.assertEqual(len(packet['standing']),3)
         self.assertEqual([r['idx'] for r in packet['relative']],[0,1,2])
         self.assertEqual(packet['relative'][0]['gap'],'ESTÁTICO · SIN INTERVALO')
@@ -52,6 +55,14 @@ class Release263Tests(unittest.TestCase):
         self.assertEqual(packet['self']['fuelSource'],'SIN DATO')
         self.assertEqual(packet['header']['driver'],'1')
         self.assertEqual(s.ir.freeze_var_buffer_latest.call_count,s.ir.unfreeze_var_buffer_latest.call_count)
+
+    def test_race_keeps_setup_telemetry_analysis_without_coach_advice_audio(self):
+        s=self.source();s.coach_session_mode='race_engineer';s.coach.finish=Mock(return_value=True)
+        s.coach.advice=[('curve',1,'long advice','more advice')]
+        self.lap(s,0,None);self.lap(s,1,92.481)
+        s.coach.finish.assert_called_once()
+        s.flush_race_engineer_audio()
+        s.audio_coach.say.assert_called_once_with('1:32.481')
 
     def test_first_lap_waits_for_new_time(self):
         s=self.source();self.lap(s,0,90);self.lap(s,1,90)

@@ -508,7 +508,7 @@ class DashboardSource:
             self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
             self.coach.capture(self.get("LapDistPct", player_pct), session_time,
                                self.get("Speed"), self.get("Brake"), self.get("Throttle"),
-                               on_track=session_coach_mode=="practice" and bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
+                               on_track=session_coach_mode!="qualifying" and bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
                                steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
                                yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"),
                                lat=self.get("Lat"),lon=self.get("Lon"),yaw_north=self.get("YawNorth"))
@@ -529,7 +529,7 @@ class DashboardSource:
             explicit_on_track = self.get("IsOnTrack")
             on_track = bool(explicit_on_track) if explicit_on_track is not None else player_pct is not None
             in_garage = not on_track and not on_pit_road
-            driving_stint = bool(session_coach_mode=="practice" and on_track and not on_pit_road)
+            driving_stint = bool(session_coach_mode!="qualifying" and on_track and not on_pit_road)
             if self.stint_active and not driving_stint:
                 engineering=self.coach.engineering_snapshot()
                 frozen = self.coach.freeze_stint_summary()
@@ -1080,7 +1080,7 @@ class DashboardSource:
         self.confirmed_session_best=min(self.confirmed_session_best,completed) if self.confirmed_session_best else completed
         self.last_lap_summary={"lap":pending["lap"],"time":self.lap_text(completed),"sessionBest":self.lap_text(prior_best),"delta":self.delta_text(completed,prior_best),"expiresAt":time.time()+6}
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
-        coach_ok=self.coach.finish(completed,pending.get("valid")) if self.coach_session_mode=="practice" else False
+        coach_ok=self.coach.finish(completed,pending.get("valid")) if self.coach_session_mode!="qualifying" else False
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"telemetry":self.coach.last_lap_record})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,

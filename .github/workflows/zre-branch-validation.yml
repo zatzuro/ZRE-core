@@ -53,4 +53,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python -c 'import json; m=json.load(open("version.json")); assert m["version"]=="2.6.3" and m["archive_ref"]=="release-2.6.3"'
+          if gh release view v2.6.3 >/dev/null 2>&1; then
+            tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v2.6.3" --jq '.object.sha')
+            if [ "$tag_sha" = "$GITHUB_SHA" ]; then exit 0; fi
+            # Replace only the known pre-activation candidate; never a live release.
+            test "$tag_sha" = "48b636bae3dc121e329182722b94b9d447ce96fb"
+            main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+            test "$main_sha" = "4eefa802f5d532b04c0a5647c03a0121bfbb9854"
+            gh release delete v2.6.3 --cleanup-tag --yes
+          fi
           gh release create v2.6.3 --target "$GITHUB_SHA" --title "ZRE Core 2.6.3" --notes-file diagnostics/QA-2.6.3.md --latest
