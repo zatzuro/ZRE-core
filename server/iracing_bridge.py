@@ -157,6 +157,65 @@ def local_pilot_driver(driver_info, drivers, cars, player_idx, context=None):
     return car_meta
 
 
+
+def _sdk_number(value):
+    try:
+        value=float(value)
+        return value if math.isfinite(value) else None
+    except (TypeError,ValueError):
+        return None
+
+def session_intelligence(get, weekend, session, cars, results, player_idx, player_class_id, lap_pct, track_surface):
+    """Normalize SDK-observed environment/session/traffic data without inventing rival state."""
+    env_keys=("AirTemp","TrackTemp","AirPressure","AirDensity","RelativeHumidity","FogLevel",
+              "WindVel","WindDir","Skies","TrackWetness","Precipitation","WeatherDeclaredWet")
+    environment={key:get(key) for key in env_keys if get(key) is not None}
+    session_data={
+        "type":session.get("SessionType"),"name":session.get("SessionName"),
+        "timeRemain":get("SessionTimeRemain"),"lapsRemain":get("SessionLapsRemain"),
+        "lapsRemainEx":get("SessionLapsRemainEx"),"flags":get("SessionFlags"),
+        "state":get("SessionState"),"pitsOpen":get("PitsOpen"),
+        "incidentLimit":weekend.get("WeekendOptions",{}).get("IncidentLimit"),
+        "standingStart":weekend.get("WeekendOptions",{}).get("StandingStart"),
+        "teamRacing":weekend.get("TeamRacing"),"numCarClasses":weekend.get("NumCarClasses"),
+    }
+    pit_flags=get("CarIdxOnPitRoad",[]) or [];laps=get("CarIdxLap",[]) or []
+    last_laps=get("CarIdxLastLapTime",[]) or [];best_laps=get("CarIdxBestLapTime",[]) or []
+    competitors=[];player_pct=_sdk_number(lap_pct[player_idx]) if player_idx<len(lap_pct) else None
+    for idx,car in (cars or {}).items():
+        if idx==player_idx or car.get("CarIsPaceCar"):continue
+        pct=_sdk_number(lap_pct[idx]) if idx<len(lap_pct) else None
+        surface=track_surface[idx] if idx<len(track_surface) else None
+        if pct is None and surface is None:continue
+        observed_delta=None
+        if player_pct is not None and pct is not None:
+            observed_delta=pct-player_pct
+            while observed_delta>.5:observed_delta-=1
+            while observed_delta<-.5:observed_delta+=1
+        result=results.get(idx,{})
+        competitors.append({
+            "carIdx":idx,"number":str(car.get("CarNumber","—")),"driver":car.get("UserName") or "—",
+            "team":car.get("TeamName") or "—","car":car_label(car),"classId":car.get("CarClassID"),
+            "sameClass":car.get("CarClassID")==player_class_id,"lapDistPct":pct,
+            "relativeLapFraction":observed_delta,"surface":surface,
+            "onPitRoad":bool(pit_flags[idx]) if idx<len(pit_flags) else None,
+            "lap":laps[idx] if idx<len(laps) else None,
+            "lastLap":_sdk_number(last_laps[idx]) if idx<len(last_laps) else None,
+            "bestLap":_sdk_number(best_laps[idx]) if idx<len(best_laps) else None,
+            "lapsComplete":result.get("LapsComplete"),
+            "source":"SDK_OBSERVED"
+        })
+    competitors.sort(key=lambda x:(x["relativeLapFraction"] is None,abs(x["relativeLapFraction"] or 0)))
+    traffic=[x for x in competitors if x["relativeLapFraction"] is not None and not x["onPitRoad"]]
+    ahead=[x for x in traffic if x["relativeLapFraction"]>0];behind=[x for x in traffic if x["relativeLapFraction"]<0]
+    return {
+        "environment":{"observed":environment,"source":"SDK_OBSERVED"},
+        "session":{"observed":session_data,"source":"SDK_OBSERVED"},
+        "traffic":{"observed":{"carsInWorld":len(traffic),"nearestAhead":min(ahead,key=lambda x:x["relativeLapFraction"],default=None),
+                               "nearestBehind":max(behind,key=lambda x:x["relativeLapFraction"],default=None)},"source":"SDK_OBSERVED"},
+        "competitors":{"observed":competitors,"source":"SDK_OBSERVED"},
+    }
+
 def pilot_active_indices(cars, player_idx, lap_pct=None, track_surface=None):
     """Live PILOTO boards show cars currently in-world plus the local car.
 
@@ -331,7 +390,9 @@ class DashboardSource:
               'SessionTimeRemain','FuelLevel','Lap','LapCompleted',
               'CarIdxLapDistPct','CarIdxLap','CarIdxLapCompleted','CarIdxPosition',
               'CarIdxClassPosition','CarIdxLastLapTime','CarIdxBestLapTime',
-              'CarIdxOnPitRoad','CarIdxEstTime','CarIdxTrackSurface','Lat','Lon','YawNorth')
+              'CarIdxOnPitRoad','CarIdxEstTime','CarIdxTrackSurface','AirTemp','TrackTemp','AirPressure','AirDensity',
+              'RelativeHumidity','FogLevel','WindVel','WindDir','Skies','TrackWetness','Precipitation','WeatherDeclaredWet',
+              'SessionFlags','SessionState','SessionLapsRemain','SessionLapsRemainEx','PitsOpen','Lat','Lon','YawNorth')
         try:
             self.ir.freeze_var_buffer_latest()
             try:
@@ -621,6 +682,7 @@ class DashboardSource:
             payload["sessionMode"] = session_coach_mode
             payload["sessionType"] = session.get("SessionType")
             payload["coach"] = coach
+            payload["sessionIntelligence"]=session_intelligence(self.get,weekend,session,cars,results,pilot_idx,player_class_id,lap_pct,track_surface)
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
             payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
