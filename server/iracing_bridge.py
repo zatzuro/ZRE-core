@@ -233,7 +233,11 @@ def session_intelligence(get, weekend, session, cars, results, player_idx, playe
         marker=_sdk_number(row.get("lastLapMarkerSessionTime"))
         row["lastLapMarkerAgo"]=max(0.0,now-marker) if marker is not None else None
         competitors.append(row)
-    competitors.sort(key=lambda x:(x["relativeLapFraction"] is None,abs(x["relativeLapFraction"] or 0)))
+    # Forget stale observations when iRacing starts a different session/subsession.
+    active_ids={idx for idx in cars if isinstance(idx,int)}
+    for stale_idx in list(history):
+        if stale_idx not in active_ids:history.pop(stale_idx,None)
+    competitors.sort(key=lambda x:(x["presence"]!="LIVE",x["relativeLapFraction"] is None,abs(x["relativeLapFraction"] or 0)))
     traffic=[x for x in competitors if x["presence"]=="LIVE" and x["relativeLapFraction"] is not None and not x["onPitRoad"]]
     ahead=[x for x in traffic if x["relativeLapFraction"]>0];behind=[x for x in traffic if x["relativeLapFraction"]<0]
     return {
