@@ -506,12 +506,13 @@ class DashboardSource:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
             self.update_race_engineer_audio(session_coach_mode,pilot_idx,category_rows,live_last,car_completed,results)
             self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
-            self.coach.capture(self.get("LapDistPct", player_pct), session_time,
-                               self.get("Speed"), self.get("Brake"), self.get("Throttle"),
-                               on_track=session_coach_mode!="qualifying" and bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
-                               steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
-                               yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"),
-                               lat=self.get("Lat"),lon=self.get("Lon"),yaw_north=self.get("YawNorth"))
+            if session_coach_mode=="practice":
+                self.coach.capture(self.get("LapDistPct", player_pct), session_time,
+                                   self.get("Speed"), self.get("Brake"), self.get("Throttle"),
+                                   on_track=bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
+                                   steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
+                                   yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"),
+                                   lat=self.get("Lat"),lon=self.get("Lon"),yaw_north=self.get("YawNorth"))
             if player:
                 player["lastLap"] = self.lap_text(last_lap)
             if self.confirmed_session_best is not None:
@@ -976,10 +977,10 @@ class DashboardSource:
 
     @staticmethod
     def coach_mode_for_session(value):
-        text=str(value or "").strip().lower()
-        if text in ("qualify","qualifying","lone qualify"):
+        text=" ".join(str(value or "").strip().lower().split())
+        if "qual" in text:
             return "qualifying"
-        if text=="race":
+        if "race" in text:
             return "race_engineer"
         return "practice"
 
@@ -1080,15 +1081,12 @@ class DashboardSource:
         self.confirmed_session_best=min(self.confirmed_session_best,completed) if self.confirmed_session_best else completed
         self.last_lap_summary={"lap":pending["lap"],"time":self.lap_text(completed),"sessionBest":self.lap_text(prior_best),"delta":self.delta_text(completed,prior_best),"expiresAt":time.time()+6}
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
-        coach_ok=self.coach.finish(completed,pending.get("valid")) if self.coach_session_mode!="qualifying" else False
+        coach_ok=self.coach.finish(completed,pending.get("valid")) if self.coach_session_mode=="practice" else False
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"telemetry":self.coach.last_lap_record})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
             on_pit=bool(self.get("OnPitRoad",False)),caution=is_caution_flag(self.get("SessionFlags")))
-        if self.coach_session_mode=="race_engineer":
-            if not self.race_plan_suppresses_coach_audio():
-                self.race_engineer_audio.append(self.lap_text(completed))
-        elif self.coach_session_mode=="practice" and coach_ok:
+        if self.coach_session_mode=="practice" and coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
             if not self.race_plan_suppresses_coach_audio():
                 if self.coach.advice:
