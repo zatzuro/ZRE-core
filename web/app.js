@@ -179,7 +179,15 @@ function renderSessionIntelligence(data,mode){
  const remain=Number(session.timeRemain);setText('intel-session',Number.isFinite(remain)&&remain>=0?Math.floor(remain/60)+' MIN':(session.lapsRemainEx??session.lapsRemain??'—'));
  const stale=Array.isArray(competitors)?competitors.filter(x=>x.presence==='STALE'):[];
  const age=s=>{const n=Number(s);if(!Number.isFinite(n))return 'sin marca temporal';if(n<60)return Math.round(n)+' s';return Math.floor(n/60)+'m '+Math.round(n%60)+'s';};
+ const strategic=Array.isArray(competitors)?competitors.filter(x=>x.lastPit||x.nextPitEstimate):[];
  let context=stale.length?stale.slice(0,3).map(x=>'#'+x.number+' '+x.driver+': última vez visto hace '+age(x.lastSeenAgo)+(x.lastLapMarkerAgo!=null?' · vuelta marcada hace '+age(x.lastLapMarkerAgo):'')).join(' | '):'Datos observados directamente del SDK.';
+ if(mode==='race'&&strategic.length){
+   context=strategic.slice(0,3).map(x=>{
+     const last=x.lastPit?'última parada V'+(x.lastPit.lap??'—')+' · '+(x.lastPit.confidence==='CONFIRMED'?'CONFIRMADA':'INFERIDA'):'sin parada registrada';
+     const next=x.nextPitEstimate?'próxima V'+x.nextPitEstimate.fromLap+'–'+x.nextPitEstimate.toLap+' · '+x.nextPitEstimate.confidence:'';
+     return '#'+x.number+' '+last+(next?' · '+next:'');
+   }).join(' | ');
+ }
  if(mode==='qualifying'&&traffic.nearestAhead)context='Quali: tráfico observado delante. ZRE no infiere intención ni estrategia del rival.';
  else if(mode==='race'&&session.pitsOpen===false)context='Carrera: pits reportados cerrados por el SDK.';
  else if(env.WeatherDeclaredWet||Number(env.TrackWetness)>0)context='Condición húmeda reportada por iRacing. Vigila la evolución de pista.';
