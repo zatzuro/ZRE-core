@@ -214,7 +214,9 @@ class DashboardSource:
         self.personal_lap_clean = False
         self.personal_incidents = None
         self.coach = LapCoach()
-        self.audio_mode = "off"
+        self.audio_mode = "auto"
+        self.coach_session_mode = "practice"
+        self.race_engineer_neighbors = {}
         self.audio_coach = AudioCoach()
         self.race_plan_audio_announced=set()
         self.race_plan_audio_state=None
@@ -245,7 +247,7 @@ class DashboardSource:
             "BOX THIS LAP":"Box, box.",
         }
         message=messages.get(status)
-        if not message or self.audio_mode=="off":
+        if not message or self.coach_session_mode=="qualifying":
             return None
         key=(str(identity),target,status)
         if key in self.race_plan_audio_announced:
@@ -458,8 +460,11 @@ class DashboardSource:
             if fuel is not None and team_completed is not None and team_completed>=0:
                 self.team_fuel_reference=(fuel,int(team_completed))
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
+            session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
+            self.coach_session_mode=session_coach_mode
             if completed_laps is not None and fuel is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
+            self.update_race_engineer_audio(session_coach_mode,pilot_idx,category_rows,live_last,car_completed)
             self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
             self.coach.capture(self.get("LapDistPct", player_pct), session_time,
                                self.get("Speed"), self.get("Brake"), self.get("Throttle"),
@@ -871,7 +876,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -921,6 +926,44 @@ class DashboardSource:
         text=str(value).strip().lower();translations={"race":"CARRERA","practice":"PRÁCTICA","open practice":"PRÁCTICA","qualify":"CLASIFICACIÓN","qualifying":"CLASIFICACIÓN","warmup":"CALENTAMIENTO","lone qualify":"CLASIFICACIÓN"}
         return translations.get(text,str(value).upper())
 
+    @staticmethod
+    def coach_mode_for_session(value):
+        text=str(value or "").strip().lower()
+        if text in ("qualify","qualifying","lone qualify"):
+            return "qualifying"
+        if text=="race":
+            return "race_engineer"
+        return "practice"
+
+    def update_race_engineer_audio(self,mode,player_idx,category_rows,live_last,car_completed):
+        if mode!="race_engineer":
+            self.race_engineer_neighbors={}
+            return
+        player=next((row for row in category_rows if row.get("idx")==player_idx),None)
+        if not player or player.get("pos") is None:
+            return
+        for label,target_pos in (("Delante",player["pos"]-1),("Detrás",player["pos"]+1)):
+            if target_pos<1:
+                continue
+            row=next((item for item in category_rows if item.get("pos")==target_pos),None)
+            if not row:
+                self.race_engineer_neighbors.pop(label,None)
+                continue
+            idx=row.get("idx")
+            completed=car_completed[idx] if isinstance(idx,int) and idx<len(car_completed) else row.get("completedLaps")
+            lap_time=seconds(live_last[idx]) if isinstance(idx,int) and idx<len(live_last) else None
+            state=self.race_engineer_neighbors.get(label)
+            key=(idx,completed)
+            if completed is None or completed<1 or lap_time is None or lap_time<=0:
+                self.race_engineer_neighbors[label]=key
+                continue
+            if state is None:
+                self.race_engineer_neighbors[label]=key
+                continue
+            if state!=key:
+                self.race_engineer_neighbors[label]=key
+                self.audio_coach.say(f"{label}, {self.lap_text(lap_time)}")
+
     def update_lap_tracking(self,lap_number,lap_pct,fuel,last_lap,session_best,result=None):
         completed=seconds(last_lap);result=result or {};incidents=self.get("PlayerCarMyIncidentCount")
         clean_now=(incidents is not None and self.get("PlayerTrackSurface")==3 and not self.get("OnPitRoad",False) and not self.get("PlayerCarTowTime",0))
@@ -966,13 +1009,17 @@ class DashboardSource:
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
             on_pit=bool(self.get("OnPitRoad",False)),caution=is_caution_flag(self.get("SessionFlags")))
-        if coach_ok:
+        if self.coach_session_mode=="race_engineer":
+            if not self.race_plan_suppresses_coach_audio():
+                self.audio_coach.say(self.lap_text(completed))
+        elif self.coach_session_mode=="practice" and coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
-            if self.audio_mode=="lap" and not self.race_plan_suppresses_coach_audio():
+            if not self.race_plan_suppresses_coach_audio():
                 if self.coach.advice:
                     item=self.coach.advice[0];marker_pct=item[4] if len(item)>4 else None;phase=item[5] if len(item)>5 else None;label=self.coach.location_label(item[0],marker_pct,phase);logger.info("AUDIO PLAY location=%s zone=%s phase=%s loss=%.3f",label,item[0],phase,item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
                 else:self.audio_coach.say(f"Vuelta {pending['lap']}. Sin una pérdida clara para corregir.")
-        else:logger.info("COACH SKIPPED lap=%s valid=%s",pending["lap"],pending.get("valid"))
+        elif self.coach_session_mode=="practice":
+            logger.info("COACH SKIPPED lap=%s valid=%s",pending["lap"],pending.get("valid"))
         self.last_recorded_lap_time=completed
 
     def strategy_payload(self,fuel):
