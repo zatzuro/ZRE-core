@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - 'work/**'
+      - 'develop/2.6.3'
+      - 'release-2.6.3'
   pull_request:
     branches:
       - main
@@ -36,3 +38,19 @@ jobs:
         run: |
           node tests/frontend_recovery.cjs
           node tests/frontend_race_plan.cjs
+          node tests/frontend_release_263.cjs
+
+  release-263:
+    if: github.ref == 'refs/heads/release-2.6.3'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish the validated 2.6.3 commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c 'import json; m=json.load(open("version.json")); assert m["version"]=="2.6.3" and m["archive_ref"]=="release-2.6.3"'
+          gh release create v2.6.3 --target "$GITHUB_SHA" --title "ZRE Core 2.6.3" --notes-file diagnostics/QA-2.6.3.md --latest

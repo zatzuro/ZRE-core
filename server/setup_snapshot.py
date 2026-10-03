@@ -51,6 +51,8 @@ def setup_fingerprint(parameters):
 
 def snapshot_from_sdk(car_setup, driver_info=None):
     params = _json_safe(car_setup or {})
+    if isinstance(params, dict):
+        params.pop("UpdateCount", None)  # SDK revision counter is not a setup setting.
     driver_info = driver_info or {}
     meta = {
         "setupName": _clean_text(driver_info.get("DriverSetupName")),

@@ -219,15 +219,15 @@ class RacePlanRuntimeTests(unittest.TestCase):
         source.handle_race_plan_audio(payload("WINDOW OPEN",target=440))
         self.assertEqual(spoken.count("Ventana de boxes abierta."),2)
 
-    def test_race_plan_audio_respects_off_and_pit_lane(self):
+    def test_race_plan_audio_respects_qualifying_and_pit_lane(self):
         source=bridge.DashboardSource(force_demo=True)
         spoken=[]
         source.audio_coach=type("FakeAudio",(),{"say":lambda self,message:spoken.append(message)})()
-        source.audio_mode="off"
+        source.coach_session_mode="qualifying"
         data={"racePlanVNext":{"raceIdentity":{"key":"race-1"},"raceState":{"on_pit_road":False},"currentPlan":{"window":{"state":"BOX THIS LAP","target":405}}}}
         source.handle_race_plan_audio(data)
         self.assertEqual(spoken,[])
-        source.audio_mode="lap"
+        source.coach_session_mode="race_engineer"
         data["racePlanVNext"]["raceState"]["on_pit_road"]=True
         source.handle_race_plan_audio(data)
         self.assertEqual(spoken,[])

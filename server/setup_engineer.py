@@ -4,6 +4,7 @@ This layer consumes bounded post-lap summaries. It does not poll the SDK and it
 does not duplicate raw telemetry capture.
 """
 from datetime import datetime
+from copy import deepcopy
 from pathlib import Path
 import math
 
@@ -278,7 +279,7 @@ class SetupEngineer:
             "startedAt": datetime.now().isoformat(timespec="seconds"),
             "session": dict(session or {}),
             "conditions": dict(conditions or {}),
-            "setup": dict(setup_snapshot or {}),
+            "setup": deepcopy(setup_snapshot or {}),
             "fuelStart": fuel_start,
             "startSessionTime": session_time,
             "tiresStart": tires_start or {},
@@ -404,7 +405,7 @@ class SetupEngineer:
         setup = record.get("setup") or {}
         meta = setup.get("metadata") or {}
         setup_name = meta.get("setupName") or meta.get("filename")
-        setup_label = slug(setup_name, "setup-unidentified")
+        setup_label = slug(setup_name, "setup-unidentified")[:60]
         filename = "ZRE_SETUP_REPORT_{}_{}_{}_{}_Stint{:02d}.md".format(
             slug(session.get("car")),
             slug(session.get("track")),

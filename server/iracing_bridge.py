@@ -165,27 +165,36 @@ def pilot_active_indices(cars, player_idx, lap_pct=None, track_surface=None):
 
 
 def official_static_gap(player_result, other_result):
-    """Best-effort official interval from ResultsPositions when a car is not live.
+    """ResultsPositions.Time has no guaranteed live-relative semantics.
 
-    ResultsPositions.Time is cumulative session/race time where available. Never
-    convert lap-time differences into a fake relative gap.
+    Neither independently updated lap counters nor completed-lap timing prove
+    an on-track interval. Keep the official order without inventing seconds.
     """
-    if not isinstance(player_result,dict) or not isinstance(other_result,dict):
-        return None
-    own_laps=player_result.get("LapsComplete");other_laps=other_result.get("LapsComplete")
-    try:
-        own_laps=int(own_laps);other_laps=int(other_laps)
-    except (TypeError,ValueError):
-        return None
-    lap_delta=other_laps-own_laps
-    if abs(lap_delta)>=1:
-        return (None,f"{lap_delta:+d} VUELTA" + ("S" if abs(lap_delta)!=1 else ""), "OFFICIAL_STATIC")
-    own_time=seconds(player_result.get("Time"));other_time=seconds(other_result.get("Time"))
-    if own_time is None or other_time is None:
-        return None
-    # Lower cumulative time is ahead in the official classification.
-    gap=own_time-other_time
-    return (gap,f"≈ {gap:+.3f} · OFICIAL", "OFFICIAL_STATIC")
+    return None
+
+
+def merge_official_neighbors(relative, standings, player_idx, gap_key):
+    """Preserve dynamic track order and insert missing official class neighbors."""
+    own=next((r for r in standings if r.get("idx")==player_idx),None)
+    if not own:return relative
+    rows=[dict(r) for r in relative]
+    if not any(r.get("idx")==player_idx for r in rows):
+        player=dict(own,gap="TÚ",gapSource="OFFICIAL_POSITION_ONLY")
+        player[gap_key]=0.0
+        rows.append(player)
+    for offset in (-1,0,1):
+        official=next((r for r in standings if own.get("pos") is not None and r.get("pos")==own["pos"]+offset),None)
+        if not official:continue
+        live=next((r for r in rows if r.get("idx")==official["idx"]),None)
+        if live:
+            # Official class identity/order with the existing dynamic interval.
+            live.update(pos=official["pos"],classPos=official["pos"])
+            continue
+        fallback=dict(official,gap="ESTÁTICO · SIN INTERVALO",gapSource="OFFICIAL_POSITION_ONLY")
+        fallback[gap_key]=None
+        player_index=next(i for i,r in enumerate(rows) if r.get("idx")==player_idx)
+        rows.insert(player_index if offset<0 else player_index+1,fallback)
+    return rows
 
 
 def class_results_rows(results, cars, conflicts, class_id, team_idx, last_laps, lap_text):
@@ -241,6 +250,9 @@ class DashboardSource:
         self.audio_mode = "auto"
         self.coach_session_mode = "practice"
         self.race_engineer_neighbors = {}
+        self.race_engineer_car_laps = {}
+        self.observed_team_history = {}
+        self.last_observed_lap_time = None
         self.race_engineer_audio = []
         self.audio_coach = AudioCoach()
         self.race_plan_audio_announced=set()
@@ -281,7 +293,10 @@ class DashboardSource:
         if len(self.race_plan_audio_announced)>48:
             self.race_plan_audio_announced=set(list(self.race_plan_audio_announced)[-32:])
         logger.info("RACE PLAN AUDIO state=%s target=%s",status,target)
-        self.audio_coach.say(message)
+        if hasattr(self.audio_coach, "say_priority"):
+            self.audio_coach.say_priority(message)
+        else:
+            self.audio_coach.say(message)
         return status
 
     def race_plan_suppresses_coach_audio(self):
@@ -432,7 +447,7 @@ class DashboardSource:
             track_surface=self.get("CarIdxTrackSurface",[]) or []
             active_indices=pilot_active_indices(cars,pilot_idx,lap_pct,track_surface)
             raw_player_pct=lap_pct[pilot_idx] if pilot_idx<len(lap_pct) else None
-            player_pct=raw_player_pct if raw_player_pct is not None and raw_player_pct>=-.5 else None
+            player_pct=raw_player_pct if raw_player_pct is not None and 0<=raw_player_pct<=1 else None
             speed=seconds(self.get("Speed",0),45.0)
             track_length=self.track_metres(self.get("WeekendInfo",{}).get("TrackLength","5 km"))
             standing_rows=[];relative_candidates=[]
@@ -441,7 +456,7 @@ class DashboardSource:
                 shown_driver=player_driver if idx==pilot_idx else driver
                 result=results.get(idx,{})
                 gap=None
-                valid_live_pct=(player_pct is not None and idx<len(lap_pct) and lap_pct[idx] is not None and lap_pct[idx]>=-.5)
+                valid_live_pct=(player_pct is not None and idx<len(lap_pct) and lap_pct[idx] is not None and 0<=lap_pct[idx]<=1)
                 if valid_live_pct:
                     delta_laps=lap_pct[idx]-player_pct
                     while delta_laps>.5:delta_laps-=1
@@ -455,7 +470,7 @@ class DashboardSource:
                      "className":shown_driver.get("CarClassShortName") or "","number":str(shown_driver.get("CarNumber","—")),
                      "car":car_label(shown_driver),"brand":car_brand(shown_driver),"driver":shown_driver.get("UserName") or "—" if idx==pilot_idx or idx not in roster_conflicts else "—",
                      "gap":"TÚ" if idx==pilot_idx else (self.gap_text(gap) if gap is not None else "—"),
-                     "gapSeconds":gap if gap is not None else 0.0,
+                     "gapSeconds":gap if idx!=pilot_idx else 0.0,"gapSource":"DYNAMIC_ESTIMATED",
                      "lastLap":self.lap_text(live_last[idx] if idx<len(live_last) else result.get("LastTime")),
                      "pace":self.delta_text(seconds(result.get("FastestTime")),session_best),"completedLaps":result.get("LapsComplete"),"isPlayer":idx==pilot_idx}
                 standing_rows.append(row)
@@ -469,30 +484,7 @@ class DashboardSource:
             player = next((row for row in category_rows if row["isPlayer"]), None)
             relative_player = next((row for row in relative_candidates if row["isPlayer"]), None)
             relative = self.relative_rows(relative_candidates, relative_player) if relative_player else []
-            # ResultsPositions remains the source of truth for the class order.
-            # If the immediate classified rival is not loaded in the live arrays,
-            # keep that rival visible and use only an official cumulative-time
-            # interval when the SDK provides one.
-            if player and player.get("pos") is not None:
-                by_relative_idx={row.get("idx"):row for row in relative}
-                own_result=results.get(pilot_idx,{})
-                for target_pos in (player["pos"]-1,player["pos"]+1):
-                    official=next((row for row in category_rows if row.get("pos")==target_pos),None)
-                    if not official or official.get("idx") in by_relative_idx:
-                        continue
-                    fallback=dict(official)
-                    static=official_static_gap(own_result,results.get(official.get("idx"),{}))
-                    if static:
-                        gap,label,source=static
-                        fallback["gapSeconds"]=gap
-                        fallback["gap"]=label
-                        fallback["gapSource"]=source
-                    else:
-                        fallback["gapSeconds"]=None
-                        fallback["gap"]="ESTÁTICO · SIN INTERVALO"
-                        fallback["gapSource"]="OFFICIAL_POSITION_ONLY"
-                    relative.append(fallback)
-                relative.sort(key=lambda row:(row.get("pos") is None,row.get("pos") or 99999))
+            relative=merge_official_neighbors(relative,category_rows,pilot_idx,"gapSeconds")
             # Never replay cached driver names from a previous roster snapshot.
             weekend = self.get("WeekendInfo", {})
             lap_number = int(self.get("Lap", 0))
@@ -510,18 +502,13 @@ class DashboardSource:
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
             self.coach_session_mode=session_coach_mode
-            if completed_laps is not None and fuel is not None:
+            if completed_laps is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
-            self.update_race_engineer_audio(session_coach_mode,pilot_idx,category_rows,live_last,car_completed)
-            if session_coach_mode=="race_engineer" and self.race_engineer_audio and not self.race_plan_suppresses_coach_audio():
-                self.audio_coach.say(". ".join(self.race_engineer_audio))
-                self.race_engineer_audio=[]
-            elif session_coach_mode!="race_engineer":
-                self.race_engineer_audio=[]
+            self.update_race_engineer_audio(session_coach_mode,pilot_idx,category_rows,live_last,car_completed,results)
             self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
             self.coach.capture(self.get("LapDistPct", player_pct), session_time,
                                self.get("Speed"), self.get("Brake"), self.get("Throttle"),
-                               on_track=bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
+                               on_track=session_coach_mode=="practice" and bool(self.get("IsOnTrack", True)) and not self.get("OnPitRoad", False),
                                steering=self.get("SteeringWheelAngle"), gear=self.get("Gear"),
                                yaw_rate=self.get("YawRate"), lat_accel=self.get("LatAccel"),
                                lat=self.get("Lat"),lon=self.get("Lon"),yaw_north=self.get("YawNorth"))
@@ -542,7 +529,7 @@ class DashboardSource:
             explicit_on_track = self.get("IsOnTrack")
             on_track = bool(explicit_on_track) if explicit_on_track is not None else player_pct is not None
             in_garage = not on_track and not on_pit_road
-            driving_stint = bool(on_track and not on_pit_road)
+            driving_stint = bool(session_coach_mode=="practice" and on_track and not on_pit_road)
             if self.stint_active and not driving_stint:
                 engineering=self.coach.engineering_snapshot()
                 frozen = self.coach.freeze_stint_summary()
@@ -599,6 +586,7 @@ class DashboardSource:
                 fuel,'REAL LOCAL' if fuel is not None else 'SIN DATO',lap_number,completed_for_strategy,
                 average_lap,on_pit_road,session_time)
             self.handle_race_plan_audio(payload)
+            self.flush_race_engineer_audio()
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
@@ -806,6 +794,8 @@ class DashboardSource:
         # subset of cars currently positioned by the SDK.
         class_id=context.car_class_id
         class_rows=class_results_rows(results,by_idx,roster_conflicts,class_id,idx,arrays['CarIdxLastLapTime'],self.lap_text)
+        self.coach_session_mode=self.coach_mode_for_session(session.get("SessionType"))
+        self.update_race_engineer_audio(self.coach_session_mode,idx,class_rows,arrays['CarIdxLastLapTime'],arrays['CarIdxLapCompleted'],results,announce_player=True)
         live=[]
         own=next((row for row in class_rows if row['isPlayer']),None)
         standing=self.position_window(class_rows,own) if own else []
@@ -821,34 +811,13 @@ class DashboardSource:
             if position_data is None:continue
             gap,label=position_data
             race=results.get(other,{})
-            live.append({'idx':other,'pos':race.get('Position') or 0,'classId':other_car.get('CarClassID'),
+            live.append({'idx':other,'pos':(int(race['ClassPosition'])+1 if race.get('ClassPosition') is not None and other_car.get('CarClassID')==class_id else None),'classId':other_car.get('CarClassID'),
                 'number':str(other_car.get('CarNumber','—')),'car':car_label(other_car),'brand':car_brand(other_car),
                 'driver':(other_car.get('UserName') or '—') if other not in roster_conflicts else '—','gap':label,
-                'relativeDelta':gap,'lastLap':self.lap_text(at('CarIdxLastLapTime',other) or race.get('LastTime')),
+                'relativeDelta':gap,'gapSource':'DYNAMIC_ESTIMATED','lastLap':self.lap_text(at('CarIdxLastLapTime',other) or race.get('LastTime')),
                 'pace':'—','isPlayer':other==idx})
         relative=relative_window(live,idx) if idx is not None else []
-        # Preserve the official classified car immediately ahead/behind even when
-        # iRacing has not loaded that car into the dynamic CarIdx arrays.
-        if own and own.get("pos") is not None:
-            present={row.get("idx") for row in relative}
-            own_result=results.get(idx,{})
-            for target_pos in (own["pos"]-1,own["pos"]+1):
-                official=next((row for row in class_rows if row.get("pos")==target_pos),None)
-                if not official or official.get("idx") in present:
-                    continue
-                fallback=dict(official)
-                static=official_static_gap(own_result,results.get(official.get("idx"),{}))
-                if static:
-                    gap,label,source=static
-                    fallback["relativeDelta"]=gap
-                    fallback["gap"]=label
-                    fallback["gapSource"]=source
-                else:
-                    fallback["relativeDelta"]=None
-                    fallback["gap"]="ESTÁTICO · SIN INTERVALO"
-                    fallback["gapSource"]="OFFICIAL_POSITION_ONLY"
-                relative.append(fallback)
-            relative.sort(key=lambda row:(row.get("pos") is None,row.get("pos") or 99999))
+        relative=merge_official_neighbors(relative,class_rows,idx,"relativeDelta")
         ahead=next((row for row in relative if own and row.get("pos")==own.get("pos")-1),None)
         behind=next((row for row in relative if own and row.get("pos")==own.get("pos")+1),None)
         driver=self.manual_team_driver or self.confirmed_driver_name or 'AUTO · no confirmado'
@@ -894,7 +863,7 @@ class DashboardSource:
             racePlanState=plan['state'],racePlanMissing=plan['missing'],racePlanInputs={'remainingSeconds':remaining,'paceSeconds':pace,'fuelLiters':fuel_used,'consumptionLiters':consumption,'tankCapacityLiters':self.strategy_settings.get('tankCapacityLiters'),'completedLap':completed},totalDrivers=len(drivers),totalResults=len(results),carsWithLapDistPct=sum(v is not None and 0<=v<=1 for v in arrays['CarIdxLapDistPct']),carsWithLap=sum(v is not None and v>=0 for v in arrays['CarIdxLap']),carsWithCompletedLap=sum(v is not None and v>=0 for v in arrays['CarIdxLapCompleted']),classCarsInResults=len(class_rows),relativeAvailableCars=len(live),spotterPayloadReady=bool(idx is not None),relativeRows=len(relative),standingRows=len(standing),classId=class_id,lap=lap,completedLap=completed,lapDistPct=pct,onPitRoad=pit,fuelState=self.spotter_control.fuel_source,strategySource='SDK + MANUAL' if self.spotter_control.events else 'SDK + ESTIMACIÓN')
         if self.debug_team_enabled:
             team_debug.update(rosterConflicts=sorted(roster_conflicts),relativeRoster=[{'carIdx':r['idx'],'number':r['number'],'sdkUserName':by_idx.get(r['idx'],{}).get('UserName'),'sdkTeamName':by_idx.get(r['idx'],{}).get('TeamName'),'sdkUserID':by_idx.get(r['idx'],{}).get('UserID'),'shownDriver':r['driver']} for r in relative],classResultPositions=[{'carIdx':r['idx'],'classPositionRaw':results.get(r['idx'],{}).get('ClassPosition'),'shownPosition':r['pos'],'overallPosition':results.get(r['idx'],{}).get('Position'),'sdkUserName':by_idx.get(r['idx'],{}).get('UserName'),'sdkUserID':by_idx.get(r['idx'],{}).get('UserID')} for r in class_rows])
-        return {'appVersion':installed_version(),'connected':True,'demo':False,
+        payload={'appVersion':installed_version(),'connected':True,'demo':False,
             'teamContext':{'autoMode':'spotter','carIdx':idx,'carNumber':context.car_number,'teamID':context.team_id,'classId':class_id,'teamName':context.team_name,'driver':driver,'driverSource':'MANUAL' if self.manual_team_driver else 'SDK' if self.confirmed_driver_name else 'NO CONFIRMADO','source':context.source,'teamChoices':team_choices,
                            'fuelSource':fuel_source,'gapSource':'estimated-car-progress',
                            'ahead':ahead['gap'] if ahead else '—','behind':behind['gap'] if behind else '—',
@@ -910,13 +879,16 @@ class DashboardSource:
             'self':{'fuel':f'{fuel_used:.1f} L · {fuel_source}' if fuel_validated is not None else f'≈ {fuel_used:.1f} L · ESTIMADO' if fuel_used is not None else '—',
                     'fuelValue':fuel_used,'fuelSource':fuel_source,'lastUse':f'{consumption:.2f} L/v · EST.' if consumption else '—',
                     'bestUse':'—','worstUse':'—','lastLap':self.lap_text(last_lap),
-                    'bestLap':'—','laps':[],'wear':{'FL':'—','FR':'—','RL':'—','RR':'—'},
+                    'bestLap':'—','laps':list(self.observed_team_history.get(idx,[])),'wear':{'FL':'—','FR':'—','RL':'—','RR':'—'},
                     'pit':'EN BOXES' if pit else 'EN PISTA' if pct is not None and pct>=0 else 'SIN DATOS',
                     'pitWindow':'—','nextStop':strategy.get('boxLap','—')},
             'lastLapSummary':None,'relative':relative,'standing':standing,'standingAll':class_rows,'relativeAvailableCars':len(live),
             'capabilities':{'coachControls':False},'coach':{},'strategy':{},
             'raceDirector':race_director,'enduranceStrategy':strategy,'racePlan':plan,'racePlanVNext':race_plan_vnext,
             'sessionSummary':{'active':False},'teamDebug':team_debug}
+        self.handle_race_plan_audio(payload)
+        self.flush_race_engineer_audio()
+        return payload
 
     def finalize_setup_stint_before_reset(self, reason="session-change"):
         """Best-effort close of an active Setup Engineer stint before session state is cleared."""
@@ -947,11 +919,12 @@ class DashboardSource:
             return None
 
     def reset_session_tracking(self):
+        if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
         self.last_lap_number=None; self.lap_history=[]; self.last_fuel=None; self.fuel_at_lap_start=None
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.last_saved=None; self.setup_engineer.last_report_path=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={}
 
     @staticmethod
     def track_metres(value):
@@ -1010,34 +983,60 @@ class DashboardSource:
             return "race_engineer"
         return "practice"
 
-    def update_race_engineer_audio(self,mode,player_idx,category_rows,live_last,car_completed):
+    def update_race_engineer_audio(self,mode,player_idx,category_rows,live_last,car_completed,results=None,announce_player=False):
         if mode!="race_engineer":
             self.race_engineer_neighbors={}
-            return
+            self.race_engineer_audio=[]
+        results=results or {}
         player=next((row for row in category_rows if row.get("idx")==player_idx),None)
-        if not player or player.get("pos") is None:
-            return
-        for label,target_pos in (("Delante",player["pos"]-1),("Detrás",player["pos"]+1)):
-            if target_pos<1:
-                continue
-            row=next((item for item in category_rows if item.get("pos")==target_pos),None)
-            if not row:
-                self.race_engineer_neighbors.pop(label,None)
-                continue
+        neighbors={}
+        if player and player.get("pos") is not None:
+            for label,offset in (("Delante",-1),("Detrás",1)):
+                row=next((r for r in category_rows if r.get("pos")==player["pos"]+offset),None)
+                if row:neighbors[row["idx"]]=label
+        # Baseline every class car, rather than the two neighbor slots. A new
+        # neighbor must never replay a historical lap, even after overtaking.
+        for row in category_rows:
             idx=row.get("idx")
-            completed=car_completed[idx] if isinstance(idx,int) and idx<len(car_completed) else row.get("completedLaps")
-            lap_time=seconds(live_last[idx]) if isinstance(idx,int) and idx<len(live_last) else None
-            state=self.race_engineer_neighbors.get(label)
-            key=(idx,completed)
-            if completed is None or completed<1 or lap_time is None or lap_time<=0:
-                self.race_engineer_neighbors[label]=key
+            if not isinstance(idx,int) or idx<0:continue
+            result=results.get(idx,{})
+            completed=car_completed[idx] if idx<len(car_completed) else None
+            if not isinstance(completed,(int,float)) or completed<0:
+                completed=result.get("LapsComplete")
+            if not isinstance(completed,(int,float)) or completed<0:continue
+            completed=int(completed)
+            lap_time=seconds(live_last[idx]) if idx<len(live_last) else None
+            if lap_time is not None and lap_time<=0:lap_time=None
+            official=seconds(result.get("LastTime"))
+            official_match=result.get("LapsComplete")==completed and official is not None and official>0
+            state=self.race_engineer_car_laps.get(idx)
+            if state is None or completed<state["completed"]:
+                self.race_engineer_car_laps[idx]={"completed":completed,"time":lap_time,"pending":None}
                 continue
-            if state is None:
-                self.race_engineer_neighbors[label]=key
-                continue
-            if state!=key:
-                self.race_engineer_neighbors[label]=key
-                self.race_engineer_audio.append(f"{label}, {self.lap_text(lap_time)}")
+            if completed>state["completed"]:
+                state["pending"]=(completed,state["time"])
+                state["completed"]=completed
+            pending=state["pending"]
+            if pending and completed==pending[0]:
+                candidate=official if official_match else lap_time
+                if candidate is not None and (official_match or candidate!=pending[1]):
+                    state["pending"]=None
+                    if idx==player_idx and announce_player:
+                        history=self.observed_team_history.setdefault(idx,[])
+                        if not history or history[-1]["lap"]<completed:
+                            history.append({"lap":completed,"time":self.lap_text(candidate),"delta":"—","consumption":"—"})
+                            del history[:-10]
+                        if mode=="race_engineer":self.race_engineer_audio.append(self.lap_text(candidate))
+                    elif mode=="race_engineer" and idx in neighbors:
+                        self.race_engineer_audio.append(f"{neighbors[idx]}, {self.lap_text(candidate)}")
+            if lap_time is not None:state["time"]=lap_time
+        self.race_engineer_neighbors=neighbors
+
+    def flush_race_engineer_audio(self):
+        messages=self.race_engineer_audio
+        self.race_engineer_audio=[]
+        if self.coach_session_mode=="race_engineer" and messages and not self.race_plan_suppresses_coach_audio():
+            self.audio_coach.say(". ".join(messages))
 
     def update_lap_tracking(self,lap_number,lap_pct,fuel,last_lap,session_best,result=None):
         completed=seconds(last_lap);result=result or {};incidents=self.get("PlayerCarMyIncidentCount")
@@ -1047,24 +1046,26 @@ class DashboardSource:
             self.confirmed_session_best=None;prior_lap=result.get("FastestLap",0)
             self.personal_session_best=seconds(result.get("FastestTime")) if 0<prior_lap<=lap_number else None
             self.personal_lap_clean=False;self.personal_incidents=incidents;self.lap_history,self.fuel_per_lap=[],[]
-            self.last_lap_summary=self.pending_lap=None;self.last_lap_number=lap_number;self.last_recorded_lap_time=completed;self.fuel_at_lap_start=None;return
+            self.last_lap_summary=self.pending_lap=None;self.last_lap_number=lap_number;self.last_recorded_lap_time=completed;self.last_observed_lap_time=completed;self.fuel_at_lap_start=None;return
         if lap_number<self.last_lap_number:return
         if lap_number>self.last_lap_number:
-            usage=self.fuel_at_lap_start-fuel if self.fuel_at_lap_start is not None else None
-            self.pending_lap={"lap":lap_number,"usage":usage,"sectors":[],"previousTime":self.last_recorded_lap_time,"valid":self.personal_lap_clean}
+            usage=self.fuel_at_lap_start-fuel if self.fuel_at_lap_start is not None and fuel is not None else None
+            self.pending_lap={"lap":lap_number,"usage":usage,"sectors":[],"previousTime":self.last_observed_lap_time,"valid":self.personal_lap_clean}
             self.personal_lap_clean=clean_now;self.personal_incidents=incidents;self.fuel_at_lap_start=fuel
             self.last_lap_number=lap_number
         if self.pending_lap:
             official_time=seconds(result.get("LastTime"))
-            official_match=(result.get("LapsComplete")==self.pending_lap["lap"] and official_time is not None)
+            official_match=(result.get("LapsComplete")==self.pending_lap["lap"] and official_time is not None and official_time>0)
             candidate=official_time if official_match else completed
-            if candidate and (candidate!=self.pending_lap["previousTime"] or official_match):
+            best_match=(self.get("LapBestLap")==self.pending_lap["lap"] and seconds(self.get("LapBestLapTime"))==candidate)
+            if candidate and candidate>0 and (candidate!=self.pending_lap["previousTime"] or official_match or best_match):
                 sdk_best=seconds(self.get("LapBestLapTime"))
                 if self.get("LapBestLap")==self.pending_lap["lap"] and sdk_best is not None and abs(sdk_best-candidate)<.001:
                     self.pending_lap["valid"]=True
                 self.finalize_lap(self.pending_lap,candidate,session_best)
                 logger.info("LAP COMPLETED %s valid=%s time=%.3f",self.pending_lap["lap"],self.pending_lap["valid"],candidate)
                 self.pending_lap=None
+        self.last_observed_lap_time=completed
 
     def finalize_lap(self,pending,completed,session_best):
         self.last_recorded_lap_time=completed
@@ -1079,7 +1080,7 @@ class DashboardSource:
         self.confirmed_session_best=min(self.confirmed_session_best,completed) if self.confirmed_session_best else completed
         self.last_lap_summary={"lap":pending["lap"],"time":self.lap_text(completed),"sessionBest":self.lap_text(prior_best),"delta":self.delta_text(completed,prior_best),"expiresAt":time.time()+6}
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
-        coach_ok=self.coach.finish(completed,pending.get("valid"))
+        coach_ok=self.coach.finish(completed,pending.get("valid")) if self.coach_session_mode=="practice" else False
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"telemetry":self.coach.last_lap_record})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
@@ -1184,6 +1185,9 @@ class DashboardSource:
         return [{"lap":e["lap"],"time":self.lap_text(e["time"]),"delta":self.delta_text(e["time"],e["priorBest"]),"consumption":self.use_text(e.get("fuelUse"))} for e in self.lap_history]
 
     def disconnected_payload(self,message):
+        self.race_engineer_car_laps={}
+        self.race_engineer_audio=[]
+        if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
         self.session_state.connected=False;payload=self.session_state.preserved_payload()
         if payload is None:payload=self.demo_payload()
         payload["connected"]=False;payload["demo"]=False;payload["header"]["state"]=message.upper()
@@ -1281,7 +1285,7 @@ async def websocket(request):
                         source.manual_team_driver=str(setting.get('value') or '').strip()[:60] or None
                     elif setting.get("type")=="settings" and setting.get("key")=="demoRole" and source.force_demo:
                         if setting.get('value') in ('driver','spotter'):source.demo_role=setting['value']
-                    elif setting.get("type")=="action" and setting.get("action")=="audio_test":source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
+                    elif setting.get("type")=="action" and setting.get("action")=="audio_test" and source.coach_session_mode!="qualifying":source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
                     elif setting.get('type')=='action' and setting.get('action')=='capture_sdk':source.capture_sdk_once()
                     elif setting.get('type')=='action' and setting.get('action')=='setup_feedback':
                         if source.setup_engineer.last_saved:
