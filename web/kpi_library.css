@@ -1,0 +1,12 @@
+.zre-kpi-card{display:grid;gap:.35rem;min-height:92px;padding:.8rem .9rem;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:#101820;min-width:0}
+.zre-kpi-head{display:flex;justify-content:space-between;gap:.5rem;align-items:center}
+.zre-kpi-label{font-size:.7rem;font-weight:800;letter-spacing:.05em;color:#91a5b8;text-transform:uppercase}
+.zre-kpi-state{font-size:.58rem;color:#72879a;text-align:right}
+.zre-kpi-value{font-size:1.55rem;line-height:1.05;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zre-kpi-meta{font-size:.58rem;color:#65798b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zre-kpi-card.kpi-estimated .zre-kpi-state{color:#f0bd67}
+.zre-kpi-card.kpi-last-valid .zre-kpi-state{color:#87b7dc}
+.zre-kpi-card.kpi-not-applicable,.zre-kpi-card.kpi-waiting{opacity:.68}
+.zre-kpi-card.kpi-stale .zre-kpi-state{color:#ec8b8b}
+#kpi-component-bank{display:none!important}
+#custom-screen-grid>.zre-kpi-card{display:grid!important}
