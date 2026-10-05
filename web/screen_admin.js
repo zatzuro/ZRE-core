@@ -58,7 +58,7 @@ function sanitizeItems(items){
  const seen=new Set(),out=[];
  for(const raw of Array.isArray(items)?items:[]){
   const id=typeof raw==='string'?raw:raw?.id;
-  if(!componentById.has(id)||seen.has(id))continue;
+  if((!componentById.has(id)&&!String(id).startsWith('kpi:'))||seen.has(id))continue;
   seen.add(id);
   out.push({id,size:['compact','normal','wide','full'].includes(raw?.size)?raw.size:'normal'});
  }
@@ -293,7 +293,7 @@ function renderCatalog(){
   for(const def of defs){
    const row=document.createElement('div');row.className='admin-catalog-row';
    const text=document.createElement('span');text.textContent=def.name;
-   const source=document.createElement('small');source.textContent=BUILT_INS[def.view]?.name||def.view;
+   const source=document.createElement('small');source.textContent=def.sourceLabel||BUILT_INS[def.view]?.name||def.view||'KPI';
    const button=document.createElement('button');button.type='button';button.textContent=selected.has(def.id)?'AGREGADO':'AGREGAR';button.disabled=selected.has(def.id);button.addEventListener('click',()=>addDraft(def.id));
    row.append(text,source,button);section.append(row);
   }
@@ -345,6 +345,14 @@ function enterView(view){
  else if(screen(view))composeCustom(view);
  refreshNavigation();
 }
+function registerExternalComponents(defs){
+ for(const def of defs||[]){
+  if(!def?.id||!def?.selector||componentById.has(def.id))continue;
+  const normalized={id:String(def.id),name:String(def.name||def.id),group:String(def.group||'KPI'),view:def.view||null,selector:String(def.selector),dynamic:true,sourceLabel:def.sourceLabel||'KPI'};
+  COMPONENTS.push(normalized);componentById.set(normalized.id,normalized);
+ }
+ if(draft)renderCatalog();
+}
 function init(options={}){
  if(state)return;
  state=loadState();navigate=typeof options.onNavigate==='function'?options.onNavigate:null;
@@ -356,5 +364,5 @@ function init(options={}){
  });
  observer.observe(document.body,{childList:true,subtree:true});
 }
-window.ZREScreenAdmin={init,enterView,leaveView,renderAdmin,renderCustom,applyBuiltIn,screenLabel,isManaged:view=>view==='admin'||Boolean(screen(view)),isCustom:view=>Boolean(screen(view)&&!screen(view).builtIn),getState:()=>clone(state||loadState())};
+window.ZREScreenAdmin={init,enterView,leaveView,renderAdmin,renderCustom,applyBuiltIn,registerExternalComponents,screenLabel,isManaged:view=>view==='admin'||Boolean(screen(view)),isCustom:view=>Boolean(screen(view)&&!screen(view).builtIn),getState:()=>clone(state||loadState())};
 })();
