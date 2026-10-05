@@ -159,11 +159,19 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
     overall=row_for(overall_rows)
     cls=row_for(class_rows)
     overall_pos=(overall or {}).get("pos")
+    if not overall_pos:overall_pos=finite(result.get("Position"))
     class_pos=(cls or {}).get("classPos") or (cls or {}).get("pos")
-    add(kpi("session.position.overall","Posición general","SESIÓN",overall_pos,f"P{overall_pos}" if overall_pos else "—",source="RESULTS/CARIDX"))
-    add(kpi("session.position.class","Posición de clase","SESIÓN",class_pos,f"P{class_pos}" if class_pos else "—",source="RESULTS/CarIdxClassPosition"))
-    add(kpi("session.participants.overall","Participantes","SESIÓN",len([r for r in overall_rows if r.get("pos")]),source="ZRE_TIMING"))
-    add(kpi("session.participants.class","Participantes clase","SESIÓN",len([r for r in class_rows if r.get("pos")]),source="ZRE_CLASS_STANDINGS"))
+    if not class_pos:
+        raw_class=finite(result.get("ClassPosition"))
+        class_pos=(raw_class+1) if raw_class is not None and raw_class>=0 else None
+    active_drivers=[r for r in (drivers or []) if isinstance(r,dict) and not r.get("IsSpectator") and not r.get("CarIsPaceCar")]
+    participant_count=len([r for r in overall_rows if r.get("pos")]) or len(active_drivers)
+    class_id=car.get("CarClassID")
+    class_count=len([r for r in class_rows if r.get("pos")]) or len([r for r in active_drivers if class_id is not None and r.get("CarClassID")==class_id])
+    add(kpi("session.position.overall","Posición general","SESIÓN",overall_pos,f"P{int(overall_pos)}" if overall_pos else "—",source="RESULTS/CARIDX"))
+    add(kpi("session.position.class","Posición de clase","SESIÓN",class_pos,f"P{int(class_pos)}" if class_pos else "—",source="RESULTS/CarIdxClassPosition"))
+    add(kpi("session.participants.overall","Participantes","SESIÓN",participant_count,str(participant_count) if participant_count else "—",source="ZRE_TIMING/DRIVER_INFO"))
+    add(kpi("session.participants.class","Participantes clase","SESIÓN",class_count,str(class_count) if class_count else "—",source="ZRE_CLASS_STANDINGS/DRIVER_INFO"))
     time_remain=finite(session.get("timeRemain"))
     add(kpi("session.time.remaining","Tiempo restante","SESIÓN",time_remain,fmt_time(time_remain),"s",source="SESSION_INTELLIGENCE"))
     laps_remain=finite(session.get("lapsRemainEx"))
