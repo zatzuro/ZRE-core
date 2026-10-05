@@ -217,8 +217,8 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
     add(kpi("lap.projected","Vuelta proyectada","VUELTA",projected,fmt_lap(projected),"s",source="SDK_DELTA+BEST",state=STATE_ESTIMATED if projected is not None else STATE_WAITING))
     optimal=positive(coach.get("optimalSeconds")) or positive(coach.get("optimal"))
     add(kpi("lap.optimal","Vuelta óptima","VUELTA",optimal,coach.get("optimalLap") or fmt_lap(optimal),"s",source="COACH",state=STATE_ESTIMATED if optimal is not None else STATE_WAITING))
-    last_valid=next((r for r in reversed(lap_history) if r.get("valid") and r.get("sectors")),None)
-    sectors=(last_valid or {}).get("sectors") or []
+    last_valid_lap=next((r for r in reversed(lap_history) if r.get("valid") and r.get("sectors")),None)
+    sectors=(last_valid_lap or {}).get("sectors") or []
     for i in range(3):
         value=positive(sectors[i]) if i<len(sectors) else None
         best=positive(best_sectors[i]) if i<len(best_sectors) else None
