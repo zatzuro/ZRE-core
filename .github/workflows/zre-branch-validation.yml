@@ -44,6 +44,7 @@ jobs:
           node tests/frontend_release_263.cjs
           node tests/frontend_release_264.cjs
           node tests/frontend_screen_admin_265.cjs
+          node tests/frontend_kpi_library_265.cjs
 
       - name: Server and WebSocket demo smoke
         if: contains(github.ref, '2.6.4')
