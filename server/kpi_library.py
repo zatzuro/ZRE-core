@@ -87,42 +87,58 @@ def _input(get,id,label,key,unit="%",scale=100.0):
     return kpi(id,label,"INPUTS",shown,fmt_num(shown,0,"%"),unit,source=f"SDK:{key}")
 
 
-def _tire_corner(get,corner,prefix):
+def _cached(last_valid,key,value):
+    if value is not None:
+        last_valid[key]=value
+        return value,"SDK_LAST_VALID"
+    if key in last_valid:
+        return last_valid[key],"ZRE_CACHE_LAST_VALID"
+    return None,"SDK"
+
+
+def _tire_corner(get,corner,prefix,last_valid):
     items=[]
     pressure,key=_first(get,(f"{prefix}pressure",f"{prefix}coldPressure"))
     pressure=finite(pressure)
+    pressure,pressure_source=_cached(last_valid,f"tire.pressure.{corner.lower()}",pressure)
     items.append(kpi(f"tire.pressure.{corner.lower()}",f"Presión {corner}","NEUMÁTICOS",
-        pressure,fmt_num(pressure,1),source=f"SDK:{key}" if key else "SDK",
+        pressure,fmt_num(pressure,1),source=(f"SDK:{key}" if key and pressure_source=="SDK_LAST_VALID" else pressure_source),
         semantic="LAST_VALID",state=STATE_LAST_VALID if pressure is not None else STATE_WAITING,
         available=pressure is not None))
     temps=[finite(get(f"{prefix}temp{zone}")) for zone in ("L","M","R")]
     temp=mean([v for v in temps if v is not None])
+    temp,temp_source=_cached(last_valid,f"tire.temp.{corner.lower()}",temp)
     items.append(kpi(f"tire.temp.{corner.lower()}",f"Temperatura {corner}","NEUMÁTICOS",
-        temp,fmt_num(temp,1," °C"),"°C",source="SDK:TIRE_TEMP",
+        temp,fmt_num(temp,1," °C"),"°C",source="SDK:TIRE_TEMP" if temp_source=="SDK_LAST_VALID" else temp_source,
         semantic="LAST_VALID",state=STATE_LAST_VALID if temp is not None else STATE_WAITING,
         available=temp is not None))
     wears=[finite(get(f"{prefix}wear{zone}")) for zone in ("L","M","R")]
     wears=[v for v in wears if v is not None]
     wear=mean(wears)
     wear_pct=wear*100 if wear is not None else None
+    wear_pct,wear_source=_cached(last_valid,f"tire.wear.{corner.lower()}",wear_pct)
     items.append(kpi(f"tire.wear.{corner.lower()}",f"Desgaste {corner}","NEUMÁTICOS",
-        wear_pct,fmt_num(wear_pct,0,"%"),"%",source="SDK:TIRE_WEAR",
+        wear_pct,fmt_num(wear_pct,0,"%"),"%",source="SDK:TIRE_WEAR" if wear_source=="SDK_LAST_VALID" else wear_source,
         semantic="LAST_VALID",state=STATE_LAST_VALID if wear_pct is not None else STATE_WAITING,
         available=wear_pct is not None))
     brake,key=_first(get,(f"{prefix}brakeTemp",f"{prefix}BrakeTemp"))
     brake=finite(brake)
+    brake,brake_source=_cached(last_valid,f"brake.temp.{corner.lower()}",brake)
     items.append(kpi(f"brake.temp.{corner.lower()}",f"Freno {corner}","FRENOS",
-        brake,fmt_num(brake,1," °C"),"°C",source=f"SDK:{key}" if key else "SDK",
+        brake,fmt_num(brake,1," °C"),"°C",source=(f"SDK:{key}" if key and brake_source=="SDK_LAST_VALID" else brake_source),
         semantic="LAST_VALID",state=STATE_LAST_VALID if brake is not None else STATE_NOT_APPLICABLE,
         available=brake is not None))
     return items
 
 
 def _sof(drivers,class_id=None):
-    ratings=[]
+    ratings=[];seen=set()
     for row in drivers or []:
         if not isinstance(row,dict) or row.get("IsSpectator") or row.get("CarIsPaceCar"):continue
         if class_id is not None and row.get("CarClassID")!=class_id:continue
+        car_idx=row.get("CarIdx")
+        if car_idx in seen:continue
+        seen.add(car_idx)
         rating=positive(row.get("IRating"))
         if rating is not None:ratings.append(rating)
     if len(ratings)<2:return None
@@ -134,12 +150,12 @@ def _sof(drivers,class_id=None):
 def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drivers=None,
                       overall_rows=None,class_rows=None,fuel_history=None,lap_history=None,
                       best_sectors=None,completed_laps=None,current_lap=None,fuel_value=None,
-                      fuel_source=None,average_lap=None,stint_laps=None,current_driver=None):
+                      fuel_source=None,average_lap=None,stint_laps=None,current_driver=None,last_valid=None):
     """Project existing telemetry/engines into stable KPI objects."""
     payload=payload or {};car=car or {};result=result or {}
     overall_rows=overall_rows or [];class_rows=class_rows or []
     fuel_history=[v for v in (fuel_history or []) if positive(v) is not None]
-    lap_history=lap_history or [];best_sectors=best_sectors or [None,None,None]
+    lap_history=lap_history or [];best_sectors=best_sectors or [None,None,None];last_valid=last_valid if isinstance(last_valid,dict) else {}
     intel=(payload.get("sessionIntelligence") or {})
     session=((intel.get("session") or {}).get("observed") or {})
     env=((intel.get("environment") or {}).get("observed") or {})
@@ -187,8 +203,8 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
     sof=_sof(drivers,car.get("CarClassID"))
     add(kpi("session.sof.class","Strength of Field","SESIÓN",sof,str(sof) if sof is not None else "—",source="ZRE_FROM_IRATING",state=STATE_ESTIMATED if sof is not None else STATE_WAITING))
 
-    last_lap=positive(get("LapLastLapTime")) if role=="driver" else positive((payload.get("self") or {}).get("lastLapValue"))
-    best_lap=positive(get("LapBestLapTime")) if role=="driver" else positive(result.get("FastestTime"))
+    last_lap=positive(get("LapLastLapTime")) if role=="driver" else (positive(at(get("CarIdxLastLapTime",[]) or [],car_idx)) or positive(result.get("LastTime")))
+    best_lap=positive(get("LapBestLapTime")) if role=="driver" else (positive(at(get("CarIdxBestLapTime",[]) or [],car_idx)) or positive(result.get("FastestTime")))
     delta=finite(get("LapDeltaToSessionBestLap")) if role=="driver" else None
     projected=(best_lap+delta) if best_lap is not None and delta is not None else None
     add(kpi("lap.delta.current","Delta vuelta actual","VUELTA",delta,fmt_num(delta,3," s"),"s",source="SDK:LapDeltaToSessionBestLap",state=STATE_ESTIMATED if delta is not None else STATE_WAITING))
@@ -208,9 +224,15 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
 
     last_use=fuel_history[-1] if fuel_history else None
     avg=mean(fuel_history)
+    fuel_model=plan_data.get("fuelModel") or {}
+    avg_source="ZRE_FUEL_HISTORY"
+    avg_state=None
+    if avg is None:
+        avg=positive(fuel_model.get("strategy_lpl")) or positive(fuel_model.get("observed_lpl"))
+        if avg is not None:avg_source="RACE_PLAN_FUEL_MODEL";avg_state=STATE_ESTIMATED
     add(kpi("fuel.current","Combustible actual","FUEL",fuel_value,fmt_num(fuel_value,1," L"),"L",source=fuel_source or "SIN DATO",state=STATE_ESTIMATED if fuel_source=="ESTIMADO" else None))
     add(kpi("fuel.use.last","Consumo última vuelta","FUEL",last_use,fmt_num(last_use,2," L/v"),"L/v",source="ZRE_FUEL_HISTORY"))
-    add(kpi("fuel.use.average","Consumo medio","FUEL",avg,fmt_num(avg,2," L/v"),"L/v",source="ZRE_FUEL_HISTORY"))
+    add(kpi("fuel.use.average","Consumo medio","FUEL",avg,fmt_num(avg,2," L/v"),"L/v",source=avg_source,state=avg_state))
     for n in (2,5,10):
         value=mean(fuel_history[-n:]) if len(fuel_history)>=n else None
         add(kpi(f"fuel.use.avg{n}",f"Media últimas {n}","FUEL",value,fmt_num(value,2," L/v"),"L/v",source="ZRE_FUEL_HISTORY"))
@@ -228,24 +250,34 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
     margin=finite(((plan_data.get("fuelModel") or {}).get("margin_laps")))
     add(kpi("fuel.margin","Margen Fuel","FUEL",margin,fmt_num(margin,1," v"),"laps",source="RACE_PLAN",state=STATE_ESTIMATED if margin is not None else STATE_WAITING))
 
-    for item in (
-        _control(get,"car.brake_bias","Brake Bias",("dcBrakeBias","BrakeBias"),"%"),
-        _control(get,"car.tc","TC",("dcTractionControl","TractionControl")),
-        _control(get,"car.tc2","TC2",("dcTractionControl2",)),
-        _control(get,"car.abs","ABS",("dcABS","ABS")),
-        _control(get,"car.engine_map","Engine Map",("dcEnginePower","dcFuelMixture","EngineMap")),
-        _control(get,"car.gear","Marcha",("Gear",)),
-        _control(get,"car.rpm","RPM",("RPM",),"rpm"),
-        _control(get,"car.speed","Velocidad",("Speed",),"m/s"),
-    ):add(item)
-    add(_input(get,"input.throttle","Throttle","Throttle"))
-    add(_input(get,"input.brake","Brake","Brake"))
-    add(_input(get,"input.clutch","Clutch","Clutch"))
-    steering=finite(get("SteeringWheelAngle"))
-    add(kpi("input.steering","Steering","INPUTS",steering,fmt_num(steering,3," rad"),"rad",source="SDK:SteeringWheelAngle",state=STATE_NOT_APPLICABLE if steering is None else STATE_AVAILABLE,available=steering is not None))
-
-    for corner,prefix in (("FL","LF"),("FR","RF"),("RL","LR"),("RR","RR")):
-        items.extend(_tire_corner(get,corner,prefix))
+    if role=="driver":
+        for item in (
+            _control(get,"car.brake_bias","Brake Bias",("dcBrakeBias","BrakeBias"),"%"),
+            _control(get,"car.tc","TC",("dcTractionControl","TractionControl")),
+            _control(get,"car.tc2","TC2",("dcTractionControl2",)),
+            _control(get,"car.abs","ABS",("dcABS","ABS")),
+            _control(get,"car.engine_map","Engine Map",("dcEnginePower","dcFuelMixture","EngineMap")),
+            _control(get,"car.gear","Marcha",("Gear",)),
+            _control(get,"car.rpm","RPM",("RPM",),"rpm"),
+            _control(get,"car.speed","Velocidad",("Speed",),"m/s"),
+        ):add(item)
+        add(_input(get,"input.throttle","Throttle","Throttle"))
+        add(_input(get,"input.brake","Brake","Brake"))
+        add(_input(get,"input.clutch","Clutch","Clutch"))
+        steering=finite(get("SteeringWheelAngle"))
+        add(kpi("input.steering","Steering","INPUTS",steering,fmt_num(steering,3," rad"),"rad",source="SDK:SteeringWheelAngle",state=STATE_NOT_APPLICABLE if steering is None else STATE_AVAILABLE,available=steering is not None))
+        for corner,prefix in (("FL","LF"),("FR","RF"),("RL","LR"),("RR","RR")):
+            items.extend(_tire_corner(get,corner,prefix,last_valid))
+    else:
+        protected=[
+            ("car.brake_bias","Brake Bias","COCHE"),("car.tc","TC","COCHE"),("car.tc2","TC2","COCHE"),("car.abs","ABS","COCHE"),
+            ("car.engine_map","Engine Map","COCHE"),("car.gear","Marcha","COCHE"),("car.rpm","RPM","COCHE"),("car.speed","Velocidad","COCHE"),
+            ("input.throttle","Throttle","INPUTS"),("input.brake","Brake","INPUTS"),("input.clutch","Clutch","INPUTS"),("input.steering","Steering","INPUTS")]
+        for kid,label,group in protected:
+            add(kpi(kid,label,group,state=STATE_NOT_APPLICABLE,source="IDENTITY_PROTECTED_SPOTTER",available=False))
+        for corner in ("fl","fr","rl","rr"):
+            for prefix,label,group in (("tire.pressure","Presión","NEUMÁTICOS"),("tire.temp","Temperatura","NEUMÁTICOS"),("tire.wear","Desgaste","NEUMÁTICOS"),("brake.temp","Freno","FRENOS")):
+                add(kpi(f"{prefix}.{corner}",f"{label} {corner.upper()}",group,state=STATE_NOT_APPLICABLE,source="IDENTITY_PROTECTED_SPOTTER",semantic="LAST_VALID",available=False))
 
     for key,label,unit in (
         ("AirTemp","Temperatura ambiente","°C"),("TrackTemp","Temperatura pista","°C"),
