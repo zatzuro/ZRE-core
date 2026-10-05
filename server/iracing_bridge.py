@@ -306,7 +306,7 @@ class DashboardSource:
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
         self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
-        self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.debug_team_enabled=False;self.capture_status='Listo para capturar'
+        self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar'
 
     def handle_race_plan_audio(self, payload):
         """Speak meaningful Race Plan transitions once for the local driver."""
@@ -707,7 +707,7 @@ class DashboardSource:
                 lap_history=self.lap_history,best_sectors=self.best_sectors,completed_laps=completed_for_strategy,
                 current_lap=lap_number,fuel_value=fuel,fuel_source="REAL LOCAL" if fuel is not None else "SIN DATO",
                 average_lap=average_lap,stint_laps=payload["teamContext"]["stintLaps"],
-                current_driver=context.current_driver or player_driver.get("UserName"))
+                current_driver=context.current_driver or player_driver.get("UserName"),last_valid=self.kpi_last_valid)
             self.recorder.observe(payload,session_time)
             return payload
         finally:
@@ -991,10 +991,10 @@ class DashboardSource:
         payload["strategySettings"]={"pitLossSeconds":self.strategy_settings.get("pitLossSeconds")}
         payload["kpiLibrary"]=build_kpi_library(
             self.get,payload,role="spotter",car_idx=idx,car=car,result=result,drivers=drivers,
-            overall_rows=[],class_rows=class_rows,fuel_history=self.fuel_per_lap,
+            overall_rows=[],class_rows=class_rows,fuel_history=[],
             lap_history=list(self.observed_team_history.get(idx,[])),best_sectors=[],
             completed_laps=completed,current_lap=lap,fuel_value=fuel_used,fuel_source=fuel_source,
-            average_lap=pace,stint_laps=payload["teamContext"]["stintLaps"],current_driver=driver)
+            average_lap=pace,stint_laps=payload["teamContext"]["stintLaps"],current_driver=driver,last_valid={})
         self.recorder.observe(payload,session_time)
         self.handle_race_plan_audio(payload)
         self.flush_race_engineer_audio()
