@@ -6,6 +6,7 @@ on:
       - 'work/**'
       - 'develop/2.6.3'
       - 'develop/2.6.4'
+      - 'develop/2.6.5'
       - 'release-2.6.4'
       - 'release-2.6.3'
   pull_request:
@@ -42,6 +43,7 @@ jobs:
           node tests/frontend_race_plan.cjs
           node tests/frontend_release_263.cjs
           node tests/frontend_release_264.cjs
+          node tests/frontend_screen_admin_265.cjs
 
       - name: Server and WebSocket demo smoke
         if: contains(github.ref, '2.6.4')
