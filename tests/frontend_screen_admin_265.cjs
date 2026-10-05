@@ -9,7 +9,7 @@ new vm.Script(admin,{filename:'web/screen_admin.js'});
 new vm.Script(app,{filename:'web/app.js'});
 
 for(const id of ['admin-view','custom-view','admin-screen-select','admin-component-list','admin-component-catalog','custom-screen-grid','screen-nav']){
-  assert.ok(html.includes(`id="${id}"`),`missing #${id}`);
+  assert.ok(new RegExp(`id=[\\"']${id}[\\"']`).test(html),`missing #${id}`);
 }
 for(const label of ['Relative / clasificación','Class Standings','Race Plan','Session Intelligence','Historial de paradas','Driver Coach']){
   assert.ok(admin.includes(label),`catalog missing ${label}`);
