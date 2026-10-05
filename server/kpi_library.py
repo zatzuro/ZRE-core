@@ -88,6 +88,8 @@ def _input(get,id,label,key,unit="%",scale=100.0):
 
 
 def _cached(last_valid,key,value):
+    if not isinstance(last_valid,dict):
+        last_valid={}
     if value is not None:
         last_valid[key]=value
         return value,"SDK_LAST_VALID"
@@ -155,7 +157,9 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
     payload=payload or {};car=car or {};result=result or {}
     overall_rows=overall_rows or [];class_rows=class_rows or []
     fuel_history=[v for v in (fuel_history or []) if positive(v) is not None]
-    lap_history=lap_history or [];best_sectors=best_sectors or [None,None,None];last_valid=last_valid if isinstance(last_valid,dict) else {}
+    lap_history=lap_history or []
+    best_sectors=best_sectors or [None,None,None]
+    last_valid=last_valid if isinstance(last_valid,dict) else {}
     intel=(payload.get("sessionIntelligence") or {})
     session=((intel.get("session") or {}).get("observed") or {})
     env=((intel.get("environment") or {}).get("observed") or {})
