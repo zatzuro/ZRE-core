@@ -13,6 +13,7 @@ import aiohttp
 
 async def smoke():
     root=Path(__file__).resolve().parents[1]
+    expected_version=json.loads((root/'version.json').read_text())['version']
     with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
     runner="from server import iracing_bridge as b; b.start_background_updater=None; b.main()"
     with tempfile.TemporaryFile(mode='w+') as output:
@@ -23,7 +24,7 @@ async def smoke():
                     if process.poll() is not None:raise AssertionError('server exited')
                     try:
                         async with client.get(f'http://127.0.0.1:{port}/version') as response:
-                            version=await response.json();assert version['runtimeVersion']=='2.6.4';break
+                            version=await response.json();assert version['runtimeVersion']==expected_version;break
                     except aiohttp.ClientConnectorError:await asyncio.sleep(.1)
                 else:raise AssertionError('server did not start')
                 for path in ['/', '/static/app.js','/static/style.css']:
@@ -31,7 +32,7 @@ async def smoke():
                         assert response.status==200;assert 'no-store' in response.headers['Cache-Control']
                         body=await response.text();assert body
                 async with client.ws_connect(f'http://127.0.0.1:{port}/ws') as ws:
-                    packet=await ws.receive_json(timeout=5);assert packet['demo'];assert packet['sessionMode']=='race_engineer';assert packet['appVersion']=='2.6.4'
+                    packet=await ws.receive_json(timeout=5);assert packet['demo'];assert packet['sessionMode']=='race_engineer';assert packet['appVersion']==expected_version
                     assert packet['relative'];assert packet['self']['laps']
                     await ws.send_json({'type':'settings','key':'demoRole','value':'spotter'})
                     for i in range(10):

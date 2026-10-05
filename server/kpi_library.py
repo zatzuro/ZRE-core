@@ -15,6 +15,7 @@ STATE_STALE="STALE"
 
 
 def finite(value):
+    if isinstance(value,bool):return None
     try:
         value=float(value)
         return value if math.isfinite(value) else None
@@ -60,6 +61,7 @@ def kpi(id,label,group,value=None,display=None,unit=None,state=None,source="UNKN
         semantic="LIVE",description=None,available=None):
     if available is None:available=value is not None
     if state is None:state=STATE_AVAILABLE if available else STATE_WAITING
+    if value is None and state in (STATE_AVAILABLE,STATE_ESTIMATED,STATE_LAST_VALID):state=STATE_WAITING
     return {"id":id,"label":label,"group":group,"value":value,
             "display":display if display is not None else ("—" if value is None else str(value)),
             "unit":unit,"state":state,"source":source,"semantic":semantic,
@@ -104,7 +106,7 @@ def _tire_corner(get,corner,prefix,last_valid):
     pressure=finite(pressure)
     pressure,pressure_source=_cached(last_valid,f"tire.pressure.{corner.lower()}",pressure)
     items.append(kpi(f"tire.pressure.{corner.lower()}",f"Presión {corner}","NEUMÁTICOS",
-        pressure,fmt_num(pressure,1),source=(f"SDK:{key}" if key and pressure_source=="SDK_LAST_VALID" else pressure_source),
+        pressure,fmt_num(pressure,1," kPa"),"kPa",source=(f"SDK:{key}" if key and pressure_source=="SDK_LAST_VALID" else pressure_source),
         semantic="LAST_VALID",state=STATE_LAST_VALID if pressure is not None else STATE_WAITING,
         available=pressure is not None))
     temps=[finite(get(f"{prefix}temp{zone}")) for zone in ("L","M","R")]
@@ -119,7 +121,7 @@ def _tire_corner(get,corner,prefix,last_valid):
     wear=mean(wears)
     wear_pct=wear*100 if wear is not None else None
     wear_pct,wear_source=_cached(last_valid,f"tire.wear.{corner.lower()}",wear_pct)
-    items.append(kpi(f"tire.wear.{corner.lower()}",f"Desgaste {corner}","NEUMÁTICOS",
+    items.append(kpi(f"tire.wear.{corner.lower()}",f"Remanente {corner}","NEUMÁTICOS",
         wear_pct,fmt_num(wear_pct,0,"%"),"%",source="SDK:TIRE_WEAR" if wear_source=="SDK_LAST_VALID" else wear_source,
         semantic="LAST_VALID",state=STATE_LAST_VALID if wear_pct is not None else STATE_WAITING,
         available=wear_pct is not None))
@@ -174,7 +176,7 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
 
     def add(item):items.append(item)
     def row_for(rows):
-        return next((r for r in rows if r.get("isPlayer") or r.get("idx")==car_idx),None)
+        return next((r for r in rows if r.get("idx")==car_idx),None) if car_idx is not None else None
 
     overall=row_for(overall_rows)
     cls=row_for(class_rows)
@@ -185,9 +187,9 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
         raw_class=finite(result.get("ClassPosition"))
         class_pos=(raw_class+1) if raw_class is not None and raw_class>=0 else None
     active_drivers=[r for r in (drivers or []) if isinstance(r,dict) and not r.get("IsSpectator") and not r.get("CarIsPaceCar")]
-    participant_count=len([r for r in overall_rows if r.get("pos")]) or len(active_drivers)
+    participant_count=len({r.get("CarIdx") for r in active_drivers if r.get("CarIdx") is not None}) or None
     class_id=car.get("CarClassID")
-    class_count=len([r for r in class_rows if r.get("pos")]) or len([r for r in active_drivers if class_id is not None and r.get("CarClassID")==class_id])
+    class_count=len({r.get("CarIdx") for r in active_drivers if r.get("CarIdx") is not None and class_id is not None and r.get("CarClassID")==class_id}) or None
     add(kpi("session.position.overall","Posición general","SESIÓN",overall_pos,f"P{int(overall_pos)}" if overall_pos else "—",source="RESULTS/CARIDX"))
     add(kpi("session.position.class","Posición de clase","SESIÓN",class_pos,f"P{int(class_pos)}" if class_pos else "—",source="RESULTS/CarIdxClassPosition"))
     add(kpi("session.participants.overall","Participantes","SESIÓN",participant_count,str(participant_count) if participant_count else "—",source="ZRE_TIMING/DRIVER_INFO"))
@@ -240,7 +242,7 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
     for n in (2,5,10):
         value=mean(fuel_history[-n:]) if len(fuel_history)>=n else None
         add(kpi(f"fuel.use.avg{n}",f"Media últimas {n}","FUEL",value,fmt_num(value,2," L/v"),"L/v",source="ZRE_FUEL_HISTORY"))
-    autonomy=(fuel_value/avg) if positive(fuel_value) is not None and positive(avg) is not None else None
+    autonomy=(fuel_value/avg) if finite(fuel_value) is not None and fuel_value>=0 and positive(avg) is not None else None
     add(kpi("fuel.autonomy.laps","Autonomía","FUEL",autonomy,fmt_num(autonomy,1," v"),"laps",source="ZRE_FUEL_HISTORY",state=STATE_ESTIMATED if autonomy is not None else STATE_WAITING))
     autonomy_time=autonomy*average_lap if autonomy is not None and positive(average_lap) is not None else None
     add(kpi("fuel.autonomy.time","Autonomía tiempo","FUEL",autonomy_time,fmt_time(autonomy_time),"s",source="ZRE_FUEL_HISTORY",state=STATE_ESTIMATED if autonomy_time is not None else STATE_WAITING))
@@ -289,17 +291,19 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
         ("WindDir","Dirección viento","rad"),("Precipitation","Precipitación",""),
     ):
         value=finite(env.get(key))
+        if key=="RelativeHumidity" and value is not None:value*=100
         add(kpi(f"environment.{key.lower()}",label,"ENTORNO",value,fmt_num(value,1,(" "+unit) if unit else ""),unit,source="SESSION_INTELLIGENCE"))
     wet=(intel.get("environment") or {}).get("wetnessLabel")
     add(kpi("environment.wetness","Estado Wet/Dry","ENTORNO",wet,display=str(wet or "—"),source="SESSION_INTELLIGENCE"))
-    sim_time=finite(get("SessionTimeOfDay")) or finite(get("SessionTime"))
+    sim_time=finite(get("SessionTimeOfDay"))
+    if sim_time is None:sim_time=finite(get("SessionTime"))
     add(kpi("environment.sim_time","Hora simulación","ENTORNO",sim_time,fmt_time(sim_time),"s",source="SDK"))
 
     add(kpi("driver.name","Piloto","PILOTO",current_driver or car.get("UserName"),display=str(current_driver or car.get("UserName") or "—"),source="TEAM_CONTEXT/DRIVER_INFO"))
     add(kpi("driver.number","Número coche","PILOTO",car.get("CarNumber"),display=str(car.get("CarNumber") or "—"),source="DRIVER_INFO"))
     irating=finite(car.get("IRating"))
     add(kpi("driver.irating","iRating","PILOTO",irating,str(int(irating)) if irating is not None else "—",source="DRIVER_INFO"))
-    sr=car.get("LicString") or car.get("LicSubLevel")
+    sr=car.get("LicString")
     add(kpi("driver.safety_rating","Safety Rating","PILOTO",sr,display=str(sr or "—"),source="DRIVER_INFO"))
     incidents=finite(get("PlayerCarMyIncidentCount")) if role=="driver" else finite(result.get("Incidents"))
     add(kpi("driver.incidents","Incidentes","PILOTO",incidents,str(int(incidents)) if incidents is not None else "—",source="SDK/RESULTS"))
@@ -329,7 +333,7 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
     rival=race_director.get("rival")
     add(kpi("strategy.rival","Strategic Rival","ESTRATEGIA",rival,display=str(rival or "—"),source="RACE_DIRECTOR"))
     rival_gap=race_director.get("gap")
-    add(kpi("strategy.rival_gap","Gap Strategic Rival","ESTRATEGIA",rival_gap,display=str(rival_gap or "—"),source="RACE_DIRECTOR"))
+    add(kpi("strategy.rival_gap","Gap Strategic Rival","ESTRATEGIA",rival_gap,display=str(rival_gap) if rival_gap is not None else "—",source="RACE_DIRECTOR"))
     action=(rival_strategy.get("primary") or {}).get("action")
     add(kpi("strategy.attack_state","Undercut / Overcut","ESTRATEGIA",action,display=str(action or "—"),source="RIVAL_STRATEGY",state=STATE_ESTIMATED if action else STATE_WAITING))
     stint=endurance.get("currentStint")

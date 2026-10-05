@@ -10,3 +10,6 @@
 .zre-kpi-card.kpi-stale .zre-kpi-state{color:#ec8b8b}
 #kpi-component-bank{display:none!important}
 #custom-screen-grid>.zre-kpi-card{display:grid!important}
+
+.zre-built-in-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
+.zre-built-in-kpis>.zre-kpi-card{order:var(--zre-layout-order,0)}

@@ -44,12 +44,12 @@ function render(library){
     node.classList.remove('kpi-available','kpi-waiting','kpi-not-applicable','kpi-estimated','kpi-last-valid','kpi-stale');
     node.classList.add('kpi-'+cssState(item.state));
     const label=node.querySelector('.zre-kpi-label'),state=node.querySelector('.zre-kpi-state'),value=node.querySelector('.zre-kpi-value'),meta=node.querySelector('.zre-kpi-meta');
-    if(label)label.textContent=safeText(item.label);
-    if(state)state.textContent=safeText(item.state);
-    if(value)value.textContent=safeText(item.display);
+    if(label&&label.textContent!==safeText(item.label))label.textContent=safeText(item.label);
+    if(state&&state.textContent!==safeText(item.state))state.textContent=safeText(item.state);
+    if(value&&value.textContent!==safeText(item.display))value.textContent=safeText(item.display);
     if(meta){
       const bits=[item.source,item.semantic].filter(Boolean);
-      meta.textContent=bits.join(' · ');
+      const text=bits.join(' · ');if(meta.textContent!==text)meta.textContent=text;
     }
     node.title=item.description||'';
   }

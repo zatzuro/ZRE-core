@@ -119,6 +119,7 @@ function clearBuiltInStyles(){
 function applyBuiltIn(view){
  const cfg=screen(view);
  if(!cfg||!cfg.builtIn)return;
+ placeBuiltInKpis(view,cfg);
  const positions=new Map(cfg.items.map((item,index)=>[item.id,{...item,index}]));
  for(const def of COMPONENTS.filter(x=>x.view===view)){
   const node=resolveComponent(def);
@@ -133,6 +134,23 @@ function applyBuiltIn(view){
    itemSizeClass(node,'normal');
   }
  }
+}
+function placeBuiltInKpis(view,cfg){
+ const roots={live:'live-view',pit:'pit-view',summary:'summary-view',spotter:'spotter-view'};
+ const root=$(roots[view]);if(!root)return;
+ let host=root.querySelector('.zre-built-in-kpis');
+ if(!host){host=document.createElement('section');host.className='zre-built-in-kpis';root.append(host)}
+ const selected=new Set(cfg.items.map(x=>x.id));
+ for(const node of [...host.children]){
+  if(!selected.has('kpi:'+node.dataset.zreKpiId))$('kpi-component-bank')?.append(node);
+ }
+ cfg.items.forEach((item,index)=>{
+  if(!item.id.startsWith('kpi:'))return;
+  const node=resolveComponent(componentById.get(item.id));if(!node)return;
+  node.classList.remove('zre-layout-hidden');itemSizeClass(node,item.size);
+  node.style.setProperty('--zre-layout-order',String(index));
+  if(node.parentNode!==host)host.append(node);
+ });
 }
 function rememberOrigin(node,id){
  if(origins.has(id))return;

@@ -7,6 +7,7 @@ on:
       - 'develop/2.6.3'
       - 'develop/2.6.4'
       - 'develop/2.6.5'
+      - 'release-2.6.5'
       - 'release-2.6.4'
       - 'release-2.6.3'
   pull_request:
@@ -45,9 +46,10 @@ jobs:
           node tests/frontend_release_264.cjs
           node tests/frontend_screen_admin_265.cjs
           node tests/frontend_kpi_library_265.cjs
+          node tests/frontend_kpi_workflows_265.cjs
 
       - name: Server and WebSocket demo smoke
-        if: contains(github.ref, '2.6.4')
+        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5')
         run: python diagnostics/smoke_264.py
 
   release-263:
@@ -93,3 +95,23 @@ jobs:
             exit 0
           fi
           gh release create v2.6.4 --target "$GITHUB_SHA" --title "ZRE Core 2.6.4" --notes-file diagnostics/QA-2.6.4.md --latest
+
+  release-265:
+    if: github.ref == 'refs/heads/release-2.6.5'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish validated ZRE Core 2.6.5
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c 'import json; m=json.load(open("version.json")); assert m["version"]=="2.6.5" and m["archive_ref"]=="release-2.6.5"'
+          if gh release view v2.6.5 >/dev/null 2>&1; then
+            tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v2.6.5" --jq '.object.sha')
+            test "$tag_sha" = "$GITHUB_SHA"
+            exit 0
+          fi
+          gh release create v2.6.5 --target "$GITHUB_SHA" --title "ZRE Core 2.6.5" --notes-file diagnostics/QA-2.6.5.md --latest

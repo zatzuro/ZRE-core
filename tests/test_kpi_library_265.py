@@ -85,7 +85,7 @@ class KpiLibraryTests(unittest.TestCase):
         values={"SplitTimeInfo":{"Sectors":[{"SectorStartPct":0.0},{"SectorStartPct":0.33},{"SectorStartPct":0.66}]},
                 "LapCurrentLapTime":5.0}
         source.get=lambda key,default=None:values.get(key,default)
-        source.update_sector_tracking(1,.05,None)
+        source.update_sector_tracking(1,0,None)
         values["LapCurrentLapTime"]=27.0;source.update_sector_tracking(1,.34,None)
         values["LapCurrentLapTime"]=55.0;source.update_sector_tracking(1,.67,None)
         values["LapCurrentLapTime"]=1.0;source.update_sector_tracking(2,.01,82.0)
@@ -95,6 +95,61 @@ class KpiLibraryTests(unittest.TestCase):
         source2.get=lambda key,default=None:{"SplitTimeInfo":{"Sectors":[]},"LapCurrentLapTime":30}.get(key,default)
         source2.update_sector_tracking(1,.5,None)
         self.assertEqual(source2.last_completed_sectors,[])
+
+    def test_missing_counts_zero_fuel_and_humidity(self):
+        lib=build_kpi_library(Getter({"SessionTimeOfDay":0,"SessionTime":50}),
+            {"sessionIntelligence":{"environment":{"observed":{"RelativeHumidity":.65}}}},
+            role="driver",fuel_history=[3],fuel_value=0,average_lap=80)
+        self.assertIsNone(by_id(lib,"session.participants.overall")["value"])
+        self.assertEqual(by_id(lib,"fuel.autonomy.laps")["value"],0)
+        self.assertEqual(by_id(lib,"environment.relativehumidity")["value"],65)
+        self.assertEqual(by_id(lib,"environment.sim_time")["value"],0)
+
+    def test_observed_identity_wins_over_local_player_marker(self):
+        lib=build_kpi_library(Getter({}),{},role="spotter",car_idx=7,
+            overall_rows=[{"idx":1,"pos":1,"isPlayer":True},{"idx":7,"pos":8}],
+            drivers=[{"CarIdx":7},{"CarIdx":7},{"CarIdx":8}])
+        self.assertEqual(by_id(lib,"session.position.overall")["value"],8)
+        self.assertEqual(by_id(lib,"session.participants.overall")["value"],2)
+
+    def test_disconnect_marks_preserved_kpis_stale(self):
+        source=DashboardSource(force_demo=True)
+        payload=source.demo_payload()
+        payload["kpiLibrary"]=build_kpi_library(Getter({"Throttle":0}),{},role="driver")
+        source.session_state.last_payload=payload
+        source.session_state.preserved_payload=lambda:payload
+        item=by_id(source.disconnected_payload("offline")["kpiLibrary"],"input.throttle")
+        self.assertEqual(item["state"],"STALE")
+        self.assertEqual(item["value"],0)
+
+    def test_sector_jump_and_invalid_layout_do_not_reuse_readings(self):
+        source=DashboardSource(force_demo=True)
+        values={"SplitTimeInfo":{"Sectors":[{"SectorStartPct":0},{"SectorStartPct":.3},{"SectorStartPct":.6}]},"LapCurrentLapTime":0}
+        source.get=Getter(values)
+        source.update_sector_tracking(1,0,None)
+        values["LapCurrentLapTime"]=25;source.update_sector_tracking(1,.31,None)
+        values["LapCurrentLapTime"]=50;source.update_sector_tracking(1,.61,None)
+        source.update_sector_tracking(4,0,80)
+        self.assertEqual(source.last_completed_sectors,[])
+        source.last_completed_sectors=[25,25,30]
+        values["SplitTimeInfo"]={"Sectors":[]}
+        source.update_sector_tracking(4,.2,80)
+        self.assertEqual(source.last_completed_sectors,[])
+
+    def test_session_reset_clears_cached_tires_and_sectors(self):
+        source=DashboardSource(force_demo=True)
+        source.kpi_last_valid={"tire.temp.fl":80}
+        source.last_completed_sectors=[25,25,30]
+        source.sector_last_sample=(1,.5,40)
+        source.reset_session_tracking()
+        self.assertEqual(source.kpi_last_valid,{})
+        self.assertEqual(source.last_completed_sectors,[])
+        self.assertIsNone(source.sector_last_sample)
+
+    def test_numeric_coach_optimum_is_available(self):
+        lib=build_kpi_library(Getter({}),{"coach":{"optimalSeconds":78.4,"optimalLap":"1:18.400"}},role="driver")
+        self.assertTrue(by_id(lib,"lap.optimal")["available"])
+        self.assertEqual(by_id(lib,"lap.optimal")["display"],"1:18.400")
 
 
 if __name__=="__main__":
