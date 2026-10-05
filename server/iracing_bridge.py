@@ -40,6 +40,7 @@ try:
     from server.setup_engineer import SetupEngineer
     from server.setup_snapshot import snapshot_from_sdk
     from server.stint_engineering_snapshot import capture_conditions, capture_tires
+    from server.kpi_library import build_kpi_library
 except ModuleNotFoundError:
     from session_state import SessionIdentity, SessionState
     from lap_coach import LapCoach, number
@@ -56,6 +57,7 @@ except ModuleNotFoundError:
     from setup_engineer import SetupEngineer
     from setup_snapshot import snapshot_from_sdk
     from stint_engineering_snapshot import capture_conditions, capture_tires
+    from kpi_library import build_kpi_library
 
 from aiohttp import web
 try:
@@ -698,6 +700,14 @@ class DashboardSource:
             payload["sessionSummary"] = {"active": bool(ended and in_garage), "bestLap": coach["bestLap"],
                                          "optimalLap": coach["optimalLap"], "potential": coach["potential"],
                                          "lapCount": self.coach.completed, "priorities": self.coach.summary_priorities()}
+            payload["strategySettings"]={"pitLossSeconds":self.strategy_settings.get("pitLossSeconds")}
+            payload["kpiLibrary"]=build_kpi_library(
+                self.get,payload,role="driver",car_idx=pilot_idx,car=player_driver,result=result,drivers=drivers,
+                overall_rows=standing_rows,class_rows=category_rows,fuel_history=self.fuel_per_lap,
+                lap_history=self.lap_history,best_sectors=self.best_sectors,completed_laps=completed_for_strategy,
+                current_lap=lap_number,fuel_value=fuel,fuel_source="REAL LOCAL" if fuel is not None else "SIN DATO",
+                average_lap=average_lap,stint_laps=payload["teamContext"]["stintLaps"],
+                current_driver=context.current_driver or player_driver.get("UserName"))
             self.recorder.observe(payload,session_time)
             return payload
         finally:
@@ -978,6 +988,13 @@ class DashboardSource:
         payload["sessionType"]=session.get("SessionType")
         payload["sessionIntelligence"]=session_intelligence(self.get,weekend,session,{i:({**c,'UserName':None,'identityAmbiguous':True} if i in roster_conflicts else c) for i,c in by_idx.items()},results,idx,class_id,arrays['CarIdxLapDistPct'],self.get('CarIdxTrackSurface',[]) or [],self.competitor_presence_history,self.sdk_units())
         payload["rivalStrategy"]={"available":False,"source":"ZRE_INFERRED","reason":"Sin ritmo/combustible local validado en SPOTTER"}
+        payload["strategySettings"]={"pitLossSeconds":self.strategy_settings.get("pitLossSeconds")}
+        payload["kpiLibrary"]=build_kpi_library(
+            self.get,payload,role="spotter",car_idx=idx,car=car,result=result,drivers=drivers,
+            overall_rows=[],class_rows=class_rows,fuel_history=self.fuel_per_lap,
+            lap_history=list(self.observed_team_history.get(idx,[])),best_sectors=[],
+            completed_laps=completed,current_lap=lap,fuel_value=fuel_used,fuel_source=fuel_source,
+            average_lap=pace,stint_laps=payload["teamContext"]["stintLaps"],current_driver=driver)
         self.recorder.observe(payload,session_time)
         self.handle_race_plan_audio(payload)
         self.flush_race_engineer_audio()
