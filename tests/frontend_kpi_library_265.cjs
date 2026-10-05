@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const renderer=fs.readFileSync('web/kpi_library.js','utf8');
+const admin=fs.readFileSync('web/screen_admin.js','utf8');
+const app=fs.readFileSync('web/app.js','utf8');
+const html=fs.readFileSync('web/index.html','utf8');
+const css=fs.readFileSync('web/kpi_library.css','utf8');
+new vm.Script(renderer,{filename:'web/kpi_library.js'});
+new vm.Script(admin,{filename:'web/screen_admin.js'});
+assert.ok(html.includes('id="kpi-component-bank"'));
+assert.ok(html.includes('/static/kpi_library.js?v=2.6.4'));
+assert.ok(html.includes('/static/kpi_library.css?v=2.6.4'));
+assert.ok(admin.includes('registerExternalComponents'));
+assert.ok(admin.includes("startsWith('kpi:')"));
+assert.ok(app.includes('window.ZREKPI?.render(data.kpiLibrary)'));
+assert.ok(renderer.includes("id:'kpi:'+item.id"));
+assert.ok(css.includes('.kpi-estimated'));
+assert.ok(css.includes('.kpi-last-valid'));
+console.log('2.6.5 unified KPI registry, renderer and builder integration: OK');
