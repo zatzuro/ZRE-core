@@ -1,7 +1,8 @@
 (function(){
 'use strict';
 
-const STORAGE_KEY='zre-screen-layouts-v1';
+const STORAGE_KEY='zre-screen-layouts-v2';
+const LEGACY_STORAGE_KEY='zre-screen-layouts-v1';
 const HEADER_KEY='zre-header-collapsed-v1';
 const COLS=12,MAX_ROWS=100;
 const SIZE_TO_W={compact:3,normal:6,wide:9,full:12};
@@ -48,7 +49,7 @@ const origins=new Map();
 
 function $(id){return document.getElementById(id)}
 function clone(value){return JSON.parse(JSON.stringify(value))}
-function clamp(n,min,max){return Math.min(max,Math.max(min,Number.isFinite(+n)?+n:min))}
+function clamp(n,min,max){return Math.min(max,Math.max(min,Number.isFinite(+n)?Math.round(+n):min))}
 function safeId(){return 'custom-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7)}
 function legacySize(w){if(w<=3)return 'compact';if(w<=6)return 'normal';if(w<=9)return 'wide';return 'full'}
 function normalizeItem(raw,index=0){
@@ -82,7 +83,7 @@ function sanitizeItems(items){
 }
 function loadState(){
  let parsed=null;
- try{parsed=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null')}catch(_){parsed=null}
+ try{parsed=JSON.parse(localStorage.getItem(STORAGE_KEY)||localStorage.getItem(LEGACY_STORAGE_KEY)||'null')}catch(_){parsed=null}
  const base=defaultState();
  if(!parsed||!parsed.screens||typeof parsed.screens!=='object')return base;
  for(const key of Object.keys(BUILT_INS)){
@@ -97,8 +98,8 @@ function loadState(){
  return base;
 }
 function persist(){
- try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch(_){setAdminStatus('No fue posible guardar localmente la configuración.','error')}
- refreshNavigation();
+ try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch(_){setAdminStatus('No fue posible guardar localmente la configuración.','error');return false}
+ refreshNavigation();return true;
 }
 function screen(view){return state&&state.screens&&state.screens[view]||null}
 function screenLabel(view){if(view==='admin')return 'ADMINISTRACIÓN';return screen(view)?.name||BUILT_INS[view]?.name||String(view||'').toUpperCase()}
@@ -234,7 +235,7 @@ function renderLayoutGrid(){
 function startPointerEdit(event,item,mode,tile){
  if(event.button!==undefined&&event.button!==0)return;
  const grid=$('admin-layout-grid');if(!grid)return;
- event.preventDefault();selectedItemId=item.id;renderComponentSettings();tile.classList.add('dragging');
+ event.preventDefault();selectedItemId=item.id;renderComponentSettings();tile.classList.add('dragging');tile.setPointerCapture?.(event.pointerId);
  const startX=event.clientX,startY=event.clientY,orig={x:item.x,y:item.y,w:item.w,h:item.h};
  const rect=grid.getBoundingClientRect(),cellW=Math.max(1,(rect.width-16)/COLS),cellH=72;
  const move=e=>{
@@ -245,8 +246,8 @@ function startPointerEdit(event,item,mode,tile){
   tile.querySelector('.admin-widget-size').textContent='C'+item.x+' · F'+item.y;
   tile.querySelector('small').textContent=(componentById.get(item.id)?.group||'ZRE')+' · '+item.w+'×'+item.h;
  };
- const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);tile.classList.remove('dragging');redrawDraft('Hay cambios sin guardar.',false)};
- window.addEventListener('pointermove',move);window.addEventListener('pointerup',up,{once:true});
+ const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);tile.classList.remove('dragging');redrawDraft('Hay cambios sin guardar.',false)};
+ window.addEventListener('pointermove',move);window.addEventListener('pointerup',up,{once:true});window.addEventListener('pointercancel',up,{once:true});
 }
 function renderComponentSettings(){
  const host=$('admin-component-settings');if(!host)return;host.replaceChildren();
@@ -316,15 +317,15 @@ function renderCatalog(){
  }
 }
 function renderAdmin(){updateAdminSelect();renderComposition();refreshNavigation()}
-function syncScreenName(){
- const a=$('admin-screen-name'),b=$('admin-screen-name-panel');const value=(a?.value||b?.value||'').slice(0,40);if(a&&a.value!==value)a.value=value;if(b&&b.value!==value)b.value=value;
+function syncScreenName(changed){
+ const a=$('admin-screen-name'),b=$('admin-screen-name-panel');const value=(changed?.value??a?.value??b?.value??'').slice(0,40);if(a&&a.value!==value)a.value=value;if(b&&b.value!==value)b.value=value;
 }
 function saveDraft(){
  if(!draft||!state.screens[selectedScreen])return;
  const target=state.screens[selectedScreen];target.items=sanitizeItems(draft.items);
  if(!target.builtIn){syncScreenName();target.name=String($('admin-screen-name')?.value||target.name).trim().slice(0,40)||target.name}
- target.layout={columns:COLS};persist();draft=clone(target);setAdminStatus('Configuración guardada.','saved');
- if(target.builtIn)applyBuiltIn(selectedScreen);updateAdminSelect();refreshNavigation();renderComposition();
+ target.layout={columns:COLS};if(!persist())return;draft=clone(target);
+ if(target.builtIn)applyBuiltIn(selectedScreen);updateAdminSelect();refreshNavigation();renderComposition();setAdminStatus('Configuración guardada.','saved');
 }
 function resetSelected(){
  const cfg=screen(selectedScreen);if(!cfg?.builtIn)return;
@@ -345,8 +346,8 @@ function bind(){
  $('admin-reset-screen')?.addEventListener('click',resetSelected);$('admin-reset-screen-panel')?.addEventListener('click',resetSelected);
  $('admin-create-screen')?.addEventListener('click',createCustom);$('admin-delete-screen')?.addEventListener('click',deleteSelected);
  $('admin-new-screen-name')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();createCustom()}});
- $('admin-screen-name')?.addEventListener('input',()=>{syncScreenName();setAdminStatus('Hay cambios sin guardar.','dirty')});
- $('admin-screen-name-panel')?.addEventListener('input',()=>{syncScreenName();setAdminStatus('Hay cambios sin guardar.','dirty')});
+ $('admin-screen-name')?.addEventListener('input',e=>{syncScreenName(e.target);setAdminStatus('Hay cambios sin guardar.','dirty')});
+ $('admin-screen-name-panel')?.addEventListener('input',e=>{syncScreenName(e.target);setAdminStatus('Hay cambios sin guardar.','dirty')});
  $('screen-nav')?.querySelector('[data-zre-view="admin"]')?.addEventListener('click',()=>navigate?.('admin'));
  $('header-collapse-toggle')?.addEventListener('click',()=>setHeaderCollapsed(!document.body.classList.contains('zre-header-collapsed')));
 }
