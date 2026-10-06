@@ -27,6 +27,7 @@
   </header>
 
   <nav id="screen-nav" class="screen-nav" aria-label="Pantallas personalizadas">
+    <button id="header-collapse-toggle" type="button" aria-expanded="true" title="Plegar o desplegar controles">PLEGAR CONTROLES</button>
     <button type="button" data-zre-view="admin">ADMINISTRACIÓN</button>
   </nav>
 
@@ -168,8 +169,24 @@
       <span id="admin-status" role="status" aria-live="polite">Listo.</span>
     </div>
     <div class="admin-builder">
-      <section class="admin-panel"><h2>COMPOSICIÓN · ARRASTRA PARA ORDENAR</h2><div id="admin-component-list"></div></section>
-      <aside class="admin-panel"><h2>CATÁLOGO DE COMPONENTES</h2><div id="admin-component-catalog"></div></aside>
+      <section class="admin-panel admin-layout-panel">
+        <div class="admin-panel-title"><div><h2>PARRILLA DE DISEÑO</h2><p>Arrastra, suelta y redimensiona los componentes. La parrilla solo aparece en edición.</p></div><span>12 COLUMNAS</span></div>
+        <div id="admin-layout-grid" class="admin-layout-grid" aria-label="Parrilla visual de edición"></div>
+        <div class="admin-secondary-list"><h3>COMPONENTES DE LA PANTALLA</h3><div id="admin-component-list"></div></div>
+      </section>
+      <aside class="admin-sidebar">
+        <section class="admin-panel admin-screen-settings">
+          <h2>AJUSTES DE PANTALLA</h2>
+          <label>NOMBRE<input id="admin-screen-name-panel" maxlength="40"></label>
+          <div class="admin-screen-actions"><button id="admin-save-screen-panel" type="button">GUARDAR</button><button id="admin-reset-screen-panel" type="button">RESTAURAR</button></div>
+          <p>Estos ajustes pertenecen a la pantalla completa, no al componente seleccionado.</p>
+        </section>
+        <section class="admin-panel admin-component-settings">
+          <h2>AJUSTES DEL COMPONENTE</h2>
+          <div id="admin-component-settings"><p class="admin-empty">Selecciona un componente de la parrilla.</p></div>
+        </section>
+        <section class="admin-panel"><h2>CATÁLOGO DE COMPONENTES</h2><div id="admin-component-catalog"></div></section>
+      </aside>
     </div>
   </section>
 
