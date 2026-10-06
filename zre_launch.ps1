@@ -25,13 +25,13 @@ $bridge=Start-Process -FilePath $python -ArgumentList $arguments -WorkingDirecto
 try {
     $runtime=$null
     for ($attempt=0; $attempt -lt 60; $attempt++) {
-        $bridge.Refresh(); if ($bridge.HasExited) { throw 'El puente terminó antes de validar su identidad.' }
+        $bridge.Refresh(); if ($bridge.HasExited) { throw 'El puente termino antes de validar su identidad.' }
         try { $runtime=Invoke-RestMethod 'http://127.0.0.1:8765/version' -TimeoutSec 1; break } catch { Start-Sleep -Milliseconds 500 }
     }
-    if (-not $runtime) { throw 'El puente no respondió.' }
+    if (-not $runtime) { throw 'El puente no respondio.' }
     $meta=Get-Content (Join-Path $Root 'version.json') -Raw | ConvertFrom-Json
     if ($runtime.pid -ne $bridge.Id -or $runtime.root -ne $Root -or $runtime.runtimeVersion -ne $meta.version -or $runtime.installedVersion -ne $meta.version) {
-        throw "Runtime incorrecto: PID $($runtime.pid), root $($runtime.root), versión $($runtime.runtimeVersion). Esperado: PID $($bridge.Id), root $Root, versión $($meta.version)."
+        throw "Runtime incorrecto: PID $($runtime.pid), root $($runtime.root), version $($runtime.runtimeVersion). Esperado: PID $($bridge.Id), root $Root, version $($meta.version)."
     }
     Write-Host "$($runtime.mode) BUILD ACTIVE`nZRE Core $($runtime.runtimeVersion)`ncommit: $($runtime.sourceCommit)`nroot: $($runtime.root)`nruntime verified: $($runtime.runtimeVersion)"
     if (-not $NoBrowser) { Start-Process ('http://localhost:8765/?instance='+$runtime.instanceId) }
