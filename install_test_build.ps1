@@ -6,7 +6,11 @@ if ($listeners.Count) {
     foreach ($ownerId in ($listeners.OwningProcess | Select-Object -Unique)) {
         $p=Get-CimInstance Win32_Process -Filter "ProcessId=$ownerId"
         $inferred=$null
-        if ($p.ExecutablePath -match '^(.*)\\\.venv\\Scripts\\python(?:w)?\.exe$') { $inferred=$Matches[1] }
+        $ancestor=$p
+        for ($depth=0; $depth -lt 8 -and $ancestor; $depth++) {
+            if ($ancestor.ExecutablePath -match '^(.*)\\\.venv\\Scripts\\python(?:w)?\.exe$') { $inferred=$Matches[1]; break }
+            $ancestor=Get-CimInstance Win32_Process -Filter "ProcessId=$($ancestor.ParentProcessId)" -ErrorAction SilentlyContinue
+        }
         if ($inferred -and (Test-Path (Join-Path $inferred 'start_dashboard.bat'))) {
             New-Item $registry -Force | Out-Null
             Set-ItemProperty $registry -Name InstallationRoot -Value $inferred

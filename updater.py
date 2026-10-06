@@ -220,7 +220,7 @@ def start_background_updater(interval: int = CHECK_INTERVAL_SECONDS):
 if __name__ == "__main__":
     parser=argparse.ArgumentParser(description="Updater ZRE: estable por defecto; prueba sólo por petición explícita.")
     channels=parser.add_mutually_exclusive_group()
-    channels.add_argument("--test-ref",help="Instala una vez una rama develop; no cambia el canal automático.")
+    channels.add_argument("--test-ref",help="Instala y fija TEST hasta Restore Stable explícito.")
     channels.add_argument("--restore-stable",action="store_true",help="Vuelve explícitamente al estable, incluso con una versión inferior.")
     parser.add_argument("--root",type=Path,help="Carpeta existente que contiene start_dashboard.bat")
     args=parser.parse_args()

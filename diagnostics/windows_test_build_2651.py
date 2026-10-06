@@ -37,7 +37,12 @@ def start_and_check(mode,version,wait=False):
         owners=json.loads(ps('@(Get-NetTCPConnection -LocalPort 8765 -State Listen).OwningProcess | ConvertTo-Json -Compress'))
         owners=owners if isinstance(owners,list) else [owners];assert status['pid'] in owners
         executable=ps(f'(Get-CimInstance Win32_Process -Filter "ProcessId={status["pid"]}").ExecutablePath')
-        assert str(ROOT/'.venv'/'Scripts'/'python.exe').lower()==executable.lower(),executable
+        expected_python=str(ROOT/'.venv'/'Scripts'/'python.exe').lower()
+        assert status['executable'].lower()==expected_python,status
+        if executable.lower()!=expected_python:
+            parent=ps(f'$p=Get-CimInstance Win32_Process -Filter "ProcessId={status["pid"]}"; (Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)").ExecutablePath')
+            assert parent.lower()==expected_python,(executable,parent)
+        print('Listener process:',executable,'venv:',status['executable'],flush=True)
         html=http('/');assert f'content="{version}"' in html and f'v{version}' in html
         for url in re.findall(r'(?:src|href)="(/static/[^\"]+)"',html):
             assert '?v='+version in url,url
@@ -48,8 +53,10 @@ def start_and_check(mode,version,wait=False):
         assert conflict.returncode!=0 and '8765' in conflict.stdout+conflict.stderr,conflict
         assert json.loads(http())['instanceId']==status['instanceId']
         # Installer must also stop before touching anything, even with another process.
-        blocker=subprocess.run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(REPO/'install_test_build.ps1'),'-Root',str(ROOT),'-NoLaunch'],capture_output=True,text=True,timeout=30)
+        blocker=subprocess.run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(REPO/'install_test_build.ps1'),'-NoLaunch'],capture_output=True,text=True,timeout=30)
         assert blocker.returncode!=0 and str(status['pid']) in blocker.stdout+blocker.stderr
+        remembered=ps("(Get-ItemProperty HKCU:\Software\ZRE).InstallationRoot")
+        assert Path(remembered)==ROOT,remembered
         if wait:
             # >120s so the real background updater gets a second chance to execute.
             deadline=time.monotonic()+125
@@ -81,7 +88,7 @@ try:
     second=start_and_check('TEST','2.6.5.1',wait=True)
     assert first['instanceId']!=second['instanceId']
     # Restore Stable local entrypoint, suppressing automatic GUI launch for QA.
-    subprocess.run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(ROOT/'install_test_build.ps1'),'-Root',str(ROOT),'-RestoreStable','-NoLaunch'],check=True)
+    subprocess.run(['cmd','/c',str(ROOT/'restore_stable.bat'),'-NoLaunch'],cwd=ROOT,check=True)
     start_and_check('STABLE','2.6.5')
     for folder in ('.venv','data','session_logs','reports'):assert (ROOT/folder/'preserve-marker').read_text()=='user data'
     assert (ROOT/'local-settings.json').read_text()=='user configuration'
