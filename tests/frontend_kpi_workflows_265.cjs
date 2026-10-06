@@ -12,15 +12,16 @@ class Node{
  add(n){this.append(n)}
  addEventListener(k,f){this.listeners[k]=f}
  click(){this.listeners.click?.({target:this})}
+ getBoundingClientRect(){return {width:1216,height:800}}
  setAttribute(){}
  matches(s){if(s.startsWith('.'))return this.classList.contains(s.slice(1));if(s.startsWith('#'))return this.id===s.slice(1);const m=s.match(/^\[data-([\w-]+)(?:="([^"]*)")?\]$/);if(m){const key=m[1].replace(/-([a-z])/g,(_,x)=>x.toUpperCase());return m[2]===undefined?key in this.dataset:this.dataset[key]===m[2]}return this.tagName===s}
  querySelectorAll(s){const out=[];for(const n of this.children){if(n.matches(s))out.push(n);out.push(...n.querySelectorAll(s))}return out}
  querySelector(s){return this.querySelectorAll(s)[0]||null}
 }
 const body=new Node(),nodes=new Map();
-for(const id of ['live-view','pit-view','summary-view','spotter-view','custom-view','custom-screen-grid','custom-screen-title','kpi-component-bank','admin-view','screen-nav','admin-screen-select','admin-screen-name','admin-delete-screen','admin-reset-screen','admin-status','admin-component-list','admin-component-catalog','admin-save-screen','admin-create-screen','admin-new-screen-name']){const n=new Node();n.id=id;nodes.set(id,n);body.append(n)}
+for(const id of ['live-view','pit-view','summary-view','spotter-view','custom-view','custom-screen-grid','custom-screen-title','kpi-component-bank','admin-view','screen-nav','admin-screen-select','admin-screen-name','admin-delete-screen','admin-reset-screen','admin-status','admin-component-list','admin-component-catalog','admin-save-screen','admin-create-screen','admin-new-screen-name','admin-layout-grid','admin-component-settings','admin-screen-name-panel','header-collapse-toggle']){const n=new Node();n.id=id;nodes.set(id,n);body.append(n)}
 const adminButton=new Node('button');adminButton.dataset.zreView='admin';nodes.get('screen-nav').append(adminButton);
-const saved=new Map();const context={document:{body,getElementById:id=>nodes.get(id)||null,querySelector:s=>body.querySelector(s),createElement:tag=>new Node(tag),createComment:()=>new Node('comment')},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},Option:function(t,v){const n=new Node('option');n.textContent=t;n.value=v;return n},CSS:{escape:x=>x},MutationObserver:class{observe(){}},setTimeout,clearTimeout};context.window=context;vm.createContext(context);
+const saved=new Map();const context={document:{body,getElementById:id=>nodes.get(id)||null,querySelector:s=>body.querySelector(s),createElement:tag=>new Node(tag),createComment:()=>new Node('comment')},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},Option:function(t,v){const n=new Node('option');n.textContent=t;n.value=v;return n},CSS:{escape:x=>x},MutationObserver:class{observe(){}},setTimeout,clearTimeout};const windowEvents={};context.addEventListener=(k,f)=>{windowEvents[k]=f};context.removeEventListener=(k)=>{delete windowEvents[k]};context.window=context;vm.createContext(context);
 for(const f of ['screen_admin.js','kpi_library.js'])vm.runInContext(fs.readFileSync('web/'+f,'utf8'),context);
 context.ZREScreenAdmin.init();
 const lib={items:[{id:'fuel.current',label:'Fuel',group:'FUEL',value:0,display:'0.0 L',state:'AVAILABLE'}]};context.ZREKPI.render(lib);
@@ -34,5 +35,13 @@ context.ZREScreenAdmin.leaveView(id);assert.ok(nodes.get('kpi-component-bank').q
 context.ZREScreenAdmin.enterView('admin');nodes.get('admin-screen-select').value='live';nodes.get('admin-screen-select').listeners.change({target:nodes.get('admin-screen-select')});addFuel();nodes.get('admin-save-screen').click();context.ZREScreenAdmin.enterView('live');assert.ok(nodes.get('live-view').querySelector('[data-zre-kpi-id="fuel.current"]'));
 context.ZREScreenAdmin.enterView(id);context.ZREScreenAdmin.leaveView(id);context.ZREScreenAdmin.enterView('live');assert.ok(nodes.get('live-view').querySelector('[data-zre-kpi-id="fuel.current"]'));
 context.ZREScreenAdmin.enterView('admin');nodes.get('admin-reset-screen').click();assert.equal(nodes.get('live-view').querySelector('[data-zre-kpi-id="fuel.current"]'),null);
-const config=JSON.parse(saved.get('zre-screen-layouts-v1'));assert.equal(config.screens[id].items[0].id,'kpi:fuel.current');
+// Exercise delivered visual grid, resize/move events, settings and saved geometry.
+context.ZREScreenAdmin.enterView('admin');nodes.get('admin-screen-select').value=id;nodes.get('admin-screen-select').listeners.change({target:nodes.get('admin-screen-select')});
+const panel=nodes.get('admin-screen-name-panel');panel.value='Renamed QA';panel.listeners.input({target:panel});assert.equal(nodes.get('admin-screen-name').value,'Renamed QA');
+let tile=nodes.get('admin-layout-grid').querySelector('.admin-layout-item');assert.ok(tile);
+tile.listeners.pointerdown({button:0,clientX:0,clientY:0,target:tile,preventDefault(){},pointerId:1});windowEvents.pointermove({clientX:200,clientY:72});windowEvents.pointerup();
+tile=nodes.get('admin-layout-grid').querySelector('.admin-layout-item');const handle=tile.querySelector('.admin-resize-handle');handle.listeners.pointerdown({button:0,clientX:0,clientY:0,target:handle,preventDefault(){},stopPropagation(){},pointerId:1});windowEvents.pointermove({clientX:100,clientY:72});windowEvents.pointerup();
+nodes.get('admin-save-screen').click();const geometry=context.ZREScreenAdmin.getState().screens[id].items[0];assert.equal(geometry.x,3);assert.equal(geometry.y,2);assert.equal(geometry.w,7);assert.equal(geometry.h,3);assert.equal(context.ZREScreenAdmin.getState().screens[id].name,'Renamed QA');
+nodes.get('header-collapse-toggle').click();assert.equal(saved.get('zre-header-collapsed-v1'),'1');nodes.get('header-collapse-toggle').click();assert.equal(saved.get('zre-header-collapsed-v1'),'0');
+const config=JSON.parse(saved.get('zre-screen-layouts-v2'));assert.equal(config.screens[id].items[0].id,'kpi:fuel.current');
 console.log('KPI behavioral editor, valid zero, custom/base placement, restoration, reset and persisted IDs: OK');

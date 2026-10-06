@@ -28,3 +28,5 @@ session_logs/
 session_replay.jsonl
 data/
 reports/
+
+.zre-build.json

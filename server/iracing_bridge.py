@@ -1441,7 +1441,9 @@ async def close_session_journal(app):
     source.finalize_setup_stint_before_reset("shutdown")
     await asyncio.to_thread(source.recorder.close)
 
-async def version_status(request):return web.json_response({"installedVersion":installed_version(),"runtimeVersion":APP_VERSION})
+async def version_status(request):
+    from zre_build import identity
+    return web.json_response(identity(ROOT,APP_VERSION),headers={"Cache-Control":"no-store"})
 async def index(request):return web.FileResponse(WEB_ROOT/"index.html")
 async def websocket(request):
     ws=web.WebSocketResponse(heartbeat=20);await ws.prepare(request);source=request.app["source"]
