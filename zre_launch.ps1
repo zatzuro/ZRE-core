@@ -19,7 +19,7 @@ if (-not (Test-Path $python)) {
 & $python (Join-Path $Root 'updater.py')
 & $python -m pip install --disable-pip-version-check -q -r (Join-Path $Root 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las dependencias.' }
-$arguments=@('-u','"'+(Join-Path $Root 'zre_runtime.py')+'"')
+$arguments=@('-u', ('"'+(Join-Path $Root 'zre_runtime.py')+'"'))
 if ($Demo) { $arguments+='--demo' }
 $bridge=Start-Process -FilePath $python -ArgumentList $arguments -WorkingDirectory $Root -NoNewWindow -PassThru
 try {

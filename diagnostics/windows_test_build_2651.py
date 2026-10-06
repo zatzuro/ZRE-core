@@ -5,7 +5,7 @@ from pathlib import Path
 assert sys.platform=='win32','This acceptance test requires Windows'
 REPO=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(REPO))
-ROOT=Path(tempfile.mkdtemp(prefix='ZRE existing installation '))
+ROOT=Path(tempfile.mkdtemp(prefix='ZRE existing installation ')).resolve()
 EXPECTED=os.environ['GITHUB_SHA']
 
 def http(path='/version'):
