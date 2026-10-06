@@ -48,6 +48,21 @@ def start_and_check(mode,version,wait=False):
             assert '?v='+version in url,url
             served=http(url).encode();local=(ROOT/url.split('?')[0].replace('/static/','web/')).read_bytes()
             assert served==local,url
+        # Browser executes the installed HTML/JS and the existing WebSocket.
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as playwright:
+            browser=playwright.chromium.launch()
+            page=browser.new_page()
+            errors=[]
+            page.on('pageerror',lambda error: errors.append(str(error)))
+            page.goto('http://127.0.0.1:8765/?instance='+status['instanceId'])
+            assert page.locator('meta[name="zre-build"]').get_attribute('content')==version
+            if mode=='TEST':
+                expected_label='TEST BUILD · v'+version+' · '+EXPECTED[:8]
+                page.wait_for_function("expected => document.getElementById('runtime-build-status')?.textContent === expected",arg=expected_label,timeout=20000)
+                print('BROWSER RUNTIME VERIFIED:',page.locator('#runtime-build-status').inner_text(),flush=True)
+            assert not errors,errors
+            browser.close()
         # A second invocation must refuse occupied port, without altering running PID.
         conflict=subprocess.run(['cmd','/c',str(ROOT/'start_dashboard.bat'),'-NoBrowser'],cwd=ROOT,capture_output=True,text=True,timeout=30)
         assert conflict.returncode!=0 and '8765' in conflict.stdout+conflict.stderr,conflict
@@ -55,7 +70,7 @@ def start_and_check(mode,version,wait=False):
         # Installer must also stop before touching anything, even with another process.
         blocker=subprocess.run(['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(REPO/'install_test_build.ps1'),'-NoLaunch'],capture_output=True,text=True,timeout=30)
         assert blocker.returncode!=0 and str(status['pid']) in blocker.stdout+blocker.stderr
-        remembered=ps("(Get-ItemProperty HKCU:\Software\ZRE).InstallationRoot")
+        remembered=ps(r"(Get-ItemProperty HKCU:\Software\ZRE).InstallationRoot")
         assert Path(remembered)==ROOT,remembered
         if wait:
             # >120s so the real background updater gets a second chance to execute.
