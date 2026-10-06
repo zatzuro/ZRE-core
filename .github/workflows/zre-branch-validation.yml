@@ -7,6 +7,7 @@ on:
       - 'develop/2.6.3'
       - 'develop/2.6.4'
       - 'develop/2.6.5'
+      - 'develop/2.6.5.1'
       - 'release-2.6.5'
       - 'release-2.6.4'
       - 'release-2.6.3'
@@ -45,6 +46,7 @@ jobs:
           node tests/frontend_release_263.cjs
           node tests/frontend_release_264.cjs
           node tests/frontend_screen_admin_265.cjs
+          node tests/frontend_screen_admin_2651.cjs
           node tests/frontend_kpi_library_265.cjs
           node tests/frontend_kpi_workflows_265.cjs
 
