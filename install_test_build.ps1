@@ -30,4 +30,16 @@ try {
     if (-not $RestoreStable -and $meta.version -ne '2.6.5.1') { throw 'La instalación no reporta 2.6.5.1.' }
     Write-Host ('ZRE Core v' + $meta.version + ' instalada en ' + $Root)
     Start-Process -FilePath (Join-Path $Root 'start_dashboard.bat') -WorkingDirectory $Root
+    $runtime = $null
+    for ($attempt = 0; $attempt -lt 60; $attempt++) {
+        try {
+            $runtime = Invoke-RestMethod 'http://localhost:8765/version' -TimeoutSec 2
+            break
+        } catch { Start-Sleep -Seconds 1 }
+    }
+    if (-not $runtime) { throw 'Los archivos están instalados, pero el puente no arrancó. Revisa la ventana de ZRE.' }
+    if ($runtime.installedVersion -ne $meta.version -or $runtime.runtimeVersion -ne $meta.version) {
+        throw ('El proceso local no coincide con la instalación. Runtime: ' + $runtime.runtimeVersion + '; esperado: ' + $meta.version)
+    }
+    Write-Host ('Runtime local verificado: ZRE Core v' + $runtime.runtimeVersion + '. Abre Administración.')
 } finally { Remove-Item -LiteralPath $tempUpdater -ErrorAction SilentlyContinue }
