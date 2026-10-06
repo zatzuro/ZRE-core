@@ -9,6 +9,7 @@ on:
       - 'develop/2.6.5'
       - 'develop/2.6.5.1'
       - 'release-2.6.5'
+      - 'release-2.6.5.1'
       - 'release-2.6.4'
       - 'release-2.6.3'
   pull_request:
@@ -142,3 +143,24 @@ jobs:
             exit 0
           fi
           gh release create v2.6.5 --target "$GITHUB_SHA" --title "ZRE Core 2.6.5" --notes-file diagnostics/QA-2.6.5.md --latest
+
+
+  release-2651:
+    if: github.ref == 'refs/heads/release-2.6.5.1'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish validated ZRE Core 2.6.5.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c 'import json; m=json.load(open("version.json")); assert m["version"]=="2.6.5.1" and m["archive_ref"]=="release-2.6.5.1" and m["channel"]=="stable"'
+          if gh release view v2.6.5.1 >/dev/null 2>&1; then
+            tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v2.6.5.1" --jq '.object.sha')
+            test "$tag_sha" = "$GITHUB_SHA"
+            exit 0
+          fi
+          gh release create v2.6.5.1 --target "$GITHUB_SHA" --title "ZRE Core 2.6.5.1" --notes "Visual screen builder, test/stable updater hardening, Windows runtime validation, and 2.6.5 compatibility fixes." --latest
