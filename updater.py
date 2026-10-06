@@ -25,7 +25,7 @@ BRANCH = "main"
 REMOTE_VERSION_URL = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json"
 CHECK_INTERVAL_SECONDS = 120
 PROTECTED_TOP_LEVEL = {".venv", ".git", ".zre-backup", "data", "session_logs", "reports"}
-PROTECTED_NAMES = {"dashboard.log", "session_replay.jsonl"}
+PROTECTED_NAMES = {"dashboard.log", "session_replay.jsonl", ".zre-build.json"}
 
 def _version_tuple(value: str) -> tuple[int, ...]:
     try:
@@ -64,7 +64,7 @@ def _download(url: str, target: Path, timeout: float = 30.0) -> None:
 def _archive_url(ref: str) -> str:
     return f"https://codeload.github.com/{REPO}/zip/refs/heads/{ref}"
 
-def _copy_program_tree(source: Path) -> None:
+def _copy_program_tree(source: Path, *, build_state=None) -> None:
     # Remove the retired uploader after applying 2.6.4; never remove session logs.
     if not (source / "server" / "session_uploader.py").exists():
         for retired in (ROOT / "server" / "session_uploader.py", ROOT / "upload_queue.jsonl"):
@@ -86,6 +86,10 @@ def _copy_program_tree(source: Path) -> None:
             files.append((src,ROOT/rel))
     files.sort(key=lambda pair:(pair[0].name=="version.json",str(pair[0])))
     with tempfile.TemporaryDirectory(prefix="zre-rollback-") as backup_dir:
+        if build_state is not None:
+            state_file=Path(backup_dir)/"state.json"
+            state_file.write_text(json.dumps(build_state,indent=2),encoding="utf-8")
+            files.append((state_file,ROOT/".zre-build.json"))
         backups=[]
         for index,(_,dst) in enumerate(files):
             saved=Path(backup_dir)/str(index) if dst.is_file() else None
@@ -107,6 +111,18 @@ def _copy_program_tree(source: Path) -> None:
 def update_if_available(*, background: bool = False, test_ref: str | None = None,
                         restore_stable: bool = False) -> bool:
     local = _read_local_version()
+    # TEST is a locally pinned installation, never an automatic branch follower.
+    state_path=ROOT/".zre-build.json"
+    if not test_ref and not restore_stable and state_path.exists():
+        try:
+            state=json.loads(state_path.read_text(encoding="utf-8"))
+            if state.get("mode")=="TEST":
+                print(f"TEST BUILD ACTIVE: v{local}; commit {state.get('sourceCommit')}; actualizador estable suspendido.")
+                return False
+            if state.get("mode")!="STABLE":raise ValueError("modo inválido")
+        except Exception as exc:
+            print(f"Estado de build inválido; no actualizo: {exc}")
+            return False
     try:
         if test_ref:
             if not re.fullmatch(r"develop/[A-Za-z0-9._/-]+",test_ref) or ".." in test_ref:
@@ -120,6 +136,11 @@ def update_if_available(*, background: bool = False, test_ref: str | None = None
                 raise ValueError("El manifiesto no corresponde a la rama de prueba")
         else:
             remote_meta = _fetch_json(REMOTE_VERSION_URL)
+            if restore_stable:
+                commit=_fetch_json(f"https://api.github.com/repos/{REPO}/commits/main",20)
+                commit_sha=commit['sha']
+                if not re.fullmatch(r"[0-9a-f]{40}",commit_sha):raise ValueError("SHA estable inválido")
+                remote_meta=_fetch_json(f"https://raw.githubusercontent.com/{REPO}/{commit_sha}/version.json",20)
         remote = str(remote_meta.get("version", "0.0.0"))
         archive_ref = str(remote_meta.get("archive_ref") or BRANCH)
     except Exception as exc:
@@ -136,7 +157,7 @@ def update_if_available(*, background: bool = False, test_ref: str | None = None
         with tempfile.TemporaryDirectory(prefix="zre_update_") as temp_dir:
             temp = Path(temp_dir)
             archive = temp / "zre.zip"
-            url=f"https://codeload.github.com/{REPO}/zip/{commit_sha}" if test_ref else _archive_url(archive_ref)
+            url=f"https://codeload.github.com/{REPO}/zip/{commit_sha}" if test_ref or restore_stable else _archive_url(archive_ref)
             _download(url, archive,60 if test_ref else 30)
             if archive.stat().st_size < 5_000:
                 raise RuntimeError("descarga incompleta")
@@ -157,7 +178,21 @@ def update_if_available(*, background: bool = False, test_ref: str | None = None
                 raise RuntimeError(f"el paquete trae v{package_meta.get('version')} y esperaba v{remote}")
             if test_ref and (package_meta.get("channel")!="development" or package_meta.get("archive_ref")!=test_ref):
                 raise RuntimeError("canal de prueba incoherente")
-            _copy_program_tree(roots[0])
+            if test_ref or restore_stable:
+                # Retain only the installation controller when restoring old stable
+                # code. Telemetry, HTML and all assets come unchanged from main.
+                if restore_stable:
+                    for name in ("start_dashboard.bat","zre_launch.ps1","zre_runtime.py","zre_build.py","install_test_build.ps1","restore_stable.bat"):
+                        if (ROOT/name).is_file():shutil.copy2(ROOT/name,roots[0]/name)
+                    shutil.copy2(Path(__file__),roots[0]/"updater.py")
+                hashes={str(p.relative_to(roots[0])).replace("\\","/"):__import__('hashlib').sha256(p.read_bytes()).hexdigest()
+                    for folder in ('web','server') for p in sorted((roots[0]/folder).rglob('*'))
+                    if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.log')}
+                build_state={"mode":"TEST" if test_ref else "STABLE","version":remote,
+                    "channel":"development" if test_ref else "stable","sourceRef":test_ref or "main",
+                    "sourceCommit":commit_sha,"root":str(ROOT.resolve()),"assetHashes":hashes}
+                _copy_program_tree(roots[0],build_state=build_state)
+            else:_copy_program_tree(roots[0])
 
         installed = _read_local_version()
         if installed != remote:

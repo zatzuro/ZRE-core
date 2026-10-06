@@ -19,7 +19,7 @@ class TestBuildUpdater(unittest.TestCase):
         with patch.object(updater,'_fetch_json',return_value={'version':'2.6.6'}),patch.object(updater,'_download',side_effect=RuntimeError('expected download')) as download:
             updater.update_if_available();download.assert_called_once()
     def test_restore_stable_explicitly_allows_lower_version(self):
-        with patch.object(updater,'_fetch_json',return_value={'version':'2.6.5'}),patch.object(updater,'_download',side_effect=RuntimeError('expected download')) as download:
+        with patch.object(updater,'_fetch_json',side_effect=[{'version':'2.6.5'},{'sha':'b'*40},{'version':'2.6.5'}]),patch.object(updater,'_download',side_effect=RuntimeError('expected download')) as download:
             updater.update_if_available(restore_stable=True);download.assert_called_once()
     def test_invalid_test_ref_does_not_download(self):
         with patch.object(updater,'_fetch_json') as fetch:
@@ -50,5 +50,33 @@ class TestBuildUpdater(unittest.TestCase):
         with patch.object(updater.shutil,'copy2',side_effect=copy):
             with self.assertRaises(OSError):updater._copy_program_tree(package)
         self.assertEqual((self.root/'a.py').read_text(),'old');self.assertEqual(updater._read_local_version(),'2.6.5.1')
+
+    def test_persistent_test_never_contacts_main_even_when_future_stable_is_newer(self):
+        (self.root/'.zre-build.json').write_text(json.dumps({'mode':'TEST','sourceCommit':'a'*40}))
+        with patch.object(updater,'_fetch_json') as fetch:
+            self.assertFalse(updater.update_if_available())
+            self.assertFalse(updater.update_if_available(background=True))
+            fetch.assert_not_called()
+    def test_corrupt_state_fails_closed(self):
+        (self.root/'.zre-build.json').write_text('{broken')
+        with patch.object(updater,'_fetch_json') as fetch:
+            self.assertFalse(updater.update_if_available());fetch.assert_not_called()
+    def test_state_is_protected_from_package_files(self):
+        package=self.root/'package';package.mkdir();(package/'.zre-build.json').write_text('{"mode":"STABLE"}')
+        (self.root/'.zre-build.json').write_text('{"mode":"TEST"}')
+        updater._copy_program_tree(package)
+        self.assertEqual(json.loads((self.root/'.zre-build.json').read_text())['mode'],'TEST')
+    def test_build_state_committed_with_program_and_rolled_back_on_failure(self):
+        package=self.root/'package';package.mkdir();(package/'version.json').write_text('{"version":"2.6.6"}')
+        old={'mode':'TEST','version':'2.6.5.1'}
+        (self.root/'.zre-build.json').write_text(json.dumps(old))
+        original=updater.shutil.copy2
+        def copy(src,dst,*args,**kwargs):
+            if Path(src).name=='state.json':raise OSError('state write failed')
+            return original(src,dst,*args,**kwargs)
+        with patch.object(updater.shutil,'copy2',side_effect=copy):
+            with self.assertRaises(OSError):updater._copy_program_tree(package,build_state={'mode':'STABLE'})
+        self.assertEqual(updater._read_local_version(),'2.6.5.1')
+        self.assertEqual(json.loads((self.root/'.zre-build.json').read_text()),old)
 
 if __name__=='__main__':unittest.main()
