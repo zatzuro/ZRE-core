@@ -361,7 +361,7 @@ function registerExternalComponents(defs){
   const normalized={id:String(def.id),name:String(def.name||def.id),group:String(def.group||'KPI'),view:def.view||null,selector:String(def.selector),dynamic:true,sourceLabel:def.sourceLabel||'KPI',editorOptions:Array.isArray(def.editorOptions)?def.editorOptions:[]};
   COMPONENTS.push(normalized);componentById.set(normalized.id,normalized);
  }
- if(state){state=loadState()}if(draft)renderCatalog();
+ if(draft)renderCatalog();
 }
 function init(options={}){
  if(state)return;state=loadState();navigate=typeof options.onNavigate==='function'?options.onNavigate:null;bind();updateAdminSelect();refreshNavigation();
