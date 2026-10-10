@@ -154,7 +154,9 @@
    set('rv2-rival-pace',time(selected.rivalPace));
    const role=Object.entries(race.roles||{}).find(([k,idx])=>idx===effective?.carIdx&&['AHEAD','BEHIND'].includes(k));
    const neighbor=role&&race.physical?(role[0]==='AHEAD'?race.physical.ahead:race.physical.behind):null;
-   set('rv2-rival-gap',neighbor?.gapLabel||'SIN GAP FÍSICO');
+   const evidence=obs.presence==='LIVE'?(obs.gapEvidence||{}):{};
+   const observedGap=good(evidence.seconds)?'≈ '+Math.abs(evidence.seconds).toFixed(2)+' s · EST.':'SIN GAP FÍSICO';
+   set('rv2-rival-gap',neighbor?.gapLabel||observedGap);
    const age=obs.lastSeenAgo;
    set('rv2-rival-age',obs.presence==='STALE'?'ÚLTIMA OBS. HACE '+(good(age)?Math.round(age)+' s':'TIEMPO DESCONOCIDO'):
         obs.presence==='LIVE'?'OBSERVADO · SDK':selected.selectionState==='TEMPORARILY_UNAVAILABLE'?'MANUAL CONSERVADO · SIN DATOS':'SIN POSICIÓN OBSERVABLE');
