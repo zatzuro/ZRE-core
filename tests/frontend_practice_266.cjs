@@ -15,7 +15,7 @@ assert.ok(!html.includes('<script src="/static/screen_admin.js'),'archived build
 assert.ok(!html.includes('data-zre-view="admin"'),'builder must not appear in navigation');
 assert.ok(builder.includes("STORAGE_KEY"),'archived source must remain available for restoration');
 assert.ok(!app.includes('localStorage.clear()'),'legacy layouts must not be deleted');
-assert.ok(js.includes("const columns=count>=19?4:count>=11?3:count>=5?2:1"),'8/14/20 zones density must vary');
+assert.ok(js.includes("columns=count>=19?4:count>=11?3:count>=5?2:1"),'8/14/20 zones density must vary');
 assert.ok(js.includes("selectCorner(curve.id,true)"),'map and Coach selection contract missing');
 assert.ok(js.includes("renderPace(analytics.laps)"),'valid-lap series not connected');
 assert.ok(app.includes("window.ZREPractice?.render(data)"),'practice renderer must receive live payload');
