@@ -54,3 +54,9 @@ body.practice-session .live-view>.live-telemetry,body.practice-session .live-vie
 .pr-corner-dialog::backdrop{background:#090f19bb}.pr-corner-dialog button{float:right;background:#38536a;border:1px solid #7690a4;color:white;padding:6px 12px;cursor:pointer}.pr-corner-dialog h2{font-size:24px}.pr-corner-dialog b{display:block;margin:10px 0}.pr-corner-dialog p{font-size:15px;line-height:1.5}.pr-corner-dialog small{color:var(--pr-muted)}
 @media(max-height:810px){.practice-workspace{grid-template-rows:minmax(62px,.8fr) minmax(0,4.3fr) minmax(111px,1.52fr)}.practice-stat-row>div{padding:4px 7px}.pr-corners{gap:3px;padding:4px}.pr-corner{gap:2px;padding:3px 5px}.pr-corner em{font-size:9px}.practice-map-panel header,.practice-coach-panel header,.pr-fuel-panel header,.pr-pace-panel header{height:25px}.dashboard-footer{font-size:9px}}
 @media(max-width:1150px){body.practice-session .dashboard{height:100dvh;display:grid}body.practice-session .live-view{display:grid}.practice-focus-row{grid-template-columns:35fr 65fr}.practice-stat-row small{font-size:9px}.practice-stat-row strong{font-size:18px}.practice-map-panel footer{font-size:9px}}
+
+/* Confirmed loss bands; no green gains unless Coach can substantiate them. */
+.pr-corner[data-loss="significant"]{border-left-color:#ff776c;background:#3d4254}
+.pr-corner[data-loss="observed"]{border-left-color:#f6b66e}
+.pr-map-zone[data-loss="significant"] circle{fill:#f4786f;stroke:#ffdfd7}
+.pr-map-zone[data-loss="observed"] circle{fill:#f4b874;stroke:#fff0dc}
