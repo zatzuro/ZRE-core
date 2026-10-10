@@ -17,7 +17,7 @@
     text('pr-detail-zone',curve.zone||curve.id);
     text('pr-detail-title',curve.title||'Sin diagnóstico validado');
     text('pr-detail-advice',curve.advice||'No hay evidencia suficiente para una recomendación específica.');
-    text('pr-detail-confidence',curve.confidence?'Confianza: '+curve.confidence:'DATOS INSUFICIENTES · todavía no hay diagnóstico validado');
+    text('pr-detail-confidence',curve.confidence?'Confianza: '+curve.confidence+(valid(curve.lossSeconds)?' · Pérdida media observada +'+curve.lossSeconds.toFixed(2)+' s':''):'DATOS INSUFICIENTES · todavía no hay diagnóstico validado');
     const dialog=el('pr-corner-dialog');
     if(dialog&&!dialog.open)dialog.showModal();
   }
@@ -41,9 +41,10 @@
     host.replaceChildren(...curves.map((curve,i)=>{
       const b=document.createElement('button');b.type='button';b.className='pr-corner';b.dataset.corner=curve.id||String(i);
       b.dataset.diagnosis=String(curve.state==='diagnosis');
+      b.dataset.loss=valid(curve.lossSeconds)?(curve.lossSeconds>=.25?'significant':'observed'):'unknown';
       const top=document.createElement('span');top.className='pr-corner-top';
       const zone=document.createElement('strong');zone.textContent=curve.zone||'TRAMO '+(i+1);
-      const confidence=document.createElement('small');confidence.textContent=curve.confidence||'SIN EVIDENCIA';
+      const confidence=document.createElement('small');confidence.textContent=(curve.confidence||'SIN EVIDENCIA')+(valid(curve.lossSeconds)?' · +'+curve.lossSeconds.toFixed(2)+' s':'');
       top.append(zone,confidence);
       const title=document.createElement('b');title.textContent=curve.title||'Sin diagnóstico validado';
       const advice=document.createElement('em');advice.textContent=curve.state==='diagnosis'?(curve.advice||'Recomendación disponible'):'Datos insuficientes';
@@ -76,6 +77,7 @@
         if(!valid(best.x)||!valid(best.y))return;
         const g=svg('g');g.classList.add('pr-map-zone');g.dataset.corner=curve.id;
         g.dataset.diagnosis=String(curve.state==='diagnosis');
+        g.dataset.loss=valid(curve.lossSeconds)?(curve.lossSeconds>=.25?'significant':'observed'):'unknown';
         g.dataset.selected=String(curve.id===selected);g.setAttribute('tabindex','0');g.setAttribute('role','button');
         g.setAttribute('aria-label','Ver '+curve.zone);
         const circle=svg('circle');circle.setAttribute('cx',best.x);circle.setAttribute('cy',best.y);circle.setAttribute('r','2.3');
