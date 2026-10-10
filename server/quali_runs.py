@@ -29,6 +29,8 @@ class QualiRuns:
         self.lap = None
         self.pct = None
         self.clock = None
+        self.on_track = False
+        self.on_pit = False
         self.generation = 0
         self.last_error = None
 
@@ -51,6 +53,15 @@ class QualiRuns:
     def _close(self, reason):
         if not self.current or self.current["status"] != "ACTIVE":
             return
+        if self.on_track and self.lap is not None and self.lap>self.current["gateLap"]:
+            if not any(a["sourceLap"] == self.lap for a in self.current["attempts"]):
+                incomplete={"attemptId":self.current["runId"]+"-L"+str(self.lap),
+                    "runId":self.current["runId"],"sourceLap":self.lap,
+                    "status":"INCOMPLETE","lapTime":None,"validity":"UNFINISHED",
+                    "sectorTimes":[],"sectorSource":"UNAVAILABLE",
+                    "source":"ZRE_INFERRED","confidence":"LOW"}
+                self.current["attempts"].append(incomplete)
+                self._event("attempt",**incomplete)
         self.current["status"] = "CLOSED"
         self.current["endedAt"] = datetime.now(timezone.utc).isoformat()
         self.current["endLap"] = self.lap
@@ -62,12 +73,14 @@ class QualiRuns:
         self.mode = None
         self.last_error = None
 
-    def observe(self, identity, official_type, lap, pct, clock):
+    def observe(self, identity, official_type, lap, pct, clock, on_track=False, on_pit=False):
         key = str(identity)
         new_kind = self.classify(official_type)
         self.lap = int(float(lap)) if finite(lap) is not None and float(lap) >= 0 else None
         self.pct = finite(pct)
         self.clock = finite(clock)
+        self.on_track = bool(on_track)
+        self.on_pit = bool(on_pit)
         if key != self.identity or new_kind != self.official_type:
             self.close_session("sdk-session-change")
             self.identity = key
@@ -120,7 +133,7 @@ class QualiRuns:
         return False
 
     def note_lap(self, lap, seconds, *, clean=None, sdk_best=False,
-                 sectors=None, sector_source=None, in_pit=False, source="SDK_OBSERVED"):
+                 sectors=None, sector_source=None, in_pit=False, source="SDK_OBSERVED",sdk_invalid=False):
         run = self.current
         lap = int(float(lap)) if finite(lap) is not None else None
         measured = finite(seconds)
@@ -130,7 +143,7 @@ class QualiRuns:
             return None
         # Prioritize direct SDK fastest-lap confirmation. A clean ZRE estimate
         # alone is not proof of official iRacing lap legality.
-        status = "VALID" if sdk_best else "IN LAP" if in_pit else "PENDING VALIDATION"
+        status = "VALID" if sdk_best else "INVALID" if sdk_invalid else "IN LAP" if in_pit else "PENDING VALIDATION"
         evidence = "SDK_BEST_CONFIRMED" if sdk_best else "ZRE_CLEAN_ESTIMATE" if clean is True else "ZRE_DIRTY_OBSERVED" if clean is False else "UNKNOWN"
         sector_times = [float(v) for v in (sectors or []) if finite(v) is not None and v > 0]
         attempt = {"attemptId": run["runId"] + "-L" + str(lap), "runId": run["runId"],
@@ -150,13 +163,21 @@ class QualiRuns:
         previous = [r for r in self.runs if r is not active and
                     r["officialSessionIdentity"] == self.identity]
         attempts = active["attempts"] if active else []
-        return {"officialSessionIdentity": self.identity,
+        live=None
+        if active and self.lap is not None:
+            live={"attemptId":active["runId"]+"-LIVE-"+str(self.lap),
+                "runId":active["runId"],"sourceLap":self.lap,
+                "status":("IN LAP" if self.on_pit else "OUT LAP"
+                          if self.lap<=active["gateLap"] else "FLYING"
+                          if self.on_track else "INCOMPLETE"),
+                "source":"SDK_PROGRESS","confidence":"OBSERVED_PROGRESS_ONLY"}
+        return {"activeAttempt":live,"officialSessionIdentity": self.identity,
                 "officialSessionType": self.official_type,
                 "qualifyingMode": self.mode,
                 "effectiveDashboard": ("quali" if self.mode else self.official_type),
                 "manualOverrideActive": self.mode == "simulated",
                 "activeRunId": active["runId"] if active else None,
-                "activeAttemptId": attempts[-1]["attemptId"] if attempts else None,
+                "activeAttemptId": live["attemptId"] if live else attempts[-1]["attemptId"] if attempts else None,
                 "activeRun": self._public(active) if active else None,
                 "previousRuns": [self._public(r) for r in previous[-12:]],
                 "lastError": self.last_error}
