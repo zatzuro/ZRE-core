@@ -36,8 +36,8 @@ class QualiRunTests(unittest.TestCase):
 
     def test_partial_lap_excluded_then_full_lap_recorded(self):
         self.q.command("simulate")
-        self.assertIsNone(self.q.note_lap(4,90,clean=True,sdk_best=True))
-        self.assertIsNotNone(self.q.note_lap(5,88.5,clean=True,sdk_best=True))
+        self.assertIsNone(self.q.note_lap(3,90,clean=True,sdk_best=True))
+        self.assertIsNotNone(self.q.note_lap(4,88.5,clean=True,sdk_best=True))
         self.assertEqual(len(self.q.current["attempts"]),1)
 
     def test_new_run_keeps_original_and_isolates_best(self):
@@ -136,7 +136,8 @@ class QualiRunTests(unittest.TestCase):
         self.q.observe(ID2,"Qualify",1,.1,12,on_track=True)
         closed=self.q.runs[0]
         self.assertEqual(closed["endLap"],8)
-        self.assertEqual(closed["attempts"],[])
+        self.assertEqual([a["sourceLap"] for a in closed["attempts"]],[8])
+        self.assertEqual(closed["attempts"][0]["status"],"INCOMPLETE")
         self.assertEqual(self.q.current["startLap"],1)
 
     def test_official_session_after_manual_starts_distinct_official_run(self):

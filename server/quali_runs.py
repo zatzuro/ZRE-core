@@ -100,7 +100,7 @@ class QualiRuns:
         run_id = "Q" + uuid4().hex[:12]
         # Mid-lap activation: first complete source lap may have begun earlier.
         # Require NEXT full SDK lap after arming to count.
-        gate = self.lap + 1 if self.lap is not None else 1
+        gate = self.lap if self.lap is not None else 0
         run = {"runId": run_id, "officialSessionIdentity": self.identity,
                "kind": kind, "startedAt": datetime.now(timezone.utc).isoformat(),
                "endedAt": None, "startLap": self.lap, "endLap": None,

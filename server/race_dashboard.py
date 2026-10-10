@@ -33,9 +33,9 @@ def clean_history(raw, clean, *, own=False):
         lap = row.get("lap")
         if elapsed is None or lap is None:
             continue
-        comparable = (bool(row.get("valid")) if own else lap in clean_ids)
+        comparable = ((bool(row.get("valid")) and not row.get("caution") and not row.get("onPitRoad")) if own else lap in clean_ids)
         reason = ("ZRE_CLEAN_LOCAL" if own else "ZRE_COMPARABLE_FILTER") if comparable else (
-            row.get("comparabilityReason") or "NOT_CONFIRMED_COMPARABLE")
+            "CAUTION" if row.get("caution") else row.get("comparabilityReason") or "NOT_CONFIRMED_COMPARABLE")
         samples.append({"lapNumber": lap, "lapTimeSeconds": round(elapsed, 4),
                         "sessionTime": row.get("sessionTime"),
                         "comparable": comparable, "comparabilityReason": reason,

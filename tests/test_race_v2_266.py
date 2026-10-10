@@ -61,6 +61,14 @@ class RaceV2Tests(unittest.TestCase):
                                 "strategy_lpl":3.05,"confidence":"HIGH"}}
         self.director=RaceDirector()
 
+    def test_own_caution_lap_is_visible_but_not_in_pace_mean(self):
+        rows=[{"lap":i,"time":90,"valid":True} for i in range(1,5)]
+        rows.append({"lap":5,"time":150,"valid":True,"caution":True})
+        result=clean_history(rows,rows,own=True)
+        self.assertEqual(result["recentAverageSeconds"],90)
+        self.assertFalse(result["samples"][-1]["comparable"])
+        self.assertEqual(result["samples"][-1]["comparabilityReason"],"CAUTION")
+
     def state(self,*,selected=None,neighbors=None,carrows=None,own=None,plan=None,session="race-100"):
         if selected is not None:self.director.set_selected(selected)
         rows=carrows if carrows is not None else self.carrows

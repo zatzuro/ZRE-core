@@ -31,7 +31,7 @@ function kpis(data){
  const n=delta?.valid===true?delta.value:null;
  put('q-delta',signed(n));put('q-delta-source',n!=null?'SDK · MEJOR PERSONAL':'SIN DELTA SDK VÁLIDO');
  if($('q-delta'))$('q-delta').dataset.trend=n>0?'loss':n<0?'gain':'neutral';
- put('q-best',self.bestLap);put('q-last',self.lastLap);
+ put('q-best',format(q.bestPersonalSDK));put('q-last',self.lastLap);
  put('q-optimal',coach.optimalLap);put('q-potential',coach.potential);
  put('q-position',q.qualifyingMode==='official'&&q.classPosition!=null?'P'+q.classPosition:'NO OFICIAL');
  put('q-time-left',finite(q.timeRemaining)&&q.timeRemaining>=0?Math.floor(q.timeRemaining/60)+':'+String(Math.floor(q.timeRemaining%60)).padStart(2,'0'):'—');
@@ -55,7 +55,7 @@ function map(data){
 function priorities(data){
  const host=$('q-priorities'),list=(data.coach?.curveRecommendations||[]).slice(0,3);if(!host)return;
  const sig=JSON.stringify(list);if(host.dataset.signature===sig)return;host.dataset.signature=sig;
- if(!list.length){const p=document.createElement('p');p.textContent='Sin recomendaciones contrastadas. Completa vueltas comparables.';host.replaceChildren(p);return}
+ if(!list.length){put('q-focus-zone','SIN DIAGNÓSTICO');put('q-focus-advice','Completa vueltas comparables; no hay una causa validada.');const p=document.createElement('p');p.textContent='Sin recomendaciones contrastadas. Completa vueltas comparables.';host.replaceChildren(p);return}
  host.replaceChildren(...list.map(c=>{
   const d=document.createElement('div');d.className='q-priority';
   const b=document.createElement('b');b.textContent=c.zone||'ZONA';
@@ -73,7 +73,7 @@ function sectors(data){
  const rows=$('q-sector-rows');if(!rows)return;
  if(!starts.length){const p=document.createElement('p');p.textContent='No hay límites de sectores compatibles disponibles.';rows.replaceChildren(p);return}
  rows.replaceChildren(...starts.map((start,i)=>{
-   const self=last[i]??(elapsed[i]??null),ref=reference[i]??null;
+   const self=elapsed[i]??(last[i]??null),ref=reference[i]??null;
    const change=finite(self)&&finite(ref)?self-ref:null;
    const div=document.createElement('div');div.className='q-sector-row'+(elapsed.length===i?' current':'');
    const cols=['S'+(i+1),format(self),format(ref),signed(change)];
@@ -90,7 +90,9 @@ function traffic(data){
    put(gapId,present&&finite(frac)?(Math.abs(frac)*100).toFixed(1)+'% VUELTA · ESTIMADO':'SIN POSICIÓN ACTUAL');
  };
  neighbor('nearestAhead','q-ahead','q-gap-ahead');neighbor('nearestBehind','q-behind','q-gap-behind');
- put('q-flag',intel.session?.observed?.flags==null?'NO DISPONIBLE':'SDK '+intel.session.observed.flags);
+ const flags=intel.session?.observed?.flags;
+ const labels=[[0x0010,'ROJA'],[0x010000,'NEGRA'],[0x0001,'CUADROS'],[0x4000|0x8000,'CAUTION'],[0x0008|0x0100,'AMARILLA'],[0x0020,'AZUL'],[0x0002,'BLANCA'],[0x0004,'VERDE']];
+ put('q-flag',flags==null?'NO DISPONIBLE':labels.find(([mask])=>(flags&mask)!==0)?.[1]||(flags===0?'SIN BANDERA':'OTRA · SDK '+flags));
  put('q-track-temp',finite(env.TrackTemp)?Number(env.TrackTemp).toFixed(1)+' °C':'NO DISPONIBLE');
 }
 function car(data){

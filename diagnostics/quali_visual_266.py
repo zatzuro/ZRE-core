@@ -28,7 +28,7 @@ def fixture(n,official=False):
                "sectorSource":"ZRE_RECONSTRUCTED_FROM_SDK_SPLITS"} for i in range(2)]
     q={"qualifyingMode":"official" if official else "simulated","officialSessionType":"Qualify" if official else "Practice",
        "inGarage":False,"inPitRoad":False,"onTrack":True,
-       "sessionTime":120,"timeRemaining":420,"classPosition":4 if official else None,
+       "bestPersonalSDK":89.35,"sessionTime":120,"timeRemaining":420,"classPosition":4 if official else None,
        "deltaReferences":{"LapDeltaToBestLap":{"value":-.145,"valid":True,"source":"SDK:LapDeltaToBestLap"}},
        "sectorBoundaries":[0,.32,.66],"sectorTimes":[29.4],"lastSectors":[29.5,30,30],
        "fuelValue":42.5,"fuelPerLap":3.2,"autonomyLaps":13.3,
@@ -99,6 +99,16 @@ def main():
                         assert page.locator(".q-garage-curve").count()==n,(width,height,n)
                         assert "Δ" in page.locator("#q-comparison").inner_text()
                         if n==20:page.screenshot(path=str(OUT/f"quali-garage-{width}x{height}.png"),full_page=True)
+                    # Product regression: live sectors and advice must not keep old values.
+                    changed=fixture(8)
+                    changed["coach"]["curveRecommendations"]=[]
+                    page.evaluate("data=>window.ZREQuali.render(data,{garage:false})",changed)
+                    assert page.locator("#q-focus-zone").inner_text()=="SIN DIAGNÓSTICO"
+                    assert "0:29.400" in page.locator("#q-sector-rows").inner_text()
+                    assert page.locator("#q-best").inner_text()=="1:29.350"
+                    changed["sessionIntelligence"]["session"]["observed"]["flags"]=8
+                    page.evaluate("data=>window.ZREQuali.render(data)",changed)
+                    assert page.locator("#q-flag").inner_text()=="AMARILLA"
                     official=fixture(8,True)
                     page.evaluate("data=>window.ZREQuali.render(data,{garage:false})",official)
                     assert page.locator("#q-position").inner_text()=="P4"

@@ -123,3 +123,15 @@ body.race-v2-session[data-race-emphasis="endurance"] .rv2-bottom{grid-template-c
 @media(max-width:1150px){.rv2-plan-details{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .rv2-empty{padding:16px 10px;font-size:12px;color:#bdd4e4;text-align:center}
+
+/* Keep plot labels at native pixel size and prevent footer/grid overlap. */
+@media(min-width:1151px) and (max-height:810px){.race-v2-view{grid-template-rows:64px minmax(0,1fr) 220px}}
+.rv2-fuel-context{flex:0 0 auto}
+.rv2-fuel-grid>div{gap:4px;padding:6px}
+.rv2-fuel-grid small{font-size:10px}
+@media(max-height:740px){
+ .rv2-plan-panel,.rv2-rival-panel{overflow-y:auto;scrollbar-width:thin}
+ .rv2-plan-panel>* ,.rv2-rival-panel>*{flex-shrink:0}
+ .rv2-plan-emphasis{flex:1 0 74px}
+ .rv2-rival-grid{flex:1 0 154px}
+}

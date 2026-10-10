@@ -190,12 +190,11 @@
    const g=el('rv2-pace-series'),grid=el('rv2-pace-grid');if(!g||!grid)return;
    const comparable=series.flatMap(s=>(s.samples||[]).filter(x=>x.comparable&&good(x.lapTimeSeconds)).map(x=>x.lapTimeSeconds));
    if(!comparable.length){g.replaceChildren();grid.replaceChildren();return;}
-   const ordered=[...comparable].sort((a,b)=>a-b),median=ordered[Math.floor(ordered.length/2)];
-   const rangeLimit=Math.max(2,median*.06);
-   let lo=Math.min(...comparable.filter(x=>x>=median-rangeLimit)),hi=Math.max(...comparable.filter(x=>x<=median+rangeLimit));
-   if(!good(lo)||!good(hi)){lo=median-1;hi=median+1}
+   let lo=Math.min(...comparable),hi=Math.max(...comparable);
    const padding=Math.max(.65,(hi-lo)*.22);lo-=padding;hi+=padding;
-   const plot={left:60,right:882,top:16,bottom:180};
+   const chart=el('rv2-pace-chart'),width=Math.max(360,chart?.clientWidth||900),height=Math.max(90,chart?.clientHeight||220);
+   chart?.setAttribute('viewBox',`0 0 ${width} ${height}`);
+   const plot={left:65,right:width-50,top:12,bottom:height-25};
    const coordY=value=>plot.bottom-(value-lo)/(hi-lo)*(plot.bottom-plot.top);
    const x=slot=>plot.left+(plot.right-plot.left)*slot/7;
    const axes=[];
@@ -207,7 +206,7 @@
    }
    for(let i=0;i<8;i++){
       const t=svg('text');t.classList.add('rv2-chart-label');
-      t.setAttribute('x',x(i));t.setAttribute('y',205);t.setAttribute('text-anchor','middle');
+      t.setAttribute('x',x(i));t.setAttribute('y',height-6);t.setAttribute('text-anchor','middle');
       t.textContent=i===7?'ÚLTIMA OBS.':String(i-7);axes.push(t);
    }
    grid.replaceChildren(...axes);
@@ -260,6 +259,7 @@
  }
  function init(sendSetting){
     command=sendSetting;
+    if(window.ResizeObserver&&el('rv2-pace-chart'))new ResizeObserver(()=>{cache.delete('chart');if(latest)pace(latest)}).observe(el('rv2-pace-chart'));
     document.body.dataset.raceEmphasis=emphasis;
     if(el('rv2-emphasis-select')){
       el('rv2-emphasis-select').value=emphasis;

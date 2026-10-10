@@ -10,6 +10,7 @@ on:
       - 'develop/2.6.5.1'
       - 'release-2.6.5'
       - 'release-2.6.5.1'
+      - 'release-2.6.6'
       - 'release-2.6.4'
       - 'release-2.6.3'
   pull_request:
@@ -55,11 +56,11 @@ jobs:
           node tests/frontend_race_v2_266.cjs
 
       - name: Server and WebSocket demo smoke
-        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || github.head_ref == 'develop/2.6.6-practice'
+        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || startsWith(github.head_ref, 'develop/2.6.6') || github.ref == 'refs/heads/release-2.6.6'
         run: python diagnostics/smoke_264.py
 
   practice-visual:
-    if: github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2')
+    if: github.ref == 'refs/heads/release-2.6.6' || github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2')
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -75,8 +76,8 @@ jobs:
       - name: Browser layout QA at 1366, 1920 and 2560
         run: |
           python diagnostics/practice_visual_266.py
-          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-quali" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ]; then python diagnostics/quali_visual_266.py; fi
-          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ]; then python diagnostics/race_v2_visual_266.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-quali" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6" ]; then python diagnostics/quali_visual_266.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6" ]; then python diagnostics/race_v2_visual_266.py; python diagnostics/senior_266_browser.py; fi
       - name: Archive actual Chromium screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -96,7 +97,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: race-v2-266-chromium-screenshots
-          path: diagnostics/race-v2-screenshots/
+          path: |
+            diagnostics/race-v2-screenshots/
+            diagnostics/senior-266-screenshots/
           if-no-files-found: warn
 
   windows-test-install:
@@ -208,3 +211,23 @@ jobs:
             exit 0
           fi
           gh release create v2.6.5.1 --target "$GITHUB_SHA" --title "ZRE Core 2.6.5.1" --notes "Visual screen builder, test/stable updater hardening, Windows runtime validation, and 2.6.5 compatibility fixes." --latest
+
+  release-266:
+    if: github.ref == 'refs/heads/release-2.6.6'
+    needs: [validate, practice-visual]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish validated ZRE Core 2.6.6
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c 'import json; m=json.load(open("version.json")); assert m["version"]=="2.6.6" and m["archive_ref"]=="release-2.6.6" and m["channel"]=="stable"'
+          if gh release view v2.6.6 >/dev/null 2>&1; then
+            tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v2.6.6" --jq '.object.sha')
+            test "$tag_sha" = "$GITHUB_SHA"
+            exit 0
+          fi
+          gh release create v2.6.6 --target "$GITHUB_SHA" --title "ZRE Core 2.6.6" --notes-file diagnostics/QA-2.6.6.md --latest

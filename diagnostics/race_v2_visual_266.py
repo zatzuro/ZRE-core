@@ -143,6 +143,8 @@ def main():
                         }""",current)
                         page.wait_for_timeout(100)
                         m=measure(page)
+                        assert page.locator("#rv2-pace-chart").evaluate("n=>Math.abs(n.viewBox.baseVal.width-n.clientWidth)<2")
+                        assert page.locator(".rv2-fuel-context").evaluate("n=>n.getBoundingClientRect().top>=document.getElementById('rv2-fuel-deviation').getBoundingClientRect().bottom")
                         assert not m["bodyScroll"],(w,h,n,"body scroll",m)
                         assert not m["horizontalScroll"],(w,h,n,"horizontal scroll",m)
                         assert m["root"]["bottom"]<=h+2,(w,h,n,"root overflow",m)
