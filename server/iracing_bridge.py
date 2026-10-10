@@ -38,6 +38,7 @@ try:
     from server.spotter_control import SpotterControl
     from server.stop_plan import build_stop_plan, race_plan
     from server.setup_engineer import SetupEngineer
+    from server.setup_ownership import resolve_setup_owner
     from server.setup_snapshot import snapshot_from_sdk
     from server.stint_engineering_snapshot import capture_conditions, capture_tires
     from server.kpi_library import build_kpi_library
@@ -55,6 +56,7 @@ except ModuleNotFoundError:
     from spotter_control import SpotterControl
     from stop_plan import build_stop_plan, race_plan
     from setup_engineer import SetupEngineer
+    from setup_ownership import resolve_setup_owner
     from setup_snapshot import snapshot_from_sdk
     from stint_engineering_snapshot import capture_conditions, capture_tires
     from kpi_library import build_kpi_library
@@ -447,6 +449,7 @@ class DashboardSource:
                                            self.local_user_id,self.local_driver_name,self.team_id,self.manual_team_car_number,self.team_car_number,
                                            local_car_active=local_active)
             self.local_user_id=context.local_user_id;self.local_driver_name=context.local_driver_name
+            self.setup_engineer.set_owner(resolve_setup_owner(context,driver_info,player_idx).payload())
             if context.team_id is not None:self.team_id=context.team_id
             if context.car_idx is not None:
                 if self.team_car_idx is not None and self.team_car_idx!=context.car_idx and self.team_car_number!=context.car_number:
@@ -658,7 +661,33 @@ class DashboardSource:
             payload["coach"] = coach
             payload["sessionIntelligence"]=session_intelligence(self.get,weekend,session,{i:({**c,'UserName':None,'identityAmbiguous':True} if i in roster_conflicts else c) for i,c in cars.items()},results,pilot_idx,player_class_id,lap_pct,track_surface,self.competitor_presence_history,self.sdk_units())
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
-            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
+            valid_practice=[row for row in self.lap_history
+                            if row.get("valid") and isinstance(row.get("time"),(int,float)) and row["time"]>0]
+            valid_fuel_laps=[row["fuelUse"] for row in valid_practice
+                             if isinstance(row.get("fuelUse"),(int,float)) and 0<row["fuelUse"]<30]
+            mean_pace=sum(row["time"] for row in valid_practice)/len(valid_practice) if valid_practice else None
+            pace_dev=(math.sqrt(sum((row["time"]-mean_pace)**2 for row in valid_practice)/len(valid_practice))
+                      if len(valid_practice)>1 else None)
+            mean_fuel=sum(valid_fuel_laps)/len(valid_fuel_laps) if valid_fuel_laps else None
+            previous_clean=valid_practice[-1] if valid_practice else None
+            payload["practiceAnalytics"]={
+                "validLaps":len(valid_practice),
+                "averageLap":self.lap_text(mean_pace) if mean_pace is not None else None,
+                "consistencySeconds":round(pace_dev,3) if pace_dev is not None else None,
+                "lastValidLap":self.lap_text(previous_clean["time"]) if previous_clean else None,
+                "lastDelta":self.delta_text(previous_clean["time"],best_lap)
+                    if previous_clean and best_lap is not None else None,
+                "deltaReference":"MEJOR REAL",
+                "fuelLast":valid_fuel_laps[-1] if valid_fuel_laps else None,
+                "fuelAverage":mean_fuel,
+                "fuelMin":min(valid_fuel_laps) if valid_fuel_laps else None,
+                "fuelMax":max(valid_fuel_laps) if valid_fuel_laps else None,
+                "fuelLapsEstimated":round(fuel/mean_fuel,1)
+                    if fuel is not None and mean_fuel is not None and mean_fuel>0 else None,
+                "laps":[{"lap":row.get("lap"),"seconds":round(row["time"],3),
+                         "fuelUse":row.get("fuelUse")} for row in valid_practice],
+            }
+            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"owner":dict(self.setup_engineer.owner),"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
             payload["racePlanVNext"]=self.race_plan_vnext_payload(
                 context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
