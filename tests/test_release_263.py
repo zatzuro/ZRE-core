@@ -205,6 +205,7 @@ class Release263Tests(unittest.TestCase):
     def test_html_identity_and_frozen_setup_between_stints(self):
         with tempfile.TemporaryDirectory() as folder:
             e=SetupEngineer(folder);ctx={'car':'McLaren','track':'Zandvoort','layout':'GP'}
+            e.set_owner({"authorized":True,"scope":"own","car_idx":8,"team_id":"99","driver_user_id":"10","reason":"SDK test verified"})
             a=snapshot_from_html('<table><tr><td>Wing</td><td>8</td></tr></table>','Zandvoort:Race?.html')
             e.start_stint(ctx,a)
             a['parameters']['General']['Wing']='7';a['metadata']['filename']='New.html'

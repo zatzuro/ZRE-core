@@ -23,10 +23,12 @@ def _gap(row):
 
 def select_rival(rows,player_idx,selected_idx=None):
     candidates=[row for row in rows if row.get("idx")!=player_idx and not row.get("isPlayer")]
-    if not candidates:return RivalSelection(None,"auto")
+    if not candidates:return RivalSelection(None,"manual" if selected_idx is not None else "auto")
     if selected_idx is not None:
         manual=next((row for row in candidates if row.get("idx")==selected_idx),None)
         if manual is not None:return RivalSelection(int(selected_idx),"manual")
+        # Preserve manual intent when the selected car is temporarily unavailable.
+        return RivalSelection(None,"manual")
     player=next((row for row in rows if row.get("idx")==player_idx or row.get("isPlayer")),None)
     player_pos=_position(player or {})
     def score(row):
@@ -44,8 +46,20 @@ class RaceDirector:
         pit_by_idx=pit_by_idx or {};lap_by_idx=lap_by_idx or {};selection=select_rival(rows,player_idx,self.selected_idx)
         candidates=[{"idx":row.get("idx"),"label":f"#{row.get('number','—')} · {row.get('driver','—')}","position":f"P{row.get('pos','—')}"} for row in rows if not row.get("isPlayer")]
         if selection.idx is None:
-            return {"mode":selection.mode,"selectedIdx":None,"candidates":candidates,"confidence":"SIN RIVAL","rival":"—","position":"—","gap":"—","lastLap":"—","pit":"—","lap":"—","status":"Sin rival de clase disponible.","gapBefore":"—","netGap":"—"}
+            manual=self.selected_idx is not None
+            return {"mode":selection.mode,"selectionMode":"manual" if manual else "auto",
+                    "requestedCarIdx":self.selected_idx,"effectiveCarIdx":None,
+                    "selectionState":"TEMPORARILY_UNAVAILABLE" if manual else "NO_CANDIDATES",
+                    "selectedIdx":self.selected_idx if manual else None,
+                    "candidates":candidates,"confidence":"MANUAL · SIN OBSERVACIÓN" if manual else "SIN RIVAL",
+                    "rival":"RIVAL MANUAL NO OBSERVADO" if manual else "—",
+                    "position":"—","gap":"—","lastLap":"—","pit":"SIN DATO","lap":"—",
+                    "status":"Selección manual retenida · coche sin datos actuales." if manual else "Sin rival de clase disponible.",
+                    "gapBefore":"—","netGap":"—"}
         rival=next(row for row in rows if row.get("idx")==selection.idx);on_pit=bool(pit_by_idx.get(selection.idx,False));was_on_pit=bool(self.last_pit_state.get(selection.idx,False))
         if on_pit and not was_on_pit:self.gap_before_pit[selection.idx]=rival.get("gap") or "—"
         self.last_pit_state[selection.idx]=on_pit;gap_before=self.gap_before_pit.get(selection.idx,"—");gap=rival.get("gap") or "—";status="EN BOXES" if on_pit else "EN PISTA";confidence="MANUAL" if selection.mode=="manual" else "AUTO"
-        return {"mode":selection.mode,"selectedIdx":selection.idx,"candidates":candidates,"confidence":confidence,"rival":f"#{rival.get('number','—')} · {rival.get('driver','—')}","position":f"P{rival.get('pos','—')}","gap":gap,"lastLap":rival.get("lastLap") or "—","pit":status,"lap":f"V{lap_by_idx.get(selection.idx)}" if lap_by_idx.get(selection.idx) is not None else "—","status":f"{status} · {gap}","gapBefore":gap_before,"netGap":gap}
+        return {"mode":selection.mode,"selectionMode":selection.mode,
+                "requestedCarIdx":self.selected_idx,"effectiveCarIdx":selection.idx,
+                "selectionState":"SELECTED",
+                "selectedIdx":selection.idx,"candidates":candidates,"confidence":confidence,"rival":f"#{rival.get('number','—')} · {rival.get('driver','—')}","position":f"P{rival.get('pos','—')}","gap":gap,"lastLap":rival.get("lastLap") or "—","pit":status,"lap":f"V{lap_by_idx.get(selection.idx)}" if lap_by_idx.get(selection.idx) is not None else "—","status":f"{status} · {gap}","gapBefore":gap_before,"netGap":gap}

@@ -31,6 +31,7 @@ try:
     from server.session_recorder import SessionRecorder
     from server.session_intelligence import build_intelligence, strategy_intelligence
     from server.race_director import RaceDirector
+    from server.race_dashboard import race_view
     from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from server.race_state import RaceIdentity
     from server.team_context import TeamCarContext
@@ -38,6 +39,8 @@ try:
     from server.spotter_control import SpotterControl
     from server.stop_plan import build_stop_plan, race_plan
     from server.setup_engineer import SetupEngineer
+    from server.setup_ownership import resolve_setup_owner
+    from server.quali_runs import QualiRuns
     from server.setup_snapshot import snapshot_from_sdk
     from server.stint_engineering_snapshot import capture_conditions, capture_tires
     from server.kpi_library import build_kpi_library
@@ -48,6 +51,7 @@ except ModuleNotFoundError:
     from session_recorder import SessionRecorder
     from session_intelligence import build_intelligence, strategy_intelligence
     from race_director import RaceDirector
+    from race_dashboard import race_view
     from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from race_state import RaceIdentity
     from team_context import TeamCarContext
@@ -55,6 +59,8 @@ except ModuleNotFoundError:
     from spotter_control import SpotterControl
     from stop_plan import build_stop_plan, race_plan
     from setup_engineer import SetupEngineer
+    from setup_ownership import resolve_setup_owner
+    from quali_runs import QualiRuns
     from setup_snapshot import snapshot_from_sdk
     from stint_engineering_snapshot import capture_conditions, capture_tires
     from kpi_library import build_kpi_library
@@ -254,7 +260,8 @@ def class_results_rows(results, cars, conflicts, class_id, team_idx, last_laps, 
             'driver':car.get('UserName') or '—' if idx not in conflicts else '—',
             'team':car.get('TeamName') or '—','gap':'EQUIPO' if idx==team_idx else '—',
             'gapSeconds':None,'lastLap':lap_text(last or race.get('LastTime')),
-            'completedLaps':race.get('LapsComplete'),'pace':'—','isPlayer':idx==team_idx})
+            'completedLaps':race.get('LapsComplete'),'pace':'—','isPlayer':idx==team_idx,
+            'positionSource':race.get('positionSource') or ('RESULTS_POSITIONS' if race.get('ClassPosition') is not None else 'UNAVAILABLE')})
     rows.sort(key=lambda row:(row['pos'] is None,row['pos'] or 99999,row['idx']))
     return rows
 
@@ -283,6 +290,7 @@ class DashboardSource:
         self.last_session_time = None
         self.personal_session_best = None
         self.personal_lap_clean = False
+        self.personal_lap_caution = False
         self.personal_incidents = None
         self.coach = LapCoach()
         self.audio_mode = "auto"
@@ -300,12 +308,13 @@ class DashboardSource:
         self.race_plan_audio_state=None
         self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
+        self.quali = QualiRuns(self.recorder)
         self.last_strategy_log_signature=None
         self.strategy_prediction_audit={}
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
-        self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
+        self.race_director=RaceDirector();self.race_class_candidates=set();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar';self.sector_tracking_armed=False;self.sector_last_sample=None
 
     def handle_race_plan_audio(self, payload):
@@ -395,6 +404,7 @@ class DashboardSource:
 
     def sample(self,force_driver=False,force_spotter=False):
         if self.force_demo:
+            self.setup_engineer.set_owner(None)
             return self.demo_payload('driver' if force_driver else 'spotter' if force_spotter else None)
         if self.connect():
             try:
@@ -402,7 +412,9 @@ class DashboardSource:
                 self.session_state.remember_payload(payload)
                 return payload
             except Exception as exc:
+                self.setup_engineer.set_owner(None)
                 return self.disconnected_payload(f"Leyendo sesión: {exc}")
+        self.setup_engineer.set_owner(None)
         return self.disconnected_payload("Esperando a iRacing SDK")
 
     def connect(self):
@@ -447,6 +459,12 @@ class DashboardSource:
                                            self.local_user_id,self.local_driver_name,self.team_id,self.manual_team_car_number,self.team_car_number,
                                            local_car_active=local_active)
             self.local_user_id=context.local_user_id;self.local_driver_name=context.local_driver_name
+            resolved_owner=resolve_setup_owner(context,driver_info,player_idx).payload()
+            owner_driver=next((d for d in drivers if d.get("CarIdx")==context.car_idx and not d.get("IsSpectator")),None)
+            setup_location={"car":car_label(owner_driver) if owner_driver else None,
+                            "track":weekend.get("TrackDisplayName") or weekend.get("TrackName"),
+                            "layout":weekend.get("TrackConfigName") or "default"}
+            self.setup_engineer.set_owner(resolved_owner,setup_location)
             if context.team_id is not None:self.team_id=context.team_id
             if context.car_idx is not None:
                 if self.team_car_idx is not None and self.team_car_idx!=context.car_idx and self.team_car_number!=context.car_number:
@@ -469,12 +487,14 @@ class DashboardSource:
             if self.session_state.observe_identity(identity,ignore_car_idx=True) or (self._last_session_type is not None and self._last_session_type!=session.get("SessionType")) or (number(session_time) is not None and number(self.last_session_time) is not None and session_time<self.last_session_time-1):
                 logger.info("SESSION CHANGED")
                 self.finalize_setup_stint_before_reset("session-change")
+                self.quali.close_session("official-session-change")
                 self.recorder.finish_session("session-change")
                 self.reset_session_tracking()
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
                 self.last_strategy_log_signature=None
             self.session_key=identity;self.last_session_time=session_time;self._last_session_type=session.get("SessionType")
+            self.quali.observe(identity,session.get("SessionType"),self.get("Lap"),self.get("LapDistPct"),session_time,self.get("IsOnTrack"),self.get("OnPitRoad"))
             if self.recorder.session_id is None:
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
@@ -491,6 +511,11 @@ class DashboardSource:
             # the normal local-telemetry payload, and AUTO follows TeamCarContext.
             # force_driver never changes TeamCarContext/local_driving; it only selects
             # which payload ZRE emits for this websocket frame.
+            # A real team driver handoff enters SPOTTER before PILOTO's normal
+            # finalize branch. Persist the outgoing verified stint once.
+            if not context.local_driving and self.stint_active:
+                self.finalize_setup_stint_before_reset("driver-handoff")
+                self.stint_active=False
             if self.use_spotter_payload(context.auto_mode,force_driver,force_spotter):
                 return self.spotter_payload(context,drivers,session,results,weekend,session_time,driver_info)
             # PILOTO is always the local SDK car. TeamCarContext may decide AUTO,
@@ -546,7 +571,10 @@ class DashboardSource:
                 if valid_live_pct:relative_candidates.append(row.copy())
             standing_rows.sort(key=lambda row:(row["pos"]==0,row["pos"]))
             overall_player=next((row for row in standing_rows if row["isPlayer"]),None)
-            category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text,live_class_pos)
+            class_cars={idx:entry.get("_car",{}) for idx,entry in self.competitor_presence_history.items()
+                        if isinstance(idx,int) and isinstance(entry,dict) and entry.get("_car")}
+            class_cars.update(cars)
+            category_rows=class_results_rows(results,class_cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text,live_class_pos)
             for row in category_rows:
                 idx=row.get("idx")
                 if row["idx"]==pilot_idx:
@@ -571,11 +599,11 @@ class DashboardSource:
                 self.team_fuel_reference=(fuel,int(team_completed))
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
-            self.coach_session_mode=session_coach_mode
+            self.coach_session_mode="qualifying" if self.quali.mode else session_coach_mode
             self.update_sector_tracking(lap_number,self.get("LapDistPct",player_pct),last_lap)
             if completed_laps is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
-            self.update_race_engineer_audio(session_coach_mode,pilot_idx,category_rows,live_last,car_completed,results)
+            self.update_race_engineer_audio(self.coach_session_mode,pilot_idx,category_rows,live_last,car_completed,results)
             self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
             if session_coach_mode in ("practice","qualifying","race_engineer"):
                 self.coach.capture(self.get("LapDistPct", player_pct), session_time,
@@ -653,12 +681,56 @@ class DashboardSource:
             coach = self.coach.payload(self.lap_text)
             payload["capabilities"] = {"coachControls": True}
             payload["sessionMode"] = session_coach_mode
+            quali=self.quali.snapshot()
+            payload["effectiveDashboard"]=quali["effectiveDashboard"]
+            payload["qualifying"]={**quali,"officialSessionType":session.get("SessionType"),
+                "sessionTime":session_time,"timeRemaining":number(self.get("SessionTimeRemain")),
+                "onTrack":on_track,"onPitRoad":on_pit_road,"inGarage":in_garage,
+                "bestPersonalSDK":number(self.get("LapBestLapTime")),
+                "deltaReferences":{key:self._quali_sdk_delta(key) for key in
+                    ("LapDeltaToBestLap","LapDeltaToOptimalLap","LapDeltaToSessionBestLap")},
+                "sectorBoundaries":self._sector_boundaries(),"sectorTimes":list(self.current_sector_times),
+                "lastSectors":list(self.last_completed_sectors),
+                "sectorSource":"ZRE_RECONSTRUCTED_FROM_SDK_SPLITS" if self.last_completed_sectors else "UNAVAILABLE",
+                "classPosition":player.get("pos") if self.quali.mode=="official" and player else None,
+                "fuelValue":fuel,
+                "fuelPerLap":(sum(self.fuel_per_lap)/len(self.fuel_per_lap)) if self.fuel_per_lap else None}
+            consumption=payload["qualifying"]["fuelPerLap"]
+            payload["qualifying"]["autonomyLaps"]=(round(fuel/consumption,1) if fuel is not None and consumption else None)
             payload["sessionType"] = session.get("SessionType")
             coach.update(source="ZRE_INFERRED",sessionIdentity=str(identity),referenceSessionType=session.get("SessionType"))
             payload["coach"] = coach
             payload["sessionIntelligence"]=session_intelligence(self.get,weekend,session,{i:({**c,'UserName':None,'identityAmbiguous':True} if i in roster_conflicts else c) for i,c in cars.items()},results,pilot_idx,player_class_id,lap_pct,track_surface,self.competitor_presence_history,self.sdk_units())
             last_setup=(self.setup_engineer.last_saved or {}).get("setup") or {}
-            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
+            valid_practice=[row for row in self.lap_history
+                            if row.get("valid") and not row.get("caution") and isinstance(row.get("time"),(int,float)) and row["time"]>0]
+            valid_fuel_laps=[row["fuelUse"] for row in valid_practice
+                             if isinstance(row.get("fuelUse"),(int,float)) and 0<row["fuelUse"]<30]
+            mean_pace=sum(row["time"] for row in valid_practice)/len(valid_practice) if valid_practice else None
+            pace_dev=(math.sqrt(sum((row["time"]-mean_pace)**2 for row in valid_practice)/len(valid_practice))
+                      if len(valid_practice)>1 else None)
+            mean_fuel=sum(valid_fuel_laps)/len(valid_fuel_laps) if valid_fuel_laps else None
+            payload["qualifying"]["fuelPerLap"]=mean_fuel
+            payload["qualifying"]["autonomyLaps"]=round(fuel/mean_fuel,1) if fuel is not None and mean_fuel else None
+            previous_clean=valid_practice[-1] if valid_practice else None
+            payload["practiceAnalytics"]={
+                "validLaps":len(valid_practice),
+                "averageLap":self.lap_text(mean_pace) if mean_pace is not None else None,
+                "consistencySeconds":round(pace_dev,3) if pace_dev is not None else None,
+                "lastValidLap":self.lap_text(previous_clean["time"]) if previous_clean else None,
+                "lastDelta":self.delta_text(previous_clean["time"],best_lap)
+                    if previous_clean and best_lap is not None else None,
+                "deltaReference":"MEJOR REAL",
+                "fuelLast":valid_fuel_laps[-1] if valid_fuel_laps else None,
+                "fuelAverage":mean_fuel,
+                "fuelMin":min(valid_fuel_laps) if valid_fuel_laps else None,
+                "fuelMax":max(valid_fuel_laps) if valid_fuel_laps else None,
+                "fuelLapsEstimated":round(fuel/mean_fuel,1)
+                    if fuel is not None and mean_fuel is not None and mean_fuel>0 else None,
+                "laps":[{"lap":row.get("lap"),"seconds":round(row["time"],3),
+                         "fuelUse":row.get("fuelUse")} for row in valid_practice],
+            }
+            payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"owner":dict(self.setup_engineer.owner),"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
             payload["racePlanVNext"]=self.race_plan_vnext_payload(
                 context,session,results,weekend,driver_info,player_driver.get("UserName","Piloto"),
@@ -679,6 +751,16 @@ class DashboardSource:
             self.flush_race_engineer_audio()
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
+            self.race_class_candidates={row.get("idx") for row in category_rows
+                                        if row.get("idx") is not None and row.get("idx")!=pilot_idx}
+            if session_coach_mode=="race_engineer":
+                payload["raceDashboard"]=race_view(
+                    session_identity=identity,own_idx=pilot_idx,class_rows=category_rows,
+                    results=results,cars=class_cars,best_laps=self.get("CarIdxBestLapTime",[]) or [],
+                    last_laps=live_last,intelligence=payload["sessionIntelligence"],
+                    own_history=self.lap_history,director=payload["raceDirector"],fuel=fuel,
+                    fuel_history=self.fuel_per_lap,race_plan=payload["racePlanVNext"],
+                    session_time=session_time)
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
             behind=max((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']<0),key=lambda r:r['gapSeconds'],default=None)
@@ -1041,7 +1123,22 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None
+        self.personal_lap_clean=False; self.personal_lap_caution=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None
+
+    def _quali_sdk_delta(self,key):
+        raw=number(self.get(key))
+        flag=self.get(key+"_OK")
+        return {"value":round(raw,4) if flag is True and raw is not None else None,
+                "valid":flag is True and raw is not None,"source":"SDK:"+key,
+                "reference":key.replace("LapDeltaTo","")}
+
+    def _sector_boundaries(self):
+        info=self.get("SplitTimeInfo",{}) or {}
+        rows=info.get("Sectors",[]) if isinstance(info,dict) else []
+        starts=sorted({round(x,6) for row in rows if isinstance(row,dict)
+                       for x in [number(row.get("SectorStartPct"))]
+                       if x is not None and 0<=x<1})
+        return starts if len(starts)>=2 and starts[0]==0 else []
 
     def update_sector_tracking(self,current_lap,lap_pct,last_lap):
         """Capture official iRacing split sectors once per completed local lap.
@@ -1063,7 +1160,7 @@ class DashboardSource:
             value=number(row.get("SectorStartPct"))
             if value is not None and 0<=value<1:starts.append(value)
         starts=sorted(set(starts))
-        if len(starts)!=3 or starts[0]!=0:
+        if len(starts)<2 or starts[0]!=0:
             self.current_sector_times=[];self.last_completed_sectors=[];self.sector_tracking_armed=False;self.sector_last_sample=None
             return
         lap_time=number(self.get("LapCurrentLapTime"))
@@ -1074,7 +1171,7 @@ class DashboardSource:
             return
         if lap!=self.sector_lap_number:
             completed=seconds(last_lap)
-            if lap==self.sector_lap_number+1 and self.sector_tracking_armed and completed is not None and len(self.current_sector_times)==2:
+            if lap==self.sector_lap_number+1 and self.sector_tracking_armed and completed is not None and len(self.current_sector_times)==len(starts)-1:
                 third=completed-sum(self.current_sector_times)
                 self.last_completed_sectors=[*self.current_sector_times,third] if third>0 else []
             else:self.last_completed_sectors=[]
@@ -1088,7 +1185,7 @@ class DashboardSource:
         if sum(pct>=x for x in thresholds)-len(self.current_sector_times)>1:
             self.current_sector_times=[];self.sector_tracking_armed=False;self.sector_last_sample=None
             return
-        while len(self.current_sector_times)<2 and pct>=thresholds[len(self.current_sector_times)]:
+        while len(self.current_sector_times)<len(thresholds) and pct>=thresholds[len(self.current_sector_times)]:
             elapsed=lap_time-sum(self.current_sector_times)
             if elapsed<=0:return
             self.current_sector_times.append(elapsed)
@@ -1207,6 +1304,8 @@ class DashboardSource:
 
     def update_lap_tracking(self,lap_number,lap_pct,fuel,last_lap,session_best,result=None):
         completed=seconds(last_lap);result=result or {};incidents=self.get("PlayerCarMyIncidentCount")
+        caution_now=is_caution_flag(self.get("SessionFlags"))
+        self.personal_lap_caution=getattr(self,"personal_lap_caution",False) or caution_now
         clean_now=(incidents is not None and self.get("PlayerTrackSurface")==3 and not self.get("OnPitRoad",False) and not self.get("PlayerCarTowTime",0))
         self.personal_lap_clean=(self.personal_lap_clean and clean_now and incidents==self.personal_incidents)
         if self.last_lap_number is None:
@@ -1217,7 +1316,8 @@ class DashboardSource:
         if lap_number<self.last_lap_number:return
         if lap_number>self.last_lap_number:
             usage=self.fuel_at_lap_start-fuel if self.fuel_at_lap_start is not None and fuel is not None else None
-            self.pending_lap={"lap":lap_number,"usage":usage,"sectors":list(self.last_completed_sectors),"previousTime":self.last_observed_lap_time,"valid":self.personal_lap_clean}
+            self.pending_lap={"lap":lap_number,"usage":usage,"sectors":list(self.last_completed_sectors),"previousTime":self.last_observed_lap_time,"valid":self.personal_lap_clean,"caution":self.personal_lap_caution}
+            self.personal_lap_caution=caution_now
             self.personal_lap_clean=clean_now;self.personal_incidents=incidents;self.fuel_at_lap_start=fuel
             self.last_lap_number=lap_number
         if self.pending_lap:
@@ -1240,27 +1340,36 @@ class DashboardSource:
         if usage and 0<usage<30:
             self.fuel_per_lap.append(usage);self.fuel_per_lap=self.fuel_per_lap[-10:]
         sectors=pending["sectors"]
-        if len(sectors)==3:
-            third=completed-sum(sectors[:2])
-            sectors=[*sectors[:2],third] if third>0 else []
+        if sectors and len(sectors)==len(self._sector_boundaries())-1:
+            final=completed-sum(sectors)
+            sectors=[*sectors,final] if final>0 else []
+        elif sectors and len(sectors)!=len(self._sector_boundaries()):
+            sectors=[]
         prior_best=self.personal_session_best
-        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid"))})
+        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid")),"caution":bool(pending.get("caution")),"sessionTime":number(self.get("SessionTime")),"driverName":self.local_driver_name,"source":"SDK_OBSERVED"})
         self.lap_history=self.lap_history[-10:]
         for index,value in enumerate(sectors if pending.get("valid") else []):
+            while index>=len(self.best_sectors):self.best_sectors.append(None)
             if self.best_sectors[index] is None or value<self.best_sectors[index]:self.best_sectors[index]=value
         self.confirmed_session_best=min(self.confirmed_session_best,completed) if self.confirmed_session_best else completed
         self.last_lap_summary={"lap":pending["lap"],"time":self.lap_text(completed),"sessionBest":self.lap_text(prior_best),"delta":self.delta_text(completed,prior_best),"expiresAt":time.time()+6}
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
         coach_ok=self.coach.finish(completed,pending.get("valid"))
+        sdk_fast=number(self.get("LapBestLapTime"))
+        self.quali.note_lap(pending["lap"],completed,clean=pending.get("valid"),
+            sdk_best=(self.get("LapBestLap")==pending["lap"] and
+                      sdk_fast is not None and abs(sdk_fast-completed)<.001),
+            sectors=sectors,sector_source="ZRE_RECONSTRUCTED_FROM_SDK_SPLITS" if sectors else "UNAVAILABLE",
+            in_pit=bool(self.get("OnPitRoad",False)))
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"source":"SDK_OBSERVED"})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
-            on_pit=bool(self.get("OnPitRoad",False)),caution=is_caution_flag(self.get("SessionFlags")))
+            on_pit=bool(self.get("OnPitRoad",False)),caution=bool(pending.get("caution")) or is_caution_flag(self.get("SessionFlags")))
         if self.coach_session_mode=="race_engineer":
             if not self.race_plan_suppresses_coach_audio():self.race_engineer_audio.append(self.lap_text(completed))
         elif self.coach_session_mode=="practice" and coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
-            if not self.race_plan_suppresses_coach_audio():
+            if not self.race_plan_suppresses_coach_audio() and not self.quali.mode:
                 if self.coach.advice:
                     item=self.coach.advice[0];marker_pct=item[4] if len(item)>4 else None;phase=item[5] if len(item)>5 else None;label=self.coach.location_label(item[0],marker_pct,phase);logger.info("AUDIO PLAY location=%s zone=%s phase=%s loss=%.3f",label,item[0],phase,item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
                 else:self.audio_coach.say(f"Vuelta {pending['lap']}. Sin una pérdida clara para corregir.")
@@ -1359,7 +1468,20 @@ class DashboardSource:
         self.race_engineer_audio=[]
         if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
         self.session_state.connected=False;payload=self.session_state.preserved_payload()
-        if payload is None:payload=self.demo_payload()
+        if payload is None:
+            # No prior SDK observation: do not disguise demo car positions,
+            # fuel, Coach recommendations or lap times as live production data.
+            payload=self.demo_payload()
+            payload.update(sessionType="UNKNOWN",sessionMode="unknown",
+                relative=[],standing=[],standingAll=[],raceDirector={},
+                raceDashboard=None,racePlanVNext={"available":False},
+                sessionIntelligence={},enduranceStrategy={},strategy={},
+                coach={},lastLapSummary=None)
+            payload["header"]={"car":"—","track":"—","driver":"—",
+                               "position":"P—","lap":"—","state":message.upper()}
+            payload["self"]={"fuel":"—","fuelValue":None,"fuelSource":"SIN DATO",
+                "lastUse":"—","lastLap":"—","bestLap":"—","laps":[],
+                "wear":{"FL":"—","FR":"—","RL":"—","RR":"—"},"pit":"—"}
         payload["connected"]=False;payload["demo"]=False;payload["header"]["state"]=message.upper()
         # Keep positions for continuity, but never present an old roster name
         # as the current driver while the SDK is disconnected.
@@ -1370,6 +1492,26 @@ class DashboardSource:
         for row in ((payload.get('sessionIntelligence') or {}).get('competitors') or {}).get('observed') or []:
             row.update(presence='STALE',lapDistPct=None,relativeLapFraction=None,gapEvidence=None,rejoinProjection=None,sdkDisconnected=True)
         payload['rivalStrategy']={'available':False,'primary':None,'source':'ZRE_INFERRED','reason':'SDK desconectado'}
+        if payload.get("raceDashboard"):
+            race=payload["raceDashboard"]
+            race["stale"]=True
+            race["physical"]={"ahead":None,"behind":None,"source":"SDK_DISCONNECTED"}
+            for row in race.get("classStandings") or []:
+                row["presence"]="STALE"
+                row["lastSeenAgo"]=None
+            for series in race.get("paceSeries") or []:
+                series["observationState"]="STALE"
+            rival=race.get("rival") or {}
+            if isinstance(rival.get("observation"),dict):
+                rival["observation"]["presence"]="STALE"
+            if isinstance(race.get("fuel"),dict):
+                race["fuel"]["currentLiters"]=None
+                race["fuel"]["autonomyLaps"]=None
+                race["fuel"]["targetLpl"]=None
+                race["fuel"]["deviationLpl"]=None
+                race["fuel"]["source"]="STALE · SDK DESCONECTADO"
+            if payload.get("racePlanVNext"):
+                payload["racePlanVNext"]={"available":False,"source":"SDK_DISCONNECTED"}
         library=payload.get('kpiLibrary') or {}
         for item in library.get('items',[]):
             if item.get('available'):
@@ -1439,6 +1581,7 @@ def installed_version():
 async def close_session_journal(app):
     source=app["source"]
     source.finalize_setup_stint_before_reset("shutdown")
+    source.quali.close_session("shutdown")
     await asyncio.to_thread(source.recorder.close)
 
 async def version_status(request):
@@ -1457,7 +1600,17 @@ async def websocket(request):
                     setting=json.loads(message.data)
                     if not isinstance(setting,dict):continue
                     if setting.get("type")=="settings" and setting.get("key")=="audio" and setting.get("value")=="auto":source.audio_mode="auto"
-                    elif setting.get("type")=="settings" and setting.get("key")=="rival":source.race_director.set_selected(setting.get("value"))
+                    elif setting.get("type")=="settings" and setting.get("key")=="rival":
+                        selected=setting.get("value")
+                        if selected in (None,"","auto",-1,"-1"):
+                            source.race_director.set_selected("auto")
+                        else:
+                            try:requested=int(selected)
+                            except (TypeError,ValueError):requested=None
+                            if requested is not None and requested in source.race_class_candidates:
+                                source.race_director.set_selected(requested)
+                                source.recorder.write({"type":"strategic_rival_selection","carIdx":requested,
+                                                       "mode":"manual","source":"ZRE_USER_ACTION"})
                     elif setting.get("type")=="settings" and setting.get("key")=="strategy":source.apply_strategy_settings(setting.get("value"))
                     elif setting.get("type")=="settings" and setting.get("key")=="role" and setting.get('value') in ('auto','driver','spotter'):
                         role_preference=setting['value']
@@ -1476,8 +1629,12 @@ async def websocket(request):
                         source.manual_team_driver=str(setting.get('value') or '').strip()[:60] or None
                     elif setting.get("type")=="settings" and setting.get("key")=="demoRole" and source.force_demo:
                         if setting.get('value') in ('driver','spotter'):source.demo_role=setting['value']
-                    elif setting.get("type")=="action" and setting.get("action")=="audio_test" and source.coach_session_mode!="qualifying":source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
+                    elif setting.get("type")=="action" and setting.get("action")=="audio_test" and source.coach_session_mode!="qualifying" and not source.quali.mode:source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
                     elif setting.get('type')=='action' and setting.get('action')=='capture_sdk':source.capture_sdk_once()
+                    elif setting.get("type")=="action" and setting.get("action")=="quali_mode":
+                        if source.quali.command(setting.get("value")):
+                            if hasattr(source.audio_coach,"clear_pending"):source.audio_coach.clear_pending()
+                        source.last_lap_summary=None
                     elif setting.get('type')=='action' and setting.get('action')=='setup_feedback':
                         if source.setup_engineer.last_saved:
                             source.setup_engineer.update_feedback(source.setup_engineer.last_saved,setting.get('entry'),setting.get('mid'),setting.get('exit'),setting.get('comment'))

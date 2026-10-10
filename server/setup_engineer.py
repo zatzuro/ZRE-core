@@ -10,11 +10,13 @@ import math
 
 try:
     from server.setup_snapshot import compare_setups, snapshot_from_html
+    from server.setup_ownership import same_confirmed_owner
     from server.setup_report import write_setup_report
     from server.stint_store import StintStore, slug
     from server.stint_engineering_snapshot import compare_tires, snapshot_availability
 except ModuleNotFoundError:
     from setup_snapshot import compare_setups, snapshot_from_html
+    from setup_ownership import same_confirmed_owner
     from setup_report import write_setup_report
     from stint_store import StintStore, slug
     from stint_engineering_snapshot import compare_tires, snapshot_availability
@@ -225,17 +227,40 @@ class SetupEngineer:
         self.imported_setup = None
         self.setup_source_preference = "auto"
         self.status = "Esperando stint"
+        self.owner = {"authorized": False, "reason": "Identidad aún no confirmada"}
+        self.owner_location = {}
         recovered = self.store.latest_stint()
         if recovered:
             self.last_saved = recovered
             try:
-                self.export_report(recovered)
-                self.status = f"Último stint recuperado · reporte disponible · {self.last_report_path.name}"
+                # Historical records stay readable but are never auto-exported
+                # without reliable ownership metadata and fresh authorization.
+                self.status = "Último stint recuperado · exportación sujeta a identidad"
             except OSError:
                 self.last_report_path = None
                 self.status = f"Último stint recuperado · reporte pendiente"
 
+    def set_owner(self, owner, location=None):
+        self.owner = dict(owner or {"authorized": False, "reason": "SDK desconectado"})
+        self.owner_location = dict(location or {})
+        if self.current is not None:
+            original = (self.current.get("session") or {}).get("setupOwner")
+            # Disallow a stale/mismatched stint reaching the disk on role/car changes.
+            if not same_confirmed_owner(original, self.owner):
+                self.current["ownershipRevoked"] = True
+
+    def _can_write(self, record):
+        original = (record.get("session") or {}).get("setupOwner")
+        return (not record.get("ownershipRevoked")
+                and same_confirmed_owner(original, self.owner))
+
+    def _deny(self):
+        self.status = "Setup bloqueado · " + str(self.owner.get("reason") or "propiedad no confirmada")
+        return None
+
     def import_html_setup(self, html_text, filename=None):
+        if not self.owner.get("authorized"):
+            return self._deny()
         text=str(html_text or "")
         if not text or len(text)>500_000:
             self.status="HTML de setup inválido o demasiado grande"
@@ -244,6 +269,12 @@ class SetupEngineer:
         if not snapshot.get("parameters"):
             self.status="No se encontraron parámetros de setup en el HTML"
             return None
+        snapshot["ownership"] = dict(self.owner)
+        location=self.owner_location
+        if not all(location.get(key) for key in ("car","track","layout")):
+            self.status="Importación bloqueada · coche o circuito sin confirmar"
+            return None
+        self.store.save_setup(location["car"],location["track"],location["layout"],snapshot)
         self.imported_setup=snapshot
         self.status=f"Setup HTML importado · {filename or snapshot.get('fingerprint')}"
         return snapshot
@@ -264,6 +295,9 @@ class SetupEngineer:
     def resolve_setup(self, sdk_snapshot):
         sdk=sdk_snapshot or {}
         html=self.imported_setup or {}
+        if html and not same_confirmed_owner(html.get("ownership"), self.owner):
+            html={}
+            self.status="HTML asociado a otro coche; importación no reutilizable"
         if self.setup_source_preference=="html":
             if html.get("parameters"):
                 return html
@@ -275,11 +309,14 @@ class SetupEngineer:
         return sdk
 
     def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None, tires_start=None, controls_start=None):
+        if not self.owner.get("authorized") or self.owner.get("scope") != "own":
+            return self._deny()  # CarSetup SDK is always local, never a spectator's observed car.
+        session = {**dict(session or {}), "setupOwner": dict(self.owner)}
         self.current = {
             "startedAt": datetime.now().isoformat(timespec="seconds"),
             "session": dict(session or {}),
             "conditions": dict(conditions or {}),
-            "setup": deepcopy(setup_snapshot or {}),
+            "setup": {**deepcopy(setup_snapshot or {}), "ownership": dict(self.owner)},
             "fuelStart": fuel_start,
             "startSessionTime": session_time,
             "tiresStart": tires_start or {},
@@ -322,6 +359,9 @@ class SetupEngineer:
         if self.current is None:
             return None
         base = self.current
+        if not self._can_write(base):
+            self.current = None
+            return self._deny()
         session = base.get("session") or {}
         setup = base.get("setup") or {}
         start_time = base.get("startSessionTime")
@@ -396,7 +436,7 @@ class SetupEngineer:
         return saved
 
     def update_feedback(self, stint, entry=None, mid=None, exit=None, comment=None):
-        if not isinstance(stint, dict):
+        if not isinstance(stint, dict) or not self._can_write(stint):
             return None
         feedback = dict(stint.get("driverFeedback") or {})
         for key, value in (("entry", entry), ("mid", mid), ("exit", exit)):
@@ -417,8 +457,8 @@ class SetupEngineer:
 
     def export_report(self, stint=None):
         record = stint or self.last_saved
-        if not record:
-            return None
+        if not record or not self._can_write(record):
+            return self._deny()
         session = record.get("session") or {}
         number = int(record.get("stintNumber") or 0)
         setup = record.get("setup") or {}
