@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/style.css?v=2.6.5.3">
   <link rel="stylesheet" href="/static/practice.css?v=2.6.5.3">
   <link rel="stylesheet" href="/static/quali.css?v=2.6.5.3">
+  <link rel="stylesheet" href="/static/race_v2.css?v=2.6.5.3">
   <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.5.3">
 </head>
 <body data-view="live">
@@ -180,6 +181,62 @@
       <article class="q-panel"><header><strong>COACH · TODAS LAS CURVAS</strong><small>DATOS OBSERVADOS / INFERIDOS</small></header><div id="q-garage-curves"></div></article>
     </section>
   </section>
+  <section id="race-v2-view" class="screen race-v2-view" hidden aria-label="ZRE Carrera V2">
+    <div class="rv2-kpis" aria-label="Indicadores operativos de carrera">
+      <div class="rv2-kpi"><small>POSICIÓN CLASE</small><strong id="rv2-position">—</strong><em id="rv2-position-source">SDK</em></div>
+      <div class="rv2-kpi"><small>DELANTE · FÍSICO</small><strong id="rv2-gap-ahead">—</strong><em id="rv2-car-ahead">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>DETRÁS · FÍSICO</small><strong id="rv2-gap-behind">—</strong><em id="rv2-car-behind">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>ÚLTIMA PROPIA</small><strong id="rv2-last-lap">—</strong></div>
+      <div class="rv2-kpi"><small>MI RITMO · 5 V.</small><strong id="rv2-my-pace">—</strong><em id="rv2-my-count">SIN MUESTRAS</em></div>
+      <div class="rv2-kpi"><small>FUEL ACTUAL</small><strong id="rv2-fuel">—</strong><em id="rv2-fuel-source">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>CONSUMO</small><strong id="rv2-consumption">—</strong><em id="rv2-use-source">L/VUELTA</em></div>
+      <div class="rv2-kpi"><small>RESTANTE</small><strong id="rv2-remaining">—</strong></div>
+    </div>
+    <section class="rv2-main">
+      <article class="rv2-panel rv2-standings-panel">
+        <header><strong>CLASS STANDINGS · OFICIAL</strong><div><select id="rv2-standing-scope" aria-label="Vista de clasificación"><option value="near">CERCA DE MÍ</option><option value="all">TODOS</option></select><button type="button" id="rv2-standings-expand" title="Abrir clasificación completa">AMPLIAR ↗</button></div></header>
+        <div class="rv2-standing-head"><span>POS.</span><span>#</span><span>PILOTO / COCHE</span><span>MEJOR</span><span>ÚLTIMA</span></div>
+        <div id="rv2-standing-rows" class="rv2-standing-rows" role="list" aria-label="Orden oficial de clase"></div>
+        <footer><span id="rv2-standing-summary">ESPERANDO CLASIFICACIÓN</span><span>SELECCIONA UN RIVAL</span></footer>
+      </article>
+      <article class="rv2-panel rv2-plan-panel" id="rv2-plan-card" data-state="no-plan">
+        <header><strong>RACE PLAN VNEXT</strong><button type="button" id="rv2-plan-expand">DETALLE ↗</button></header>
+        <div class="rv2-plan-emphasis"><small>PRÓXIMA PARADA</small><strong id="rv2-box-lap">—</strong><span id="rv2-box-countdown">—</span></div>
+        <div class="rv2-plan-status" id="rv2-plan-status">PLAN NO DISPONIBLE</div>
+        <div class="rv2-window-grid"><div><small>EARLIEST SAFE</small><b id="rv2-earliest">—</b></div><div><small>TARGET</small><b id="rv2-target">—</b></div><div><small>FUEL LIMIT</small><b id="rv2-fuel-limit">—</b></div></div>
+        <div class="rv2-window-track"><i id="rv2-window-range"></i><em id="rv2-window-marker" hidden></em></div>
+        <div class="rv2-plan-details"><div><small>FUEL A AÑADIR</small><b id="rv2-add-fuel">—</b></div><div><small>PARADAS RESTANTES</small><b id="rv2-stops-left">—</b></div><div><small>NEUMÁTICOS</small><b id="rv2-tyres">—</b></div><div><small>PRÓXIMO PILOTO</small><b id="rv2-next-driver">—</b></div></div>
+        <footer id="rv2-plan-source">FUENTE: RACE PLAN VNEXT</footer>
+      </article>
+      <article class="rv2-panel rv2-rival-panel">
+        <header><strong>RIVAL ESTRATÉGICO</strong><button type="button" id="rv2-rival-auto">AUTO</button></header>
+        <label class="rv2-rival-search-label">BUSCAR # · PILOTO · POSICIÓN<input id="rv2-rival-search" type="search" placeholder="Ej. #42, Pérez o P7" autocomplete="off"></label>
+        <select id="rv2-rival-select" aria-label="Seleccionar rival estratégico"><option value="auto">AUTO</option></select>
+        <div class="rv2-rival-highlight"><b id="rv2-rival-name">—</b><small id="rv2-rival-mode">AUTO</small></div>
+        <div class="rv2-rival-grid">
+          <div><small>POS. CLASE</small><strong id="rv2-rival-pos">—</strong></div><div><small>ESTADO</small><strong id="rv2-rival-presence">—</strong></div>
+          <div><small>MEJOR</small><strong id="rv2-rival-best">—</strong></div><div><small>ÚLTIMA</small><strong id="rv2-rival-last">—</strong></div>
+          <div><small>RITMO</small><strong id="rv2-rival-pace">—</strong></div><div><small>GAP FÍSICO</small><strong id="rv2-rival-gap">—</strong></div>
+        </div>
+        <footer><span id="rv2-rival-age">SIN OBSERVACIÓN ACTUAL</span><span id="rv2-rival-car">—</span></footer>
+      </article>
+    </section>
+    <section class="rv2-bottom">
+      <article class="rv2-panel rv2-chart-panel">
+        <header><strong>COMPARADOR DE 4 RITMOS · ÚLTIMAS 8 VUELTAS POR COCHE</strong><span>RITMO = 3–5 V. COMPARABLES</span></header>
+        <div id="rv2-pace-legend" class="rv2-pace-legend" aria-label="Referencias y promedios">SIN SERIES</div>
+        <div class="rv2-chart-content"><svg id="rv2-pace-chart" viewBox="0 0 900 210" role="img" aria-label="Tiempos por vuelta para los cuatro roles"><g id="rv2-pace-grid"></g><g id="rv2-pace-series"></g></svg></div>
+        <footer><span>ÍNDICE RELATIVO (−7…ACTUAL) · VUELTAS NO NECESARIAMENTE SIMULTÁNEAS</span><span id="rv2-pace-difference">Δ RITMO VS RIVAL: —</span></footer>
+      </article>
+      <article class="rv2-panel rv2-fuel-panel">
+        <header><strong>COMBUSTIBLE Y EFICIENCIA</strong><span id="rv2-fuel-quality">SIN FUENTE</span></header>
+        <div class="rv2-fuel-grid"><div><small>OBSERVADO</small><strong id="rv2-fuel-observed">—</strong></div><div><small>OBJETIVO</small><strong id="rv2-fuel-target">—</strong></div><div><small>DESVIACIÓN</small><strong id="rv2-fuel-deviation">—</strong></div><div><small>AUTONOMÍA</small><strong id="rv2-fuel-autonomy">—</strong></div></div>
+        <div class="rv2-fuel-context" id="rv2-fuel-context">La suficiencia del combustible depende de Race Plan, no del ahorro aislado.</div>
+        <footer id="rv2-race-emphasis">FORMATO: NO CONFIRMADO · VISTA GENERAL</footer>
+      </article>
+    </section>
+  </section>
+  <dialog id="rv2-standings-dialog" class="rv2-standings-dialog"><form method="dialog"><header><strong>CLASIFICACIÓN COMPLETA DE CLASE</strong><button type="submit" aria-label="Cerrar clasificación">CERRAR ×</button></header></form><div class="rv2-standing-head"><span>POS.</span><span>#</span><span>PILOTO / COCHE</span><span>MEJOR</span><span>ÚLTIMA</span></div><div id="rv2-standing-all" class="rv2-standing-all"></div></dialog>
   <section id="spotter-view" class="screen spotter-screen" hidden>
     <div class="spotter-kpis"><div><small># COCHE · PILOTO</small><strong id="spotter-car">—</strong><small id="spotter-driver">AUTO · no confirmado</small></div><div><small>POS CLASE</small><strong id="spotter-position">—</strong></div><div><small>VUELTA</small><strong id="spotter-lap">—</strong></div><div><small>TIEMPO RESTANTE</small><strong id="spotter-time">—</strong></div><div><small>FUEL</small><strong id="spotter-fuel">—</strong></div><div><small>AUTONOMÍA</small><strong id="spotter-autonomy">—</strong></div><div><small>PRÓXIMA PARADA</small><strong id="spotter-next-stop">—</strong></div><div><small>PARADAS RESTANTES</small><strong id="spotter-stops">—</strong></div></div>
     <div class="spotter-choice"><label>COCHE DEL EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label><label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label><span id="spotter-identity-warning">Selecciona el coche si ZRE no lo identifica.</span></div>
@@ -309,6 +366,7 @@
 </main>
 <script src="/static/practice.js?v=2.6.5.3"></script>
  <script src="/static/quali.js?v=2.6.5.3"></script>
+ <script src="/static/race_v2.js?v=2.6.5.3"></script>
 <script src="/static/kpi_library.js?v=2.6.5.3"></script>
 <script src="/static/app.js?v=2.6.5.3"></script>
 </body>
