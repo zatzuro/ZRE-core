@@ -8,6 +8,7 @@ two different laps.
 from collections import deque
 import bisect
 import math
+import re
 
 try:
     from server.track_model import advice_marker, consolidate_advice, detect_corners, nearest_corner, normalize_points, project_track
@@ -261,7 +262,36 @@ class LapCoach:
         curve_recommendations=self.summary_priorities(limit=8)
         if not curve_recommendations and self.advice:
             curve_recommendations=[{**priority(item),'confidence':'BAJA','occurrences':1,'sampleLaps':1} for item in self.advice[:8]]
-        return {'reference':'ÓPTIMA SESIÓN','bestLap':format_lap(best),'optimalLap':format_lap(optimal),'potential':f'{max(0,best-optimal):.3f}' if best and optimal else '—','lapMessage':f"{primary['zone']}: {primary['advice']}" if primary else '','primary':primary,'secondary':priority(self.advice[1]) if len(self.advice)>1 else None,'curveRecommendations':curve_recommendations,'pattern':pattern,'patternAdvice':pattern_advice,'patternConfidence':pattern_confidence,'validPatternLaps':len(self.recent_valid_advice),'diagnostics':self.last_diagnostics,'trackMap':self._track_map_payload()}
+        # Complete detected-corner inventory: never invent an analysis for a
+        # turn which has not produced comparable, validated coaching evidence.
+        by_corner={}
+        extras=[]
+        for rec in curve_recommendations:
+            match=re.search(r"\\bT(\\d+)\\b",str(rec.get("zone") or ""),re.I)
+            if match:
+                by_corner.setdefault(int(match.group(1)),[]).append(rec)
+            else:
+                extras.append(rec)
+        all_corners=[]
+        for corner in self.corner_model:
+            number=corner.get("number")
+            advice_rows=by_corner.pop(number,[])
+            entry=advice_rows[0] if advice_rows else None
+            all_corners.append({"id":f"T{number}","zone":f"T{number}",
+                "pct":corner.get("pct"),"state":"diagnosis" if entry else "insufficient",
+                "title":entry.get("title") if entry else "Sin diagnóstico validado",
+                "advice":entry.get("advice") if entry else "Completa más vueltas comparables para analizar esta curva.",
+                "confidence":entry.get("confidence") if entry else None,
+                "occurrences":entry.get("occurrences") if entry else None,
+                "lossSeconds":None})
+        for entries in by_corner.values():
+            extras.extend(entries)
+        for i,entry in enumerate(extras):
+            all_corners.append({"id":f"zone-{i+1}","zone":entry.get("zone") or f"TRAMO {i+1}",
+                "pct":None,"state":"diagnosis","title":entry.get("title"),
+                "advice":entry.get("advice"),"confidence":entry.get("confidence"),
+                "occurrences":entry.get("occurrences"),"lossSeconds":None})
+        return {'reference':'ÓPTIMA SESIÓN','bestLap':format_lap(best),'optimalLap':format_lap(optimal),'potential':f'{max(0,best-optimal):.3f}' if best and optimal else '—','lapMessage':f"{primary['zone']}: {primary['advice']}" if primary else '','primary':primary,'secondary':priority(self.advice[1]) if len(self.advice)>1 else None,'curveRecommendations':curve_recommendations,'allCorners':all_corners,'pattern':pattern,'patternAdvice':pattern_advice,'patternConfidence':pattern_confidence,'validPatternLaps':len(self.recent_valid_advice),'diagnostics':self.last_diagnostics,'trackMap':self._track_map_payload()}
 
 def _metric(metrics,index):return metrics[index] if len(metrics)>index else None
 def _direction(sign):
