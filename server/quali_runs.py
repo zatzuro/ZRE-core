@@ -65,7 +65,7 @@ class QualiRuns:
     def observe(self, identity, official_type, lap, pct, clock):
         key = str(identity)
         new_kind = self.classify(official_type)
-        self.lap = int(lap) if finite(lap) is not None and lap >= 0 else None
+        self.lap = int(float(lap)) if finite(lap) is not None and float(lap) >= 0 else None
         self.pct = finite(pct)
         self.clock = finite(clock)
         if key != self.identity or new_kind != self.official_type:
@@ -122,7 +122,7 @@ class QualiRuns:
     def note_lap(self, lap, seconds, *, clean=None, sdk_best=False,
                  sectors=None, sector_source=None, in_pit=False, source="SDK_OBSERVED"):
         run = self.current
-        lap = int(lap) if finite(lap) is not None else None
+        lap = int(float(lap)) if finite(lap) is not None else None
         measured = finite(seconds)
         if not run or lap is None or measured is None or measured <= 0:
             return None
@@ -130,7 +130,7 @@ class QualiRuns:
             return None
         # Prioritize direct SDK fastest-lap confirmation. A clean ZRE estimate
         # alone is not proof of official iRacing lap legality.
-        status = "VALID" if sdk_best else "IN LAP" if in_pit else "PENDING VALIDATION" if clean is not False else "INVALID"
+        status = "VALID" if sdk_best else "IN LAP" if in_pit else "PENDING VALIDATION"
         evidence = "SDK_BEST_CONFIRMED" if sdk_best else "ZRE_CLEAN_ESTIMATE" if clean is True else "ZRE_DIRTY_OBSERVED" if clean is False else "UNKNOWN"
         sector_times = [float(v) for v in (sectors or []) if finite(v) is not None and v > 0]
         attempt = {"attemptId": run["runId"] + "-L" + str(lap), "runId": run["runId"],
