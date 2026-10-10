@@ -1,0 +1,56 @@
+/* ZRE practice workspace - independent of archived Screen Builder.
+   Existing localStorage builder documents and original source remain untouched. */
+:root{--pr-bg:#192635;--pr-panel:#243649;--pr-line:#41556a;--pr-muted:#c0d1df;--pr-text:#f5f9ff}
+.dashboard{max-width:none;grid-template-rows:auto auto minmax(0,1fr) auto;gap:5px;padding:7px 10px 5px}
+.session-header{gap:10px;min-height:47px;padding-bottom:4px}.session-info strong{font-size:20px}
+.screen-nav{display:flex;align-items:center;justify-content:flex-end;min-height:27px;gap:8px;position:relative;z-index:5}
+#header-collapse-toggle{border:1px solid var(--pr-line);background:#263a4c;color:var(--pr-text);border-radius:4px;padding:5px 10px;font-size:10px;font-weight:800;cursor:pointer}
+body.zre-header-collapsed .session-header .driver-header,body.zre-header-collapsed .session-header .coach-controls,body.zre-header-collapsed #capture-sdk,body.zre-header-collapsed #capture-status,body.zre-header-collapsed #team-debug-toggle{display:none!important}
+body.zre-header-collapsed .session-header{min-height:35px}
+body.practice-session{background:var(--pr-bg);color:var(--pr-text)}
+body.practice-session .dashboard{background:linear-gradient(140deg,#1b2939,#182534);width:100%}
+body.practice-session .live-view{display:grid;grid-template-rows:minmax(0,1fr);min-width:0;min-height:0}
+body.practice-session .live-view>.live-telemetry,body.practice-session .live-view>.practice-boards,body.practice-session .live-view>.race-tools-grid{display:none!important}
+.practice-workspace{display:grid;grid-template-rows:minmax(64px,.78fr) minmax(0,4.35fr) minmax(118px,1.48fr);gap:6px;min-height:0;min-width:0;height:100%}
+.practice-stat-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;min-height:0}
+.practice-stat-row>div,.practice-map-panel,.practice-coach-panel,.pr-fuel-panel,.pr-pace-panel{border:1px solid var(--pr-line);background:var(--pr-panel);border-radius:6px;min-width:0;min-height:0;overflow:hidden}
+.practice-stat-row>div{padding:6px 9px;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.practice-stat-row small,.pr-fuel-values small{font-size:clamp(9px,.75vw,11px);font-weight:800;color:var(--pr-muted);letter-spacing:.04em}
+.practice-stat-row strong{font-size:clamp(19px,2.1vw,35px);line-height:1;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pr-delta[data-trend="loss"]{color:#ff998f}#pr-delta[data-trend="gain"]{color:#77e2b3}
+.practice-focus-row{display:grid;grid-template-columns:minmax(0,36fr) minmax(0,64fr);gap:6px;min-height:0;min-width:0}
+.practice-map-panel,.practice-coach-panel,.pr-fuel-panel,.pr-pace-panel{display:grid}
+.practice-map-panel{grid-template-rows:auto minmax(0,1fr) auto}.practice-coach-panel{grid-template-rows:auto minmax(0,1fr) auto}
+.practice-map-panel header,.practice-coach-panel header,.pr-fuel-panel header,.pr-pace-panel header{height:29px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 9px;border-bottom:1px solid var(--pr-line);min-width:0}
+.practice-map-panel header b,.practice-coach-panel header b,.pr-fuel-panel header b,.pr-pace-panel header b{font-size:11px;letter-spacing:.04em;white-space:nowrap}
+.practice-map-panel header span,.practice-coach-panel header span,.pr-fuel-panel header span,.pr-pace-panel header span{color:var(--pr-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.practice-map-stage{position:relative;display:grid;place-items:center;min-height:0;background:#203142}
+#pr-track-map{width:100%;height:100%;min-height:0;max-width:100%;padding:8px;overflow:visible}
+#pr-track-line{fill:none;stroke:#e5f2fd;stroke-width:1.5;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
+.pr-map-zone{cursor:pointer;outline:none}.pr-map-zone circle{fill:#5087ad;stroke:#d1e6f5;stroke-width:.5}.pr-map-zone[data-diagnosis="true"] circle{fill:#ffad69;stroke:#fff0d7}
+.pr-map-zone[data-selected="true"] circle{stroke:#fff;stroke-width:1.5}
+.pr-map-zone text{font-size:3.2px;fill:#fff;font-weight:900;paint-order:stroke;stroke:#142433;stroke-width:.65px;pointer-events:none}
+#pr-map-empty{position:absolute;text-align:center;padding:12px;max-width:290px;font-size:12px;color:var(--pr-muted);line-height:1.4}
+.practice-map-panel footer{display:flex;gap:12px;justify-content:center;padding:6px;font-size:10px;color:var(--pr-muted);border-top:1px solid var(--pr-line)}
+.pr-key{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}.pr-key-loss{background:#ffad69}.pr-key-info{background:#5087ad}
+.pr-corners{display:grid;grid-template-columns:repeat(var(--pr-cols,3),minmax(0,1fr));grid-template-rows:repeat(var(--pr-rows,4),minmax(0,1fr));grid-auto-flow:row;gap:4px;padding:5px;min-height:0;overflow:hidden}
+.pr-corner{display:flex;flex-direction:column;justify-content:center;align-items:stretch;text-align:left;gap:3px;background:#2b4156;color:var(--pr-text);border:1px solid #536c80;border-left:3px solid #699ec2;border-radius:4px;padding:5px 7px;min-width:0;min-height:0;cursor:pointer;font-family:inherit}
+.pr-corner[data-diagnosis="true"]{border-left-color:#f6b66e;background:#34465a}.pr-corner[data-selected="true"]{outline:2px solid #e2edf6;outline-offset:-2px}
+.pr-corner .pr-corner-top{display:flex;justify-content:space-between;gap:4px;min-width:0;align-items:center}
+.pr-corner strong{font-size:clamp(10px,.82vw,14px);white-space:nowrap}
+.pr-corner small{font-size:9px;color:#bcd0df;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pr-corner b{font-size:clamp(10px,.78vw,12px);line-height:1.15;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pr-corner em{font-style:normal;font-size:clamp(9px,.7vw,11px);color:#d7e1e9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pr-corner-hint{margin:0;padding:4px 9px;border-top:1px solid var(--pr-line);font-size:10px;color:var(--pr-muted);height:23px}
+.practice-bottom-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;min-height:0}
+.pr-fuel-panel{grid-template-rows:auto minmax(0,1fr) auto}.pr-fuel-values{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;gap:3px;padding:5px 9px}
+.pr-fuel-values div{min-width:0;display:flex;flex-direction:column;gap:5px}
+.pr-fuel-values strong{font-size:clamp(15px,1.5vw,24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.pr-fuel-panel p{margin:0;padding:5px 9px;border-top:1px solid var(--pr-line);color:var(--pr-muted);font-size:10px}
+.pr-pace-panel{grid-template-rows:auto minmax(0,1fr) auto}
+#pr-pace-svg{width:100%;height:100%;min-height:0;padding:4px 11px}#pr-pace-line{fill:none;stroke:#7cdbbd;stroke-width:2;stroke-linejoin:round}#pr-pace-dots circle{fill:#b4f3dc}
+.pr-pace-caption{display:flex;justify-content:space-between;padding:4px 10px;border-top:1px solid var(--pr-line);gap:12px;font-size:10px;color:var(--pr-muted)}
+.pr-corner-dialog{border:1px solid #6b8aa0;background:#26394d;color:#fff;border-radius:8px;padding:20px;width:min(560px,90vw);box-shadow:0 18px 60px #0008}
+.pr-corner-dialog::backdrop{background:#090f19bb}.pr-corner-dialog button{float:right;background:#38536a;border:1px solid #7690a4;color:white;padding:6px 12px;cursor:pointer}.pr-corner-dialog h2{font-size:24px}.pr-corner-dialog b{display:block;margin:10px 0}.pr-corner-dialog p{font-size:15px;line-height:1.5}.pr-corner-dialog small{color:var(--pr-muted)}
+@media(max-height:810px){.practice-workspace{grid-template-rows:minmax(62px,.8fr) minmax(0,4.3fr) minmax(111px,1.52fr)}.practice-stat-row>div{padding:4px 7px}.pr-corners{gap:3px;padding:4px}.pr-corner{gap:2px;padding:3px 5px}.pr-corner em{font-size:9px}.practice-map-panel header,.practice-coach-panel header,.pr-fuel-panel header,.pr-pace-panel header{height:25px}.dashboard-footer{font-size:9px}}
+@media(max-width:1150px){body.practice-session .dashboard{height:100dvh;display:grid}body.practice-session .live-view{display:grid}.practice-focus-row{grid-template-columns:35fr 65fr}.practice-stat-row small{font-size:9px}.practice-stat-row strong{font-size:18px}.practice-map-panel footer{font-size:9px}}
