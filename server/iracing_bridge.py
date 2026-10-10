@@ -674,6 +674,22 @@ class DashboardSource:
             coach = self.coach.payload(self.lap_text)
             payload["capabilities"] = {"coachControls": True}
             payload["sessionMode"] = session_coach_mode
+            quali=self.quali.snapshot()
+            payload["effectiveDashboard"]=quali["effectiveDashboard"]
+            payload["qualifying"]={**quali,"officialSessionType":session.get("SessionType"),
+                "sessionTime":session_time,"timeRemaining":number(self.get("SessionTimeRemain")),
+                "onTrack":on_track,"onPitRoad":on_pit_road,"inGarage":in_garage,
+                "bestPersonalSDK":number(self.get("LapBestLapTime")),
+                "deltaReferences":{key:self._quali_sdk_delta(key) for key in
+                    ("LapDeltaToBestLap","LapDeltaToOptimalLap","LapDeltaToSessionBestLap")},
+                "sectorBoundaries":self._sector_boundaries(),"sectorTimes":list(self.current_sector_times),
+                "lastSectors":list(self.last_completed_sectors),
+                "sectorSource":"ZRE_RECONSTRUCTED_FROM_SDK_SPLITS" if self.last_completed_sectors else "UNAVAILABLE",
+                "classPosition":player.get("pos") if self.quali.mode=="official" and player else None,
+                "fuelValue":fuel,
+                "fuelPerLap":(sum(self.fuel_per_lap)/len(self.fuel_per_lap)) if self.fuel_per_lap else None}
+            consumption=payload["qualifying"]["fuelPerLap"]
+            payload["qualifying"]["autonomyLaps"]=(round(fuel/consumption,1) if fuel is not None and consumption else None)
             payload["sessionType"] = session.get("SessionType")
             coach.update(source="ZRE_INFERRED",sessionIdentity=str(identity),referenceSessionType=session.get("SessionType"))
             payload["coach"] = coach
