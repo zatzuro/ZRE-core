@@ -103,7 +103,7 @@ class QualiRuns:
         gate = self.lap + 1 if self.lap is not None else 1
         run = {"runId": run_id, "officialSessionIdentity": self.identity,
                "kind": kind, "startedAt": datetime.now(timezone.utc).isoformat(),
-               "endedAt": None, "startLap": gate, "endLap": None,
+               "endedAt": None, "startLap": self.lap, "endLap": None,
                "status": "ACTIVE", "attempts": [], "bestValidLap": None,
                "gateLap": gate, "generation": self.generation}
         self.runs.append(run)
