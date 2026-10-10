@@ -148,7 +148,7 @@
    set('rv2-rival-name',effective?'#'+effective.carNumber+' · '+(effective.driverName||'SIN NOMBRE'):director.rival||'SIN RIVAL');
    set('rv2-rival-mode',pending!=null?'CAMBIANDO…':selected.selectionMode==='manual'?'MANUAL':'AUTO');
    set('rv2-rival-pos',effective?.classPosition!=null?'P'+effective.classPosition:'—');
-   set('rv2-rival-presence',obs.presence||selected.selectionState||'SIN DATO');
+   set('rv2-rival-presence',obs.onPitRoad===true&&obs.presence==='LIVE'?'EN BOXES':obs.presence==='STALE'?'AUSENTE / STALE':obs.presence==='LIVE'?'EN PISTA':selected.selectionState||'SIN DATO');
    set('rv2-rival-best',time(effective?.bestLapSeconds));
    set('rv2-rival-last',time(effective?.lastLapSeconds));
    set('rv2-rival-pace',time(selected.rivalPace));
@@ -160,7 +160,10 @@
    const age=obs.lastSeenAgo;
    set('rv2-rival-age',obs.presence==='STALE'?'ÚLTIMA OBS. HACE '+(good(age)?Math.round(age)+' s':'TIEMPO DESCONOCIDO'):
         obs.presence==='LIVE'?'OBSERVADO · SDK':selected.selectionState==='TEMPORARILY_UNAVAILABLE'?'MANUAL CONSERVADO · SIN DATOS':'SIN POSICIÓN OBSERVABLE');
-   set('rv2-rival-car',effective?.carModel||'—');
+   const nextPit=obs.nextPitEstimate;
+   const pitEstimate=nextPit?.fromLap!=null&&nextPit?.toLap!=null?
+     ' · PIT EST. V'+nextPit.fromLap+'–'+nextPit.toLap+' ('+(nextPit.confidence||'LOW')+')':'';
+   set('rv2-rival-car',(effective?.carModel||'—')+pitEstimate);
  }
  function pace(data){
    const race=data.raceDashboard||{},series=race.paceSeries||[],roles=race.roles||{},one=new Map(series.map(s=>[s.carIdx,s]));
