@@ -22,6 +22,8 @@ def packet(source, kind, identity, *, qualification=None):
     src = {**base, **source, "connected": True, "demo": True,
            "sessionMode": {"Practice": "practice", "Qualify": "qualifying", "Race": "race_engineer"}[kind],
            "sessionType": kind}
+    # The real live payload publishes analytics regardless of SDK session type.
+    src["practiceAnalytics"] = source.get("practiceAnalytics") or practice_fixture(8)["practiceAnalytics"]
     src["self"] = {**base["self"], **source.get("self", {}), "pit": "EN PISTA"}
     src["header"] = {**base["header"], "state": "QA SIMULADO", "track": "QA · NO SDK REAL"}
     src["teamContext"] = {**base.get("teamContext", {}), "autoMode": "driver"}
