@@ -449,7 +449,12 @@ class DashboardSource:
                                            self.local_user_id,self.local_driver_name,self.team_id,self.manual_team_car_number,self.team_car_number,
                                            local_car_active=local_active)
             self.local_user_id=context.local_user_id;self.local_driver_name=context.local_driver_name
-            self.setup_engineer.set_owner(resolve_setup_owner(context,driver_info,player_idx).payload())
+            resolved_owner=resolve_setup_owner(context,driver_info,player_idx).payload()
+            owner_driver=next((d for d in drivers if d.get("CarIdx")==context.car_idx and not d.get("IsSpectator")),None)
+            setup_location={"car":car_label(owner_driver) if owner_driver else None,
+                            "track":weekend.get("TrackDisplayName") or weekend.get("TrackName"),
+                            "layout":weekend.get("TrackConfigName") or "default"}
+            self.setup_engineer.set_owner(resolved_owner,setup_location)
             if context.team_id is not None:self.team_id=context.team_id
             if context.car_idx is not None:
                 if self.team_car_idx is not None and self.team_car_idx!=context.car_idx and self.team_car_number!=context.car_number:
