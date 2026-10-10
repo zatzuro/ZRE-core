@@ -119,12 +119,14 @@ function updateSelection(select,items,prefer){
  }
 }
 function comparison(q){
- const run=q.activeRun||{},arr=(run.attempts||[]).filter(a=>a.status==='VALID'&&a.sectorTimes?.length===q.sectorBoundaries?.length);
+ const runs=[...(q.previousRuns||[]),q.activeRun].filter(Boolean);
+ const arr=runs.flatMap(run=>(run.attempts||[]).map(a=>({...a,runLabel:run.runId})))
+  .filter(a=>a.status==='VALID'&&a.sectorTimes?.length===q.sectorBoundaries?.length);
  updateSelection($('q-compare-a'),arr,arr.at(-2)?.attemptId);
  updateSelection($('q-compare-b'),arr,arr.at(-1)?.attemptId);
  const a=arr.find(x=>x.attemptId===$('q-compare-a')?.value),b=arr.find(x=>x.attemptId===$('q-compare-b')?.value);
- if(!a||!b||a===b){put('q-comparison','Comparación no disponible: se requieren dos vueltas validadas, con sectores compatibles.');put('q-comparison-sectors','—');return}
- put('q-comparison','V'+a.sourceLap+' '+format(a.lapTime)+' vs V'+b.sourceLap+' '+format(b.lapTime)+' · Δ '+signed(b.lapTime-a.lapTime)+' · '+(a.sectorSource||'FUENTE DESCONOCIDA'));
+ if(!a||!b||a===b||a.sectorSource!==b.sectorSource){put('q-comparison','Comparación no disponible: se requieren dos vueltas validadas con sectores y fuentes compatibles.');put('q-comparison-sectors','—');return}
+ put('q-comparison','T '+a.runLabel+' V'+a.sourceLap+' '+format(a.lapTime)+' vs T '+b.runLabel+' V'+b.sourceLap+' '+format(b.lapTime)+' · Δ '+signed(b.lapTime-a.lapTime)+' · '+(a.sectorSource||'FUENTE DESCONOCIDA'));
  const sectors=a.sectorTimes.map((n,i)=>'S'+(i+1)+' '+signed(b.sectorTimes[i]-n));
  put('q-comparison-sectors',sectors.join('   |   '));
 }
