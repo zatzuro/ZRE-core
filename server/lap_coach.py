@@ -267,7 +267,7 @@ class LapCoach:
         by_corner={}
         extras=[]
         for rec in curve_recommendations:
-            match=re.search(r"\\bT(\\d+)\\b",str(rec.get("zone") or ""),re.I)
+            match=re.search(r"(?:\\bT|\\bCurva\\s+)(\\d+)\\b",str(rec.get("zone") or ""),re.I)
             if match:
                 by_corner.setdefault(int(match.group(1)),[]).append(rec)
             else:
