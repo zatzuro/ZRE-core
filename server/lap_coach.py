@@ -191,7 +191,7 @@ class LapCoach:
         return f'{self.location_label(zone,avg_pct,phase)} · {count}/{total} vueltas · +{average:.2f}s',f'{title}. {tip}',confidence
     def summary_priorities(self,limit=3):
         ranked=self._aggregate_advice(self.recent_valid_advice,limit=limit)
-        return [{'zone':self.location_label(zone,avg_pct,phase),'title':title,'confidence':confidence,'occurrences':count,'sampleLaps':total,'repeatRatio':round(ratio,3),'advice':f'{tip} · {count}/{total} vueltas · confianza {confidence} · pérdida media +{avg_loss:.2f}s'} for zone,avg_loss,title,tip,count,avg_pct,phase,confidence,ratio,total in ranked]
+        return [{'zone':self.location_label(zone,avg_pct,phase),'title':title,'confidence':confidence,'occurrences':count,'sampleLaps':total,'repeatRatio':round(ratio,3),'lossSeconds':round(avg_loss,3),'advice':f'{tip} · {count}/{total} vueltas · confianza {confidence} · pérdida media +{avg_loss:.2f}s'} for zone,avg_loss,title,tip,count,avg_pct,phase,confidence,ratio,total in ranked]
     def engineering_snapshot(self):
         """Compact stint/zone contract consumed by Setup Engineer."""
         laps=list(self.stint_segments);valid_laps=len(laps);zones=[]
@@ -283,14 +283,14 @@ class LapCoach:
                 "advice":entry.get("advice") if entry else "Completa más vueltas comparables para analizar esta curva.",
                 "confidence":entry.get("confidence") if entry else None,
                 "occurrences":entry.get("occurrences") if entry else None,
-                "lossSeconds":None})
+                "lossSeconds":entry.get("lossSeconds") if entry else None})
         for entries in by_corner.values():
             extras.extend(entries)
         for i,entry in enumerate(extras):
             all_corners.append({"id":f"zone-{i+1}","zone":entry.get("zone") or f"TRAMO {i+1}",
                 "pct":None,"state":"diagnosis","title":entry.get("title"),
                 "advice":entry.get("advice"),"confidence":entry.get("confidence"),
-                "occurrences":entry.get("occurrences"),"lossSeconds":None})
+                "occurrences":entry.get("occurrences"),"lossSeconds":entry.get("lossSeconds")})
         return {'reference':'ÓPTIMA SESIÓN','bestLap':format_lap(best),'optimalLap':format_lap(optimal),'potential':f'{max(0,best-optimal):.3f}' if best and optimal else '—','lapMessage':f"{primary['zone']}: {primary['advice']}" if primary else '','primary':primary,'secondary':priority(self.advice[1]) if len(self.advice)>1 else None,'curveRecommendations':curve_recommendations,'allCorners':all_corners,'pattern':pattern,'patternAdvice':pattern_advice,'patternConfidence':pattern_confidence,'validPatternLaps':len(self.recent_valid_advice),'diagnostics':self.last_diagnostics,'trackMap':self._track_map_payload()}
 
 def _metric(metrics,index):return metrics[index] if len(metrics)>index else None
