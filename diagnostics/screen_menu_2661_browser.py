@@ -16,6 +16,8 @@ from diagnostics.quali_visual_266 import fixture as quali_fixture
 from diagnostics.race_v2_visual_266 import fixture as race_fixture
 from server.iracing_bridge import DashboardSource
 
+OUT = ROOT / "diagnostics" / "screen-menu-2661-screenshots"
+OUT.mkdir(exist_ok=True)
 base = DashboardSource(force_demo=True).demo_payload()
 
 def packet(source, kind, identity, *, qualification=None):
@@ -156,6 +158,7 @@ window.WebSocket=class {
                     }""")
                     assert geometry["menuRight"] <= geometry["toggleLeft"] + 3, geometry
                     assert geometry["width"] <= geometry["viewport"] + 3, geometry
+                    page.screenshot(path=str(OUT / f"screen-{width}-{scale}.png"))
             assert not errors, errors
             print("PASS screen menu 2.6.6.1: Practice → simulated Quali → Practice → same Quali run,"
                   " AUTO, official Quali, Race, SPOTTER, 3 viewports at 100/110%")
