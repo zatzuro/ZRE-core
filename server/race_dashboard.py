@@ -159,9 +159,8 @@ def race_view(*, session_identity, own_idx, class_rows, results, cars, best_laps
     fm = (race_plan or {}).get("fuelModel") or {}
     observed = numeric(fm.get("observed_lpl"), positive=True)
     target = numeric(fm.get("strategy_lpl"), positive=True)
-    if observed is None:
-        valid_use = [v for v in (numeric(v, positive=True) for v in fuel_history or []) if v is not None]
-        observed = sum(valid_use[-5:]) / len(valid_use[-5:]) if len(valid_use) >= 3 else None
+    # Only the existing FuelModel GREEN_FULL classifier may establish an
+    # observed race-consumption value. Raw SDK fuel deltas include pit/caution.
     available_fuel = numeric(fuel)
     autonomy = available_fuel / observed if available_fuel is not None and observed else None
     return {
@@ -184,6 +183,7 @@ def race_view(*, session_identity, own_idx, class_rows, results, cars, best_laps
                  "deviationLpl": round(observed-target, 4) if observed is not None and target is not None else None,
                  "autonomyLaps": round(autonomy, 2) if autonomy is not None else None,
                  "source": fm.get("source") or ("REAL LOCAL" if available_fuel is not None else "SIN DATO"),
-                 "sampleCount": len(fuel_history or [])},
+                 "sampleCount": fm.get("green_samples") if observed is not None else 0,
+                 "historicalSamples":fm.get("historical_samples")},
         "source": "RESULTS_POSITIONS / SDK_DYNAMIC / SESSION_INTELLIGENCE",
     }
