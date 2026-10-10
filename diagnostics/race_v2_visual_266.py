@@ -136,6 +136,7 @@ def main():
                           document.body.classList.remove('race-session','practice-session','quali-session');
                           document.body.classList.add('race-v2-session');
                           document.getElementById('race-v2-view').hidden=false;
+                          document.getElementById('rv2-emphasis-control').hidden=false;
                           for(let id of ['live-view','quali-view','spotter-view','pit-view','summary-view'])
                             document.getElementById(id).hidden=true;
                           window.ZRERaceV2.render(data);
@@ -153,11 +154,21 @@ def main():
                         assert page.locator("#rv2-pace-series .rv2-pace-series-path").count()==4
                         assert page.locator("#race-v2-view").is_visible()
                         assert page.get_by_text("INGENIERO DE CARRERA").count()==0
+                        assert page.locator("#rv2-add-fuel").inner_text()=="+80.5 L"
+                        assert page.locator("#rv2-target").inner_text()=="V28"
+                        assert page.locator("#rv2-stops-left").inner_text()=="2"
+                        assert page.locator("#rv2-plan-autonomy").inner_text()=="≈14.7 V"
+                        assert page.locator("#rv2-window-track").is_visible()
                         if n==18:
                             page.screenshot(path=str(OUT/f"race-{w}x{h}-4roles.png"),full_page=True)
                         page.locator("#rv2-standings-expand").click()
                         assert page.locator("#rv2-standing-all .rv2-standing-row").count()==n
                         page.locator("#rv2-standings-dialog form button").click()
+                        if n==18:
+                            page.locator("#rv2-plan-expand").click()
+                            assert page.locator("#race-plan-dialog").evaluate("(node)=>node.open")
+                            assert page.locator("#race-plan-sim-now").count()==1
+                            page.locator("#race-plan-dialog button[aria-label='Cerrar']").click()
                     # Important: same CarIdx serves both AHEAD and strategic RIVAL.
                     shared=fixture(18,duplicate=True)
                     page.evaluate("data=>window.ZRERaceV2.render(data)",shared)
@@ -169,6 +180,7 @@ def main():
                     page.evaluate("data=>window.ZRERaceV2.render(data)",limited)
                     assert page.locator("#rv2-pace-series .rv2-pace-series-path").count()==2
                     assert page.locator("#rv2-plan-status").inner_text()=="PLAN NO DISPONIBLE"
+                    assert page.locator("#rv2-window-track").is_hidden()
                     # Search by name/number/class position, select through standings.
                     page.locator("#rv2-rival-search").fill("QA Pilot 2")
                     choices=page.locator("#rv2-rival-select option")
@@ -188,6 +200,15 @@ def main():
                     assert not m["bodyScroll"] and not m["horizontalScroll"],(w,h,"expanded",m)
                     page.evaluate("data=>window.ZRERaceV2.render(data)",fixture(18,pit=True,endurance=True))
                     assert page.locator("#rv2-plan-status").inner_text()=="EN BOXES"
+                    pit_fixture=fixture(18,pit=True,endurance=True)
+                    pit_fixture["raceDashboard"]["rival"]["observation"]={"presence":"LIVE","onPitRoad":True,"lastSeenAgo":0}
+                    page.evaluate("data=>window.ZRERaceV2.render(data)",pit_fixture)
+                    assert page.locator("#rv2-rival-presence").inner_text()=="EN BOXES"
+                    for emphasis in ("sprint","endurance","auto"):
+                        page.locator("#rv2-emphasis-select").select_option(emphasis)
+                        assert page.evaluate("document.body.dataset.raceEmphasis")==emphasis
+                        m=measure(page)
+                        assert not m["bodyScroll"] and not m["horizontalScroll"],(w,h,emphasis,m)
                 assert not errors,errors
                 browser.close()
                 print("PASS Carrera V2: 1366/1920/2560, four series, shared car, gaps, search/selection, plan and folded controls")
