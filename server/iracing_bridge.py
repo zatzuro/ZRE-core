@@ -397,6 +397,7 @@ class DashboardSource:
 
     def sample(self,force_driver=False,force_spotter=False):
         if self.force_demo:
+            self.setup_engineer.set_owner(None)
             return self.demo_payload('driver' if force_driver else 'spotter' if force_spotter else None)
         if self.connect():
             try:
@@ -404,7 +405,9 @@ class DashboardSource:
                 self.session_state.remember_payload(payload)
                 return payload
             except Exception as exc:
+                self.setup_engineer.set_owner(None)
                 return self.disconnected_payload(f"Leyendo sesión: {exc}")
+        self.setup_engineer.set_owner(None)
         return self.disconnected_payload("Esperando a iRacing SDK")
 
     def connect(self):
