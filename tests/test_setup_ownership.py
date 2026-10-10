@@ -29,6 +29,11 @@ class OwnershipTests(unittest.TestCase):
         self.assertTrue(owner["authorized"])
         self.assertEqual(owner["scope"],"own")
 
+    def test_same_verified_local_driver_in_garage_retains_ownership(self):
+        owner=resolve_setup_owner(context(local_driving=False),roster(),8)
+        self.assertTrue(owner.authorized)
+        self.assertEqual(owner.scope,"own")
+
     def test_forced_driver_does_not_authorize_rival(self):
         owner=resolve_setup_owner(context(local_driving=False),roster(selected_id=40,selected_team=44),8)
         self.assertFalse(owner.authorized)
