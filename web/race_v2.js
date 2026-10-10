@@ -91,13 +91,13 @@
      const target=el('rv2-standing-all');
      if(target){const position=target.scrollTop;target.replaceChildren(...rows.map(x=>buildStanding(x,rivalIdx)));target.scrollTop=position;}
    }
-   set('rv2-standing-summary',rows.length+' COCHES · '+(race.ownPositionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK OFICIAL':'FALLBACK IDENTIFICADO'));
+   set('rv2-standing-summary',data.connected?(rows.length+' COCHES · '+(race.ownPositionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK OFICIAL':'FALLBACK IDENTIFICADO')):'ÚLTIMA CLASIFICACIÓN · SDK DESCONECTADO');
    listCandidates();
  }
  function liveMetrics(data){
    const race=data.raceDashboard||{},phys=race.physical||{},fuel=race.fuel||{},you=(race.paceSeries||[]).find(s=>s.carIdx===race.ownCarIdx);
    set('rv2-position',race.ownClassPosition!=null?'P'+race.ownClassPosition:'—');
-   set('rv2-position-source',race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE':'FALLBACK / SIN DATO');
+   set('rv2-position-source',!data.connected?'ÚLTIMA CLASE · STALE':race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE':'FALLBACK / SIN DATO');
    for(const side of ['ahead','behind']){
      const row=phys[side];
      set('rv2-gap-'+side,row?.gapLabel||'SIN DATO');
@@ -105,13 +105,13 @@
    }
    set('rv2-last-lap',data.self?.lastLap||'—');
    set('rv2-my-pace',time(you?.recentAverageSeconds));
-   set('rv2-my-count',you?.representative?you.sampleCount+' V. COMPARABLES':'MUESTRAS INSUFICIENTES · '+(you?.sampleCount||0)+'/3');
+   set('rv2-my-count',!data.connected?'HISTÓRICO · SDK SIN SEÑAL':you?.representative?you.sampleCount+' V. COMPARABLES':'MUESTRAS INSUFICIENTES · '+(you?.sampleCount||0)+'/3');
    set('rv2-fuel',unit(fuel.currentLiters,' L',1));
    set('rv2-fuel-source',data.self?.fuelSource||fuel.source||'SIN DATO');
    set('rv2-consumption',unit(fuel.observedLpl,' L/v',2));
    set('rv2-use-source',fuel.sampleCount?fuel.sampleCount+' LECTURAS':'SIN MUESTRAS');
    const remain=data.sessionIntelligence?.session?.observed?.timeRemain;
-   set('rv2-remaining',good(remain)&&remain>=0?Math.floor(remain/3600)+':'+String(Math.floor((remain%3600)/60)).padStart(2,'0')+':'+String(Math.floor(remain%60)).padStart(2,'0'):(data.teamContext?.remainingTime||'—'));
+   set('rv2-remaining',!data.connected?'SIN SEÑAL':good(remain)&&remain>=0?Math.floor(remain/3600)+':'+String(Math.floor((remain%3600)/60)).padStart(2,'0')+':'+String(Math.floor(remain%60)).padStart(2,'0'):(data.teamContext?.remainingTime||'—'));
  }
  function plan(data){
    const v=data.racePlanVNext||{},plan=v.currentPlan||v.plan||{},state=v.raceState||{},fuel=v.fuelModel||{},window=plan.window||{},stops=plan.stops||[],next=stops[0]||{};
