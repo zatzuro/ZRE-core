@@ -228,6 +228,7 @@ class SetupEngineer:
         self.setup_source_preference = "auto"
         self.status = "Esperando stint"
         self.owner = {"authorized": False, "reason": "Identidad aún no confirmada"}
+        self.owner_location = {}
         recovered = self.store.latest_stint()
         if recovered:
             self.last_saved = recovered
@@ -239,8 +240,9 @@ class SetupEngineer:
                 self.last_report_path = None
                 self.status = f"Último stint recuperado · reporte pendiente"
 
-    def set_owner(self, owner):
+    def set_owner(self, owner, location=None):
         self.owner = dict(owner or {"authorized": False, "reason": "SDK desconectado"})
+        self.owner_location = dict(location or {})
         if self.current is not None:
             original = (self.current.get("session") or {}).get("setupOwner")
             # Disallow a stale/mismatched stint reaching the disk on role/car changes.
@@ -268,6 +270,11 @@ class SetupEngineer:
             self.status="No se encontraron parámetros de setup en el HTML"
             return None
         snapshot["ownership"] = dict(self.owner)
+        location=self.owner_location
+        if not all(location.get(key) for key in ("car","track","layout")):
+            self.status="Importación bloqueada · coche o circuito sin confirmar"
+            return None
+        self.store.save_setup(location["car"],location["track"],location["layout"],snapshot)
         self.imported_setup=snapshot
         self.status=f"Setup HTML importado · {filename or snapshot.get('fingerprint')}"
         return snapshot
@@ -309,7 +316,7 @@ class SetupEngineer:
             "startedAt": datetime.now().isoformat(timespec="seconds"),
             "session": dict(session or {}),
             "conditions": dict(conditions or {}),
-            "setup": deepcopy(setup_snapshot or {}),
+            "setup": {**deepcopy(setup_snapshot or {}), "ownership": dict(self.owner)},
             "fuelStart": fuel_start,
             "startSessionTime": session_time,
             "tiresStart": tires_start or {},
