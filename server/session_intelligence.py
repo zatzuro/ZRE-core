@@ -179,6 +179,13 @@ def build_intelligence(get,weekend,session,cars,results,player_idx,player_class_
                                 'recoverySessionTime':now,'source':'ZRE_INFERRED','method':'ANOMALOUS_PAIR_RECOVERY','confidence':'MEDIUM','status':'PROBABLE',
                                 'abnormalLapExcess':sum(max(0,x['time']-cycle['baseline']) for x in cycle['samples'])},baseline)
                         state['cycle']=None
+                reason=("CAUTION_OR_CLASS_SLOWDOWN" if blocked else "PIT_ROAD" if pit
+                        else "NEAR_OBSERVED_PIT" if nearby else "LAP_TIME_ANOMALY" if anomaly
+                        else "ZRE_COMPARABLE_FILTER")
+                sample.update({"driverName":None if car.get("identityAmbiguous") else car.get("UserName"),
+                    "carIdx":idx,"onPitRoad":pit,"caution":caution,
+                    "comparable":reason=="ZRE_COMPARABLE_FILTER",
+                    "comparabilityReason":reason,"observedAt":now})
                 if not anomaly and not blocked and not pit and not nearby:
                     clean.append(sample);del clean[:-12]
             if current_last:state['time']=current_last
