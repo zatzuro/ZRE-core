@@ -211,7 +211,7 @@ def build_kpi_library(get,payload,*,role,car_idx=None,car=None,result=None,drive
 
     last_lap=positive(get("LapLastLapTime")) if role=="driver" else (positive(at(get("CarIdxLastLapTime",[]) or [],car_idx)) or positive(result.get("LastTime")))
     best_lap=positive(get("LapBestLapTime")) if role=="driver" else (positive(at(get("CarIdxBestLapTime",[]) or [],car_idx)) or positive(result.get("FastestTime")))
-    delta=finite(get("LapDeltaToSessionBestLap")) if role=="driver" else None
+    delta=finite(get("LapDeltaToSessionBestLap")) if role=="driver" and get("LapDeltaToSessionBestLap_OK") is True else None
     projected=(best_lap+delta) if best_lap is not None and delta is not None else None
     add(kpi("lap.delta.current","Delta vuelta actual","VUELTA",delta,fmt_num(delta,3," s"),"s",source="SDK:LapDeltaToSessionBestLap",state=STATE_ESTIMATED if delta is not None else STATE_WAITING))
     add(kpi("lap.last","Última vuelta","VUELTA",last_lap,fmt_lap(last_lap),"s",source="SDK/RESULTS"))
