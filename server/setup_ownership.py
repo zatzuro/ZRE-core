@@ -35,9 +35,10 @@ def resolve_setup_owner(context, driver_info, player_idx):
     team = selected.get("TeamID")
     team_key = str(team) if team not in (None, "", 0) else None
     user_key = str(local_user)
+    # PlayerCarIdx + a roster UserID matching the separately established LOCAL
+    # user is sufficient even in garage/pit (IsOnTrack / DriverCarIdx may be off).
+    # A visually selected opponent alone does not match the local account ID.
     if (idx == valid_index(player_idx)
-            and (getattr(context, "local_driving", False)
-                 or valid_index(info.get("DriverCarIdx")) == idx)
             and str(selected.get("UserID")) == user_key
             and getattr(context, "current_user_id", None) is not None
             and str(context.current_user_id) == user_key):
