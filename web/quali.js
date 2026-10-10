@@ -21,7 +21,7 @@ function mode(data,garage){
   put('q-kind',q.qualifyingMode==='official'?'OFICIAL':q.qualifyingMode==='simulated'?'SIMULADA':'NO ACTIVA');
   put('q-run-id',run.runId?'TANDA '+run.runId:'SIN TANDA');
   put('q-session-source',q.officialSessionType?'iRacing '+q.officialSessionType:'SDK NO DISPONIBLE');
-  put('q-lap-state',q.inGarage?'GARAGE':q.onPitRoad?'PIT LANE':q.onTrack?'EN PISTA':'SIN POSICIÓN CONFIRMADA');
+  put('q-lap-state',q.inGarage?'GARAGE':q.onPitRoad?'PIT LANE':q.activeAttempt?.status|| (q.onTrack?'EN PISTA':'SIN POSICIÓN CONFIRMADA'));
   $('quali-view')?.classList.toggle('q-garage-active',Boolean(garage));
   if($('q-garage'))$('q-garage').hidden=!garage;
 }
