@@ -58,6 +58,23 @@ class OwnershipTests(unittest.TestCase):
         rival={**teammate,"car_idx":9}
         self.assertFalse(same_confirmed_owner(own,rival))
 
+    def test_verified_handoff_persists_outgoing_driver_without_rebinding_setup(self):
+        with tempfile.TemporaryDirectory() as root:
+            engineer=SetupEngineer(root)
+            own=resolve_setup_owner(context(),roster(),8).payload()
+            incoming=resolve_setup_owner(context(local_driving=False,current_user_id=20,auto_mode="spotter"),
+                                         roster(selected_id=20,local_spectator=True),8).payload()
+            engineer.set_owner(own)
+            engineer.start_stint({"car":"McLaren","track":"Spa","layout":"GP","driver":"Local"},
+                                 snapshot_from_sdk({"Wing":8}))
+            engineer.set_owner(incoming)
+            saved=engineer.finish_stint({"validLaps":2,"bestLap":90.2})
+            self.assertIsNotNone(saved)
+            self.assertEqual(saved["session"]["driver"],"Local")
+            self.assertEqual(saved["session"]["setupOwner"]["scope"],"own")
+            self.assertEqual(saved["setup"]["ownership"]["driver_user_id"],"10")
+            self.assertTrue(engineer.last_report_path.exists())
+
     def test_no_setup_writes_on_unknown_or_rival(self):
         with tempfile.TemporaryDirectory() as root:
             engineer=SetupEngineer(root)
