@@ -1526,6 +1526,7 @@ def installed_version():
 async def close_session_journal(app):
     source=app["source"]
     source.finalize_setup_stint_before_reset("shutdown")
+    source.quali.close_session("shutdown")
     await asyncio.to_thread(source.recorder.close)
 
 async def version_status(request):
