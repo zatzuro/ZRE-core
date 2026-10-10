@@ -1462,7 +1462,20 @@ class DashboardSource:
         self.race_engineer_audio=[]
         if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
         self.session_state.connected=False;payload=self.session_state.preserved_payload()
-        if payload is None:payload=self.demo_payload()
+        if payload is None:
+            # No prior SDK observation: do not disguise demo car positions,
+            # fuel, Coach recommendations or lap times as live production data.
+            payload=self.demo_payload()
+            payload.update(sessionType="UNKNOWN",sessionMode="unknown",
+                relative=[],standing=[],standingAll=[],raceDirector={},
+                raceDashboard=None,racePlanVNext={"available":False},
+                sessionIntelligence={},enduranceStrategy={},strategy={},
+                coach={},lastLapSummary=None)
+            payload["header"]={"car":"—","track":"—","driver":"—",
+                               "position":"P—","lap":"—","state":message.upper()}
+            payload["self"]={"fuel":"—","fuelValue":None,"fuelSource":"SIN DATO",
+                "lastUse":"—","lastLap":"—","bestLap":"—","laps":[],
+                "wear":{"FL":"—","FR":"—","RL":"—","RR":"—"},"pit":"—"}
         payload["connected"]=False;payload["demo"]=False;payload["header"]["state"]=message.upper()
         # Keep positions for continuity, but never present an old roster name
         # as the current driver while the SDK is disconnected.
@@ -1473,6 +1486,23 @@ class DashboardSource:
         for row in ((payload.get('sessionIntelligence') or {}).get('competitors') or {}).get('observed') or []:
             row.update(presence='STALE',lapDistPct=None,relativeLapFraction=None,gapEvidence=None,rejoinProjection=None,sdkDisconnected=True)
         payload['rivalStrategy']={'available':False,'primary':None,'source':'ZRE_INFERRED','reason':'SDK desconectado'}
+        if payload.get("raceDashboard"):
+            race=payload["raceDashboard"]
+            race["stale"]=True
+            race["physical"]={"ahead":None,"behind":None,"source":"SDK_DISCONNECTED"}
+            for row in race.get("classStandings") or []:
+                row["presence"]="STALE"
+                row["lastSeenAgo"]=None
+            for series in race.get("paceSeries") or []:
+                series["observationState"]="STALE"
+            rival=race.get("rival") or {}
+            if isinstance(rival.get("observation"),dict):
+                rival["observation"]["presence"]="STALE"
+            if isinstance(race.get("fuel"),dict):
+                race["fuel"]["currentLiters"]=None
+                race["fuel"]["source"]="STALE · SDK DESCONECTADO"
+            if payload.get("racePlanVNext"):
+                payload["racePlanVNext"]={"available":False,"source":"SDK_DISCONNECTED"}
         library=payload.get('kpiLibrary') or {}
         for item in library.get('items',[]):
             if item.get('available'):
