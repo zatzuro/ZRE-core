@@ -103,6 +103,42 @@ class QualiRunTests(unittest.TestCase):
         self.assertEqual(len(self.q.runs),1)
         self.assertEqual(self.q.runs[0]["officialSessionIdentity"],ID1)
 
+    def test_incomplete_attempt_preserved_on_manual_exit(self):
+        self.q.observe(ID1,"Practice",3,.2,120,on_track=True)
+        self.q.command("simulate")
+        self.q.observe(ID1,"Practice",7,.4,175,on_track=True)
+        self.q.command("training")
+        attempts=self.q.runs[0]["attempts"]
+        self.assertEqual(len(attempts),1)
+        self.assertEqual(attempts[0]["status"],"INCOMPLETE")
+        self.assertEqual(attempts[0]["sourceLap"],7)
+
+    def test_active_attempt_states_are_provisional(self):
+        self.q.observe(ID1,"Practice",3,.2,120,on_track=True)
+        self.q.command("simulate")
+        self.assertEqual(self.q.snapshot()["activeAttempt"]["status"],"OUT LAP")
+        self.q.observe(ID1,"Practice",5,.2,200,on_track=True)
+        self.assertEqual(self.q.snapshot()["activeAttempt"]["status"],"FLYING")
+        self.q.observe(ID1,"Practice",5,.8,220,on_track=True,on_pit=True)
+        self.assertEqual(self.q.snapshot()["activeAttempt"]["status"],"IN LAP")
+        self.assertEqual(self.q.current["attempts"],[])
+
+    def test_invalid_requires_explicit_sdk_evidence(self):
+        self.q.command("simulate")
+        result=self.q.note_lap(5,92,clean=False,sdk_invalid=True)
+        self.assertEqual(result["status"],"INVALID")
+        self.assertIsNone(self.q.current["bestValidLap"])
+
+    def test_session_transition_never_attributed_to_incoming_lap(self):
+        self.q.observe(ID1,"Practice",7,.5,230,on_track=True)
+        self.q.command("simulate")
+        self.q.observe(ID1,"Practice",8,.4,251,on_track=True)
+        self.q.observe(ID2,"Qualify",1,.1,12,on_track=True)
+        closed=self.q.runs[0]
+        self.assertEqual(closed["endLap"],8)
+        self.assertEqual(closed["attempts"],[])
+        self.assertEqual(self.q.current["startLap"],1)
+
     def test_official_session_after_manual_starts_distinct_official_run(self):
         self.q.command("simulate")
         self.q.observe(ID2,"Qualify",1,.1,12)
