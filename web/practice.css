@@ -62,3 +62,14 @@ body.practice-session .live-view>.live-telemetry,body.practice-session .live-vie
 .pr-corner[data-loss="observed"]{border-left-color:#f6b66e}
 .pr-map-zone[data-loss="significant"] circle{fill:#f4786f;stroke:#ffdfd7}
 .pr-map-zone[data-loss="observed"] circle{fill:#f4b874;stroke:#fff0dc}
+
+/* ZRE 2.6.6.1: explicit visual workspace choice; never changes the official SDK session. */
+#screen-mode-control{display:flex;align-items:center;gap:7px;min-width:0;margin-right:auto;color:#deecf5;font-size:10px;font-weight:800;white-space:nowrap}
+#screen-mode-control label{font-size:10px;letter-spacing:.05em}
+#screen-mode-select{min-width:146px;max-width:170px;background:#2b455b;color:#f5faff;border:1px solid #829fb2;border-radius:5px;padding:5px 8px;font-size:11px;font-weight:850;cursor:pointer}
+#screen-mode-select:focus-visible{outline:2px solid #75d9ee;outline-offset:2px}
+#screen-mode-select option:disabled{color:#90a3b1}
+#screen-mode-context{display:block;max-width:310px;overflow:hidden;text-overflow:ellipsis;color:#bad2e0;font-size:10px;font-weight:700;white-space:nowrap}
+#screen-mode-control[hidden],#quali-mode-control[hidden],#quali-new-run[hidden],#rv2-emphasis-control[hidden]{display:none!important}
+@media(max-width:1500px){#screen-mode-context{max-width:220px}}
+@media(max-width:1050px){#screen-mode-control{flex-wrap:wrap;row-gap:2px}#screen-mode-context{flex-basis:100%;max-width:250px;font-size:9px}}
