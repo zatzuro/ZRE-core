@@ -40,6 +40,7 @@ class AssetAndUpdaterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             source = bridge.DashboardSource(force_demo=True)
             source.setup_engineer = SetupEngineer(folder)
+            source.setup_engineer.set_owner({"authorized":True,"scope":"own","car_idx":8,"team_id":"99","driver_user_id":"10","reason":"SDK test verified"})
             source.stint_active = True
             source.last_fuel = 45.0
             source.last_session_time = 200.0
