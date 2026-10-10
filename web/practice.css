@@ -1,8 +1,10 @@
 /* ZRE practice workspace - independent of archived Screen Builder.
    Existing localStorage builder documents and original source remain untouched. */
 :root{--pr-bg:#192635;--pr-panel:#243649;--pr-line:#41556a;--pr-muted:#c0d1df;--pr-text:#f5f9ff}
-.dashboard{max-width:none;grid-template-rows:auto auto minmax(0,1fr) auto;gap:5px;padding:7px 10px 5px}
-.session-header{gap:10px;min-height:47px;padding-bottom:4px}.session-info strong{font-size:20px}
+.dashboard{grid-template-rows:auto auto minmax(0,1fr) auto}
+body.practice-session .dashboard{max-width:none;gap:5px;padding:7px 10px 5px}
+body.practice-session .session-header{gap:10px;min-height:47px;padding-bottom:4px}
+body.practice-session .session-info strong{font-size:20px}
 .screen-nav{display:flex;align-items:center;justify-content:flex-end;min-height:27px;gap:8px;position:relative;z-index:5}
 #header-collapse-toggle{border:1px solid var(--pr-line);background:#263a4c;color:var(--pr-text);border-radius:4px;padding:5px 10px;font-size:10px;font-weight:800;cursor:pointer}
 body.zre-header-collapsed .session-header .driver-header,body.zre-header-collapsed .session-header .coach-controls,body.zre-header-collapsed #capture-sdk,body.zre-header-collapsed #capture-status,body.zre-header-collapsed #team-debug-toggle{display:none!important}
