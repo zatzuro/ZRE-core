@@ -1340,7 +1340,7 @@ class DashboardSource:
         elif sectors and len(sectors)!=len(self._sector_boundaries()):
             sectors=[]
         prior_best=self.personal_session_best
-        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid"))})
+        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid")),"sessionTime":number(self.get("SessionTime")),"driverName":self.local_driver_name,"source":"SDK_OBSERVED"})
         self.lap_history=self.lap_history[-10:]
         for index,value in enumerate(sectors if pending.get("valid") else []):
             while index>=len(self.best_sectors):self.best_sectors.append(None)
