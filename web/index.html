@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="zre-build" content="2.6.6">
+  <meta name="zre-build" content="2.6.6.1">
   <title>ZRE Core · iRacing Team Engineer</title>
-  <link rel="stylesheet" href="/static/style.css?v=2.6.6">
-  <link rel="stylesheet" href="/static/practice.css?v=2.6.6">
-  <link rel="stylesheet" href="/static/quali.css?v=2.6.6">
-  <link rel="stylesheet" href="/static/race_v2.css?v=2.6.6">
-  <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.6">
+  <link rel="stylesheet" href="/static/style.css?v=2.6.6.1">
+  <link rel="stylesheet" href="/static/practice.css?v=2.6.6.1">
+  <link rel="stylesheet" href="/static/quali.css?v=2.6.6.1">
+  <link rel="stylesheet" href="/static/race_v2.css?v=2.6.6.1">
+  <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.6.1">
 </head>
 <body data-view="live">
 <main class="dashboard">
   <header class="session-header">
-    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.6.6</span><span id="runtime-build-status" class="build">Runtime pendiente de verificación</span></div>
+    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.6.6.1</span><span id="runtime-build-status" class="build">Runtime pendiente de verificación</span></div>
     <div class="session-info"><strong id="car">CONECTANDO</strong><span id="track">iRacing Dashboard</span></div>
     <div class="driver-header"><span>PILOTO</span><strong id="header-driver">—</strong></div>
     <div class="driver-header compact"><span>POS</span><strong id="header-position">P—</strong></div>
@@ -28,7 +28,17 @@
     <div class="state-stack"><span id="view-badge" class="view-badge">PISTA</span><div class="session-state"><span id="status-dot"></span><strong id="state">INICIANDO</strong></div></div>
   </header>
 
-  <nav id="screen-nav" class="screen-nav" aria-label="Pantallas personalizadas">
+  <nav id="screen-nav" class="screen-nav" aria-label="Navegación y herramientas de pantalla">
+    <div id="screen-mode-control" class="screen-mode-control">
+      <label for="screen-mode-select">PANTALLA</label>
+      <select id="screen-mode-select" aria-label="Pantalla visual de ZRE">
+        <option value="auto">AUTO · SESIÓN</option>
+        <option value="practice">PRÁCTICA</option>
+        <option value="quali">QUALI</option>
+        <option value="race">CARRERA</option>
+      </select>
+      <span id="screen-mode-context" role="status" aria-live="polite">ESPERANDO SESIÓN iRacing</span>
+    </div>
     <label id="quali-mode-control" hidden>SESIÓN ZRE<select id="quali-mode-select"><option value="training">ENTRENAMIENTO</option><option value="simulate">QUALI SIMULADA</option></select></label>
     <button id="quali-new-run" type="button" hidden>NUEVA TANDA</button>
     <label id="rv2-emphasis-control" hidden>ÉNFASIS CARRERA<select id="rv2-emphasis-select" aria-label="Énfasis visual sin cambiar la sesión"><option value="auto">AUTO</option><option value="sprint">SPRINT</option><option value="endurance">ENDURANCE</option></select></label>
@@ -363,12 +373,12 @@
 
   <dialog id="pr-corner-dialog" class="pr-corner-dialog"><form method="dialog"><button aria-label="Cerrar detalle" type="submit">CERRAR ×</button><h2 id="pr-detail-zone">—</h2><b id="pr-detail-title">—</b><p id="pr-detail-advice">—</p><small id="pr-detail-confidence">—</small></form></dialog>
   <aside id="debug-panel" class="debug-panel" hidden><div><strong>COACH DEBUG</strong><span>?debug=1</span></div><pre id="debug-content">Esperando telemetría…</pre></aside>
-  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.6.6</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
+  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.6.6.1</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
 </main>
-<script src="/static/practice.js?v=2.6.6"></script>
- <script src="/static/quali.js?v=2.6.6"></script>
- <script src="/static/race_v2.js?v=2.6.6"></script>
-<script src="/static/kpi_library.js?v=2.6.6"></script>
-<script src="/static/app.js?v=2.6.6"></script>
+<script src="/static/practice.js?v=2.6.6.1"></script>
+ <script src="/static/quali.js?v=2.6.6.1"></script>
+ <script src="/static/race_v2.js?v=2.6.6.1"></script>
+<script src="/static/kpi_library.js?v=2.6.6.1"></script>
+<script src="/static/app.js?v=2.6.6.1"></script>
 </body>
 </html>
