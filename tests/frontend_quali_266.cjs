@@ -21,7 +21,7 @@ assert.ok(app.includes("action:'quali_mode',value:event.target.value"),'simulate
 assert.ok(app.includes("action:'quali_mode',value:'new_run'"),'new run must be a backend command');
 assert.ok(q.includes("delta?.valid===true"),'delta validity guard missing');
 assert.ok(q.includes("q.qualifyingMode==='official'"),'official-only position must be guarded');
-assert.ok(q.includes("const valid=(run.attempts||[]).filter"),'reference validity gating missing');
+assert.ok(q.includes("valid=(run.attempts||[]).filter"),'reference validity gating missing');
 assert.ok(q.includes("const rows=data.coach?.allCorners||[]"),'full Garage coaching not connected');
 assert.ok(css.includes('grid-template-columns:minmax(0,34fr) minmax(0,37fr) minmax(0,29fr)'),'horizontal layout proportions absent');
 assert.ok(!html.includes('data-zre-view="admin"'),'archived editor should remain out of navigation');
