@@ -502,6 +502,11 @@ class DashboardSource:
             # the normal local-telemetry payload, and AUTO follows TeamCarContext.
             # force_driver never changes TeamCarContext/local_driving; it only selects
             # which payload ZRE emits for this websocket frame.
+            # A real team driver handoff enters SPOTTER before PILOTO's normal
+            # finalize branch. Persist the outgoing verified stint once.
+            if not context.local_driving and self.stint_active:
+                self.finalize_setup_stint_before_reset("driver-handoff")
+                self.stint_active=False
             if self.use_spotter_payload(context.auto_mode,force_driver,force_spotter):
                 return self.spotter_payload(context,drivers,session,results,weekend,session_time,driver_info)
             # PILOTO is always the local SDK car. TeamCarContext may decide AUTO,
