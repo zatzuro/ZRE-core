@@ -52,13 +52,14 @@ jobs:
           node tests/frontend_kpi_workflows_265.cjs
           node tests/frontend_practice_266.cjs
           node tests/frontend_quali_266.cjs
+          node tests/frontend_race_v2_266.cjs
 
       - name: Server and WebSocket demo smoke
         if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || github.head_ref == 'develop/2.6.6-practice'
         run: python diagnostics/smoke_264.py
 
   practice-visual:
-    if: github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali')
+    if: github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2')
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -74,7 +75,8 @@ jobs:
       - name: Browser layout QA at 1366, 1920 and 2560
         run: |
           python diagnostics/practice_visual_266.py
-          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-quali" ]; then python diagnostics/quali_visual_266.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-quali" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ]; then python diagnostics/quali_visual_266.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ]; then python diagnostics/race_v2_visual_266.py; fi
       - name: Archive actual Chromium screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,11 +85,18 @@ jobs:
           path: diagnostics/practice-screenshots/
           if-no-files-found: warn
       - name: Archive Quali screenshots
-        if: always() && github.head_ref == 'develop/2.6.6-quali'
+        if: always() && (github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2')
         uses: actions/upload-artifact@v4
         with:
           name: quali-266-chromium-screenshots
           path: diagnostics/quali-screenshots/
+          if-no-files-found: warn
+      - name: Archive Carrera V2 screenshots
+        if: always() && github.head_ref == 'develop/2.6.6-race-v2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: race-v2-266-chromium-screenshots
+          path: diagnostics/race-v2-screenshots/
           if-no-files-found: warn
 
   windows-test-install:
