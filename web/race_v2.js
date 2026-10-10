@@ -175,13 +175,14 @@
         b.style.color=colors[role];b.textContent=labels[role]+' · '+(row?'#'+row.carNumber:'SIN COCHE');
         const sub=document.createElement('span');
         const shared=row&&row.roles.length>1?' · '+row.roles.map(x=>labels[x]).join(' + '):'';
-        sub.textContent=row?.representative?time(row.recentAverageSeconds)+' · '+row.sampleCount+' V'+shared:
-             (row?row.sampleCount+'/3 V · NO REPRESENTATIVO'+shared:'SIN MUESTRAS');
+        const stale=row&&row.observationState!=='LIVE'&&row.observationState!=='LOCAL'?' · ÚLTIMA OBS. / STALE':'';
+        sub.textContent=(row?.representative?time(row.recentAverageSeconds)+' · '+row.sampleCount+' V'+shared:
+             (row?row.sampleCount+'/3 V · NO REPRESENTATIVO'+shared:'SIN MUESTRAS'))+stale;
         node.append(b,sub);return node;
      }));
    }
    const delta=race.paceDifferenceToRival;set('rv2-pace-difference',good(delta)?'Δ RITMO TÚ − RIVAL: '+(delta>0?'+':'')+delta.toFixed(3)+' s ('+(delta>0?'SOY MÁS LENTO':delta<0?'SOY MÁS RÁPIDO':'IGUAL')+')':'Δ RITMO VS RIVAL: SIN DATOS COMPARABLES');
-   const sig=signature(series.map(s=>[s.carIdx,s.roles,s.samples]));
+   const sig=signature(series.map(s=>[s.carIdx,s.roles,s.samples,s.observationState]));
    if(!card('chart',sig))return;
    const g=el('rv2-pace-series'),grid=el('rv2-pace-grid');if(!g||!grid)return;
    const comparable=series.flatMap(s=>(s.samples||[]).filter(x=>x.comparable&&good(x.lapTimeSeconds)).map(x=>x.lapTimeSeconds));
@@ -204,17 +205,18 @@
    for(let i=0;i<8;i++){
       const t=svg('text');t.classList.add('rv2-chart-label');
       t.setAttribute('x',x(i));t.setAttribute('y',205);t.setAttribute('text-anchor','middle');
-      t.textContent=i===7?'ACTUAL':String(i-7);axes.push(t);
+      t.textContent=i===7?'ÚLTIMA OBS.':String(i-7);axes.push(t);
    }
    grid.replaceChildren(...axes);
    const nodes=[];
    for(const entry of series){
       const code=entry.roles?.[0]||'RIVAL',color=colors[code],samples=(entry.samples||[]).slice(-8);
+      const stale=entry.observationState!=='LIVE'&&entry.observationState!=='LOCAL';
       const realLaps=samples.map(s=>Number(s.lapNumber)).filter(Number.isFinite);
       if(!realLaps.length)continue;
       const last=Math.max(...realLaps),points=new Map(samples.map(item=>[7+Number(item.lapNumber)-last,item]));
       let segment=[];
-      const endSegment=()=>{if(segment.length>1){const path=svg('polyline');path.classList.add('rv2-pace-series-path');path.setAttribute('stroke',color);path.setAttribute('points',segment.join(' '));nodes.push(path)}segment=[]};
+      const endSegment=()=>{if(segment.length>1){const path=svg('polyline');path.classList.add('rv2-pace-series-path');path.setAttribute('stroke',color);if(stale){path.setAttribute('stroke-dasharray','6 4');path.setAttribute('opacity','.68')}path.setAttribute('points',segment.join(' '));nodes.push(path)}segment=[]};
       for(let slot=0;slot<8;slot++){
          const point=points.get(slot);
          if(!point||!good(point.lapTimeSeconds)||!point.comparable){endSegment();if(point&&good(point.lapTimeSeconds)){
@@ -226,7 +228,7 @@
          const yy=Math.max(plot.top,Math.min(plot.bottom,coordY(point.lapTimeSeconds)));
          segment.push(x(slot)+','+yy);
          const dot=svg('circle');dot.classList.add('rv2-point');dot.setAttribute('cx',x(slot));dot.setAttribute('cy',yy);dot.setAttribute('r',3.6);dot.setAttribute('fill',color);
-         const title=svg('title');title.textContent='#'+entry.carNumber+' · '+entry.roles.map(v=>labels[v]).join(' + ')+' · V'+point.lapNumber+' · '+time(point.lapTimeSeconds)+' · '+(point.driverName||'Piloto no confirmado');dot.append(title);nodes.push(dot);
+         const title=svg('title');title.textContent='#'+entry.carNumber+' · '+entry.roles.map(v=>labels[v]).join(' + ')+' · V'+point.lapNumber+' · '+time(point.lapTimeSeconds)+' · '+(point.driverName||'Piloto no confirmado')+(stale?' · ÚLTIMA OBS. / STALE':'')+(point.observedAt!=null?' · SDK T+'+point.observedAt:'');dot.append(title);nodes.push(dot);
       }
       endSegment();
    }
