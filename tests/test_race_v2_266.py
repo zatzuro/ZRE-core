@@ -320,6 +320,49 @@ class RaceV2Tests(unittest.TestCase):
         self.assertEqual(no_data["relative"],[])
         self.assertEqual(no_data["coach"],{})
 
+    def test_live_sdk_driver_contract_emits_race_dashboard(self):
+        from unittest.mock import Mock
+        from tempfile import TemporaryDirectory
+        from server.setup_engineer import SetupEngineer
+        src=bridge.DashboardSource(force_demo=True)
+        src.ir=Mock()
+        drivers=[{"CarIdx":i,"CarClassID":4,"CarNumber":str(10+i),
+                  "UserName":"SDK QA "+str(i),"UserID":100+i} for i in range(3)]
+        results=[{"CarIdx":i,"ClassPosition":i,"Position":i+4,
+                  "LapsComplete":0,"LastTime":90+i,"FastestTime":89+i} for i in range(3)]
+        sdk={"PlayerCarIdx":1,"DriverInfo":{"DriverUserID":101,"DriverCarIdx":1,"Drivers":drivers},
+             "SessionInfo":{"Sessions":[{"SessionType":"Race","ResultsPositions":results}]},
+             "SessionNum":0,"SessionTime":1,"Lap":1,"LapCompleted":0,
+             "FuelLevel":42.5,"LapLastLapTime":90.5,"LapBestLapTime":89.5,
+             "CarIdxLapDistPct":[.2,.3,.35],"CarIdxTrackSurface":[3,3,3],
+             "CarIdxClassPosition":[1,2,3],"CarIdxBestLapTime":[89,89.5,90],
+             "CarIdxLastLapTime":[90,90.5,91],"CarIdxLapCompleted":[0,0,0],
+             "CarIdxLap":[1,1,1],"CarIdxOnPitRoad":[False,False,False],
+             "SessionTimeRemain":1200,"IsOnTrack":True}
+        src.get=lambda key,default=None:sdk.get(key,default)
+        with TemporaryDirectory() as folder:
+            src.setup_engineer=SetupEngineer(folder)
+            src.recorder=Mock()
+            src.quali.recorder=src.recorder
+            packet=src.live_payload(force_driver=True)
+            race=packet["raceDashboard"]
+            self.assertEqual(packet["sessionType"],"Race")
+            self.assertEqual(race["ownCarIdx"],1)
+            self.assertEqual(race["ownClassPosition"],2)
+            self.assertEqual([r["classPosition"] for r in race["classStandings"]],[1,2,3])
+            self.assertFalse(packet["demo"])
+            self.assertEqual(race["fuel"]["currentLiters"],42.5)
+            self.assertIn("racePlanVNext",packet)
+            self.assertIn("raceDirector",packet)
+
+    def test_session_change_resets_manual_selection(self):
+        src=bridge.DashboardSource(force_demo=True)
+        src.race_director.set_selected(4)
+        src.race_class_candidates={4}
+        src.reset_session_tracking()
+        self.assertIsNone(src.race_director.selected_idx)
+        self.assertFalse(src.race_class_candidates)
+
     def test_no_unbounded_lap_array_sent_to_browser(self):
         laps=[{"lap":i+1,"time":80+i*.005,"source":"SDK_OBSERVED"} for i in range(200)]
         row=clean_history(laps,laps)
