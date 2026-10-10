@@ -39,6 +39,7 @@ try:
     from server.stop_plan import build_stop_plan, race_plan
     from server.setup_engineer import SetupEngineer
     from server.setup_ownership import resolve_setup_owner
+    from server.quali_runs import QualiRuns
     from server.setup_snapshot import snapshot_from_sdk
     from server.stint_engineering_snapshot import capture_conditions, capture_tires
     from server.kpi_library import build_kpi_library
@@ -57,6 +58,7 @@ except ModuleNotFoundError:
     from stop_plan import build_stop_plan, race_plan
     from setup_engineer import SetupEngineer
     from setup_ownership import resolve_setup_owner
+    from quali_runs import QualiRuns
     from setup_snapshot import snapshot_from_sdk
     from stint_engineering_snapshot import capture_conditions, capture_tires
     from kpi_library import build_kpi_library
@@ -302,6 +304,7 @@ class DashboardSource:
         self.race_plan_audio_state=None
         self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
+        self.quali = QualiRuns(self.recorder)
         self.last_strategy_log_signature=None
         self.strategy_prediction_audit={}
         self.setup_engineer = SetupEngineer(ROOT)
@@ -480,12 +483,14 @@ class DashboardSource:
             if self.session_state.observe_identity(identity,ignore_car_idx=True) or (self._last_session_type is not None and self._last_session_type!=session.get("SessionType")) or (number(session_time) is not None and number(self.last_session_time) is not None and session_time<self.last_session_time-1):
                 logger.info("SESSION CHANGED")
                 self.finalize_setup_stint_before_reset("session-change")
+                self.quali.close_session("official-session-change")
                 self.recorder.finish_session("session-change")
                 self.reset_session_tracking()
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
                 self.last_strategy_log_signature=None
             self.session_key=identity;self.last_session_time=session_time;self._last_session_type=session.get("SessionType")
+            self.quali.observe(identity,session.get("SessionType"),self.get("Lap"),self.get("LapDistPct"),session_time)
             if self.recorder.session_id is None:
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
@@ -587,11 +592,11 @@ class DashboardSource:
                 self.team_fuel_reference=(fuel,int(team_completed))
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
-            self.coach_session_mode=session_coach_mode
+            self.coach_session_mode="qualifying" if self.quali.mode else session_coach_mode
             self.update_sector_tracking(lap_number,self.get("LapDistPct",player_pct),last_lap)
             if completed_laps is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
-            self.update_race_engineer_audio(session_coach_mode,pilot_idx,category_rows,live_last,car_completed,results)
+            self.update_race_engineer_audio(self.coach_session_mode,pilot_idx,category_rows,live_last,car_completed,results)
             self.coach.set_track_context(weekend.get("TrackName") or weekend.get("TrackDisplayName"),weekend.get("TrackConfigName"),weekend.get("TrackNumTurns"))
             if session_coach_mode in ("practice","qualifying","race_engineer"):
                 self.coach.capture(self.get("LapDistPct", player_pct), session_time,
@@ -1085,6 +1090,21 @@ class DashboardSource:
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
         self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None
 
+    def _quali_sdk_delta(self,key):
+        raw=number(self.get(key))
+        flag=self.get(key+"_OK")
+        return {"value":round(raw,4) if flag is True and raw is not None else None,
+                "valid":flag is True and raw is not None,"source":"SDK:"+key,
+                "reference":key.replace("LapDeltaTo","")}
+
+    def _sector_boundaries(self):
+        info=self.get("SplitTimeInfo",{}) or {}
+        rows=info.get("Sectors",[]) if isinstance(info,dict) else []
+        starts=sorted({round(x,6) for row in rows if isinstance(row,dict)
+                       for x in [number(row.get("SectorStartPct"))]
+                       if x is not None and 0<=x<1})
+        return starts if len(starts)>=2 and starts[0]==0 else []
+
     def update_sector_tracking(self,current_lap,lap_pct,last_lap):
         """Capture official iRacing split sectors once per completed local lap.
 
@@ -1105,7 +1125,7 @@ class DashboardSource:
             value=number(row.get("SectorStartPct"))
             if value is not None and 0<=value<1:starts.append(value)
         starts=sorted(set(starts))
-        if len(starts)!=3 or starts[0]!=0:
+        if len(starts)<2 or starts[0]!=0:
             self.current_sector_times=[];self.last_completed_sectors=[];self.sector_tracking_armed=False;self.sector_last_sample=None
             return
         lap_time=number(self.get("LapCurrentLapTime"))
@@ -1116,7 +1136,7 @@ class DashboardSource:
             return
         if lap!=self.sector_lap_number:
             completed=seconds(last_lap)
-            if lap==self.sector_lap_number+1 and self.sector_tracking_armed and completed is not None and len(self.current_sector_times)==2:
+            if lap==self.sector_lap_number+1 and self.sector_tracking_armed and completed is not None and len(self.current_sector_times)==len(starts)-1:
                 third=completed-sum(self.current_sector_times)
                 self.last_completed_sectors=[*self.current_sector_times,third] if third>0 else []
             else:self.last_completed_sectors=[]
@@ -1130,7 +1150,7 @@ class DashboardSource:
         if sum(pct>=x for x in thresholds)-len(self.current_sector_times)>1:
             self.current_sector_times=[];self.sector_tracking_armed=False;self.sector_last_sample=None
             return
-        while len(self.current_sector_times)<2 and pct>=thresholds[len(self.current_sector_times)]:
+        while len(self.current_sector_times)<len(thresholds) and pct>=thresholds[len(self.current_sector_times)]:
             elapsed=lap_time-sum(self.current_sector_times)
             if elapsed<=0:return
             self.current_sector_times.append(elapsed)
@@ -1282,18 +1302,27 @@ class DashboardSource:
         if usage and 0<usage<30:
             self.fuel_per_lap.append(usage);self.fuel_per_lap=self.fuel_per_lap[-10:]
         sectors=pending["sectors"]
-        if len(sectors)==3:
-            third=completed-sum(sectors[:2])
-            sectors=[*sectors[:2],third] if third>0 else []
+        if sectors and len(sectors)==len(self._sector_boundaries())-1:
+            final=completed-sum(sectors)
+            sectors=[*sectors,final] if final>0 else []
+        elif sectors and len(sectors)!=len(self._sector_boundaries()):
+            sectors=[]
         prior_best=self.personal_session_best
         self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid"))})
         self.lap_history=self.lap_history[-10:]
         for index,value in enumerate(sectors if pending.get("valid") else []):
+            while index>=len(self.best_sectors):self.best_sectors.append(None)
             if self.best_sectors[index] is None or value<self.best_sectors[index]:self.best_sectors[index]=value
         self.confirmed_session_best=min(self.confirmed_session_best,completed) if self.confirmed_session_best else completed
         self.last_lap_summary={"lap":pending["lap"],"time":self.lap_text(completed),"sessionBest":self.lap_text(prior_best),"delta":self.delta_text(completed,prior_best),"expiresAt":time.time()+6}
         if pending.get("valid") and (prior_best is None or completed<prior_best):self.personal_session_best=completed
         coach_ok=self.coach.finish(completed,pending.get("valid"))
+        sdk_fast=number(self.get("LapBestLapTime"))
+        self.quali.note_lap(pending["lap"],completed,clean=pending.get("valid"),
+            sdk_best=(self.get("LapBestLap")==pending["lap"] and
+                      sdk_fast is not None and abs(sdk_fast-completed)<.001),
+            sectors=sectors,sector_source="ZRE_RECONSTRUCTED_FROM_SDK_SPLITS" if sectors else "UNAVAILABLE",
+            in_pit=bool(self.get("OnPitRoad",False)))
         self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"source":"SDK_OBSERVED"})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
@@ -1302,7 +1331,7 @@ class DashboardSource:
             if not self.race_plan_suppresses_coach_audio():self.race_engineer_audio.append(self.lap_text(completed))
         elif self.coach_session_mode=="practice" and coach_ok:
             logger.info("COACH GENERATED lap=%s best=%s optimal=%s priorities=%s",pending["lap"],self.coach.best_lap,self.coach.optimal,len(self.coach.advice))
-            if not self.race_plan_suppresses_coach_audio():
+            if not self.race_plan_suppresses_coach_audio() and not self.quali.mode:
                 if self.coach.advice:
                     item=self.coach.advice[0];marker_pct=item[4] if len(item)>4 else None;phase=item[5] if len(item)>5 else None;label=self.coach.location_label(item[0],marker_pct,phase);logger.info("AUDIO PLAY location=%s zone=%s phase=%s loss=%.3f",label,item[0],phase,item[1]);self.audio_coach.say(f"{label}. Perdiste {round(item[1]*10)} décimas. {item[2]}. {item[3]}")
                 else:self.audio_coach.say(f"Vuelta {pending['lap']}. Sin una pérdida clara para corregir.")
@@ -1518,8 +1547,12 @@ async def websocket(request):
                         source.manual_team_driver=str(setting.get('value') or '').strip()[:60] or None
                     elif setting.get("type")=="settings" and setting.get("key")=="demoRole" and source.force_demo:
                         if setting.get('value') in ('driver','spotter'):source.demo_role=setting['value']
-                    elif setting.get("type")=="action" and setting.get("action")=="audio_test" and source.coach_session_mode!="qualifying":source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
+                    elif setting.get("type")=="action" and setting.get("action")=="audio_test" and source.coach_session_mode!="qualifying" and not source.quali.mode:source.audio_coach.say("Prueba de audio correcta. El coach está listo para hablarte al terminar una vuelta.")
                     elif setting.get('type')=='action' and setting.get('action')=='capture_sdk':source.capture_sdk_once()
+                    elif setting.get("type")=="action" and setting.get("action")=="quali_mode":
+                        if source.quali.command(setting.get("value")):
+                            if hasattr(source.audio_coach,"clear_pending"):source.audio_coach.clear_pending()
+                        source.last_lap_summary=None
                     elif setting.get('type')=='action' and setting.get('action')=='setup_feedback':
                         if source.setup_engineer.last_saved:
                             source.setup_engineer.update_feedback(source.setup_engineer.last_saved,setting.get('entry'),setting.get('mid'),setting.get('exit'),setting.get('comment'))
