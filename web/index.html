@@ -7,6 +7,7 @@
   <title>ZRE Core · iRacing Team Engineer</title>
   <link rel="stylesheet" href="/static/style.css?v=2.6.5.3">
   <link rel="stylesheet" href="/static/practice.css?v=2.6.5.3">
+  <link rel="stylesheet" href="/static/quali.css?v=2.6.5.3">
   <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.5.3">
 </head>
 <body data-view="live">
@@ -27,6 +28,8 @@
   </header>
 
   <nav id="screen-nav" class="screen-nav" aria-label="Pantallas personalizadas">
+    <label id="quali-mode-control" hidden>SESIÓN ZRE<select id="quali-mode-select"><option value="training">ENTRENAMIENTO</option><option value="simulate">QUALI SIMULADA</option></select></label>
+    <button id="quali-new-run" type="button" hidden>NUEVA TANDA</button>
     <button id="header-collapse-toggle" type="button" aria-expanded="true" title="Plegar o desplegar controles">PLEGAR CONTROLES</button>
     
   </nav>
@@ -116,6 +119,67 @@
     </section>
   </section>
 
+  <section id="quali-view" class="screen quali-view" hidden aria-label="Dashboard de clasificación">
+    <div class="q-head"><strong>ZRE · QUALI</strong><b id="q-kind">—</b><span id="q-run-id">SIN TANDA</span><span id="q-lap-state">ESPERANDO DATOS</span><span id="q-session-source">—</span></div>
+    <section class="q-kpis">
+      <div class="q-hero"><small>DELTA EN VIVO · MEJOR PERSONAL SDK</small><strong id="q-delta">—</strong><em id="q-delta-source">SIN REFERENCIA VÁLIDA</em></div>
+      <div><small>MEJOR REAL · SDK</small><strong id="q-best">—</strong></div>
+      <div><small>ÚLTIMA VUELTA</small><strong id="q-last">—</strong></div>
+      <div><small>ÓPTIMA · ZRE</small><strong id="q-optimal">—</strong></div>
+      <div><small>POTENCIAL · ZRE</small><strong id="q-potential">—</strong></div>
+      <div><small>POSICIÓN QUALI</small><strong id="q-position">—</strong></div>
+      <div><small>TIEMPO RESTANTE</small><strong id="q-time-left">—</strong></div>
+    </section>
+    <section class="q-center">
+      <article class="q-panel q-map-panel">
+        <header><strong>MAPA · 3 OPORTUNIDADES</strong><small id="q-map-status">TRAZADO EN CONSTRUCCIÓN</small></header>
+        <div class="q-map-body">
+          <svg id="q-map-svg" viewBox="0 0 100 100" role="img" aria-label="Trazado observado por telemetría"><polyline id="q-map-line" points=""></polyline><g id="q-map-markers"></g></svg>
+          <p id="q-map-empty">Esperando geometría válida del circuito.</p>
+        </div>
+        <div id="q-priorities" class="q-priorities"><p>Completa vueltas válidas para identificar oportunidades.</p></div>
+      </article>
+      <article class="q-panel q-sector-panel">
+        <header><strong>SECTORES Y REFERENCIA</strong><small id="q-sector-source">SIN SECTORES</small></header>
+        <div class="q-sector-head"><span>SECTOR</span><span>PROPIO</span><span>REFERENCIA</span><span>DELTA</span></div>
+        <div id="q-sector-rows" class="q-sector-rows"></div>
+        <div class="q-focus"><small>FOCO · CLASIFICACIÓN</small><strong id="q-focus-zone">VUELTA LIMPIA</strong><p id="q-focus-advice">Conduce con precisión; analiza los cambios en Garage.</p></div>
+      </article>
+      <article class="q-panel q-traffic-panel">
+        <header><strong>TRÁFICO Y CONDICIONES</strong><small id="q-traffic-source">SDK / ZRE</small></header>
+        <div class="q-traffic-grid">
+          <div><small>DELANTE</small><strong id="q-ahead">—</strong><span id="q-gap-ahead">NO DISPONIBLE</span></div>
+          <div><small>DETRÁS</small><strong id="q-behind">—</strong><span id="q-gap-behind">NO DISPONIBLE</span></div>
+          <div><small>BANDERA</small><strong id="q-flag">—</strong></div>
+          <div><small>PISTA</small><strong id="q-track-temp">—</strong></div>
+        </div>
+        <p id="q-traffic-warning" class="q-traffic-warning">El tráfico es una observación, no una promesa de pista libre.</p>
+      </article>
+    </section>
+    <section class="q-bottom">
+      <article class="q-panel q-car-panel">
+        <header><strong>NEUMÁTICOS · COMBUSTIBLE</strong><small>ÚLTIMA LECTURA DISPONIBLE</small></header>
+        <div class="q-car-metrics">
+          <div><small>FL</small><strong id="q-tyre-fl">—</strong></div><div><small>FR</small><strong id="q-tyre-fr">—</strong></div>
+          <div><small>RL</small><strong id="q-tyre-rl">—</strong></div><div><small>RR</small><strong id="q-tyre-rr">—</strong></div>
+          <div><small>FUEL REAL</small><strong id="q-fuel">—</strong></div><div><small>CONSUMO</small><strong id="q-consumption">—</strong></div>
+          <div><small>AUTONOMÍA EST.</small><strong id="q-range">—</strong></div>
+        </div>
+      </article>
+      <article class="q-panel q-attempt-panel">
+        <header><strong>INTENTOS Y TANDA</strong><small id="q-attempt-status">SIN INTENTOS</small></header>
+        <div class="q-attempt-stats"><div><small>INTENTOS</small><strong id="q-attempt-count">0</strong></div><div><small>VALIDADOS</small><strong id="q-attempt-valid">0</strong></div><div><small>PENDIENTES</small><strong id="q-attempt-pending">0</strong></div><div><small>MEJOR TANDA</small><strong id="q-run-best">—</strong></div></div>
+        <div id="q-attempt-timeline" class="q-attempt-timeline">Sin vueltas completas desde el inicio de la tanda.</div>
+      </article>
+    </section>
+    <section id="q-garage" class="q-garage" hidden>
+      <article class="q-panel"><header><strong>GARAGE · ANÁLISIS COMPLETO</strong><small id="q-garage-run">—</small></header>
+        <div class="q-garage-selectors"><label>INTENTO A<select id="q-compare-a"></select></label><label>INTENTO B<select id="q-compare-b"></select></label><button id="q-setup-engineer" type="button">SETUP ENGINEER</button></div>
+        <p id="q-comparison">Selecciona dos intentos válidos y comparables.</p><div id="q-comparison-sectors"></div>
+      </article>
+      <article class="q-panel"><header><strong>COACH · TODAS LAS CURVAS</strong><small>DATOS OBSERVADOS / INFERIDOS</small></header><div id="q-garage-curves"></div></article>
+    </section>
+  </section>
   <section id="spotter-view" class="screen spotter-screen" hidden>
     <div class="spotter-kpis"><div><small># COCHE · PILOTO</small><strong id="spotter-car">—</strong><small id="spotter-driver">AUTO · no confirmado</small></div><div><small>POS CLASE</small><strong id="spotter-position">—</strong></div><div><small>VUELTA</small><strong id="spotter-lap">—</strong></div><div><small>TIEMPO RESTANTE</small><strong id="spotter-time">—</strong></div><div><small>FUEL</small><strong id="spotter-fuel">—</strong></div><div><small>AUTONOMÍA</small><strong id="spotter-autonomy">—</strong></div><div><small>PRÓXIMA PARADA</small><strong id="spotter-next-stop">—</strong></div><div><small>PARADAS RESTANTES</small><strong id="spotter-stops">—</strong></div></div>
     <div class="spotter-choice"><label>COCHE DEL EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label><label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label><span id="spotter-identity-warning">Selecciona el coche si ZRE no lo identifica.</span></div>
@@ -244,6 +308,7 @@
   <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.6.5.3</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
 </main>
 <script src="/static/practice.js?v=2.6.5.3"></script>
+ <script src="/static/quali.js?v=2.6.5.3"></script>
 <script src="/static/kpi_library.js?v=2.6.5.3"></script>
 <script src="/static/app.js?v=2.6.5.3"></script>
 </body>
