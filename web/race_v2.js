@@ -55,7 +55,7 @@
    const button=document.createElement('button');button.type='button';button.className='rv2-standing-row';
    button.dataset.player=String(Boolean(row.isPlayer));
    button.dataset.rival=String(row.carIdx===rivalIdx);
-   button.dataset.stale=String(row.presence!=='LIVE'&&row.presence!=='UNKNOWN');
+   button.dataset.stale=String(!row.isPlayer&&row.presence!=='LIVE');
    button.dataset.carIdx=String(row.carIdx);
    if(row.isPlayer){button.disabled=true;button.setAttribute('aria-label','Coche propio · no seleccionable como rival');}
    else button.setAttribute('aria-label','Seleccionar rival #'+row.carNumber+' · '+(row.driverName||'sin nombre'));
@@ -64,7 +64,7 @@
    const source=row.positionSource==='RESULTS_POSITIONS'?'OFICIAL':'FALLBACK';
    const driver=document.createElement('span');driver.className='rv2-driver';
    const name=cell('b',row.driverName||'SIN IDENTIDAD CONFIRMADA');
-   const extra=cell('small',(row.carModel||'COCHE')+' · '+(row.presence==='STALE'?'ÚLTIMO REGISTRO':source));
+   const extra=cell('small',(row.carModel||'COCHE')+' · '+(row.presence==='STALE'?'ÚLTIMO REGISTRO':row.presence==='UNKNOWN'?'NO OBSERVADO · '+source:source));
    driver.append(name,extra);
    button.append(cell('strong',position),cell('strong','#'+(row.carNumber||'—')),driver,
                  cell('span',time(row.bestLapSeconds)),cell('span',time(row.lastLapSeconds)));
@@ -84,7 +84,10 @@
    const mainSig=signature(shown.map(x=>[x,rivalIdx]));
    if(card('standings-near',mainSig)){
       const target=el('rv2-standing-rows');
-      if(target){const position=target.scrollTop;target.replaceChildren(...shown.map(x=>buildStanding(x,rivalIdx)));target.scrollTop=position;}
+      if(target){const position=target.scrollTop;
+        if(!shown.length){const blank=document.createElement('p');blank.className='rv2-empty';blank.textContent='CLASIFICACIÓN NO DISPONIBLE · SIN POSICIONES SDK';target.replaceChildren(blank);}
+        else target.replaceChildren(...shown.map(x=>buildStanding(x,rivalIdx)));
+        target.scrollTop=position;}
    }
    const fullSig=signature(rows.map(x=>[x,rivalIdx]));
    if(card('standings-full',fullSig)){
@@ -97,7 +100,7 @@
  function liveMetrics(data){
    const race=data.raceDashboard||{},phys=race.physical||{},fuel=race.fuel||{},you=(race.paceSeries||[]).find(s=>s.carIdx===race.ownCarIdx);
    set('rv2-position',race.ownClassPosition!=null?'P'+race.ownClassPosition:'—');
-   set('rv2-position-source',!data.connected?'ÚLTIMA CLASE · STALE':race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE':'FALLBACK / SIN DATO');
+   set('rv2-position-source',!data.connected?'ÚLTIMA CLASE · STALE':race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE'+(race.ownOverallPosition!=null?' · GENERAL P'+race.ownOverallPosition:''):'FALLBACK / SIN DATO');
    for(const side of ['ahead','behind']){
      const row=phys[side];
      set('rv2-gap-'+side,row?.gapLabel||'SIN DATO');
