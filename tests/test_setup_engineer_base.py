@@ -129,14 +129,15 @@ class SetupEngineerBaseTests(unittest.TestCase):
             engineer = SetupEngineer(folder)
             self.assertIsNotNone(engineer.last_saved)
             self.assertEqual(engineer.last_saved['stintNumber'], 1)
-            self.assertIsNotNone(engineer.last_report_path)
-            self.assertTrue(engineer.last_report_path.exists())
+            self.assertIsNone(engineer.last_report_path)  # historical ownership unknown: read-only
             self.assertIn('Último stint recuperado', engineer.status)
     def test_report_names_preserve_separate_layouts(self):
         with tempfile.TemporaryDirectory() as folder:
             engineer = SetupEngineer(folder)
-            gp = {"session": {"car": "McLaren", "track": "Spa", "layout": "GP"}, "stintNumber": 1}
-            endurance = {"session": {"car": "McLaren", "track": "Spa", "layout": "Endurance"}, "stintNumber": 1}
+            owner={"authorized": True, "scope": "own", "car_idx": 8, "team_id": "99", "driver_user_id": "10", "reason": "TEST"}
+            engineer.set_owner(owner)
+            gp = {"session": {"car": "McLaren", "track": "Spa", "layout": "GP", "setupOwner": owner}, "stintNumber": 1}
+            endurance = {"session": {"car": "McLaren", "track": "Spa", "layout": "Endurance", "setupOwner": owner}, "stintNumber": 1}
             first = engineer.export_report(gp)
             second = engineer.export_report(endurance)
             self.assertNotEqual(first, second)
@@ -238,6 +239,7 @@ class SetupEngineerBaseTests(unittest.TestCase):
             engineer = SetupEngineer(folder)
             sdk = snapshot_from_sdk({"Aero": {"Wing": 8.5}})
             html = "<h2>Aero</h2><table><tr><td>Rear Wing</td><td>7.5</td></tr></table>"
+            engineer.set_owner({"authorized": True, "scope": "own", "car_idx": 8, "team_id": "99", "driver_user_id": "10", "reason": "TEST"}, {"car":"McLaren","track":"Spa","layout":"GP"})
             imported = engineer.import_html_setup(html, "setup.html")
             self.assertIsNotNone(imported)
             self.assertEqual(engineer.resolve_setup(sdk)["source"], "SDK")
@@ -282,6 +284,7 @@ class SetupEngineerBaseTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as folder:
             engineer = SetupEngineer(folder)
+            engineer.set_owner({"authorized": True, "scope": "own", "car_idx": 8, "team_id": "99", "driver_user_id": "10", "reason": "TEST"}, {"car":"McLaren","track":"Spa","layout":"GP"})
             session = {"car": "McLaren", "track": "Spa", "layout": "GP", "session": "Practice"}
             setup_a = snapshot_from_sdk({"Aero": {"Wing": 8.5}})
             engineer.start_stint(session, setup_a, {"trackTemp": {"value": 32, "source": "MEASURED"}}, 55.0, 100.0)
