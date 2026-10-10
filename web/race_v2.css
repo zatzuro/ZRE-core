@@ -108,3 +108,12 @@ body.race-v2-session #screen-nav{min-height:24px}
  .rv2-plan-details b,.rv2-rival-grid strong{font-size:10px}
  .rv2-fuel-grid strong{font-size:16px}
 }
+
+/* Preference changes presentation only, never SDK SessionType or Race Plan. */
+#rv2-emphasis-control{display:flex;align-items:center;gap:6px;color:#d8ebf7;font-size:10px;font-weight:900}
+#rv2-emphasis-control[hidden]{display:none!important}
+#rv2-emphasis-select{background:#344e65;color:#fff;border:1px solid #7898ac;padding:5px 8px;border-radius:4px;font-size:11px}
+body.race-v2-session[data-race-emphasis="sprint"] .rv2-main{grid-template-columns:minmax(0,52fr) minmax(0,28fr) minmax(0,20fr)}
+body.race-v2-session[data-race-emphasis="sprint"] .rv2-bottom{grid-template-columns:minmax(0,74fr) minmax(0,26fr)}
+body.race-v2-session[data-race-emphasis="endurance"] .rv2-main{grid-template-columns:minmax(0,45fr) minmax(0,35fr) minmax(0,20fr)}
+body.race-v2-session[data-race-emphasis="endurance"] .rv2-bottom{grid-template-columns:minmax(0,65fr) minmax(0,35fr)}
