@@ -31,6 +31,7 @@ try:
     from server.session_recorder import SessionRecorder
     from server.session_intelligence import build_intelligence, strategy_intelligence
     from server.race_director import RaceDirector
+    from server.race_dashboard import race_view
     from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from server.race_state import RaceIdentity
     from server.team_context import TeamCarContext
@@ -50,6 +51,7 @@ except ModuleNotFoundError:
     from session_recorder import SessionRecorder
     from session_intelligence import build_intelligence, strategy_intelligence
     from race_director import RaceDirector
+    from race_dashboard import race_view
     from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from race_state import RaceIdentity
     from team_context import TeamCarContext
@@ -258,7 +260,8 @@ def class_results_rows(results, cars, conflicts, class_id, team_idx, last_laps, 
             'driver':car.get('UserName') or '—' if idx not in conflicts else '—',
             'team':car.get('TeamName') or '—','gap':'EQUIPO' if idx==team_idx else '—',
             'gapSeconds':None,'lastLap':lap_text(last or race.get('LastTime')),
-            'completedLaps':race.get('LapsComplete'),'pace':'—','isPlayer':idx==team_idx})
+            'completedLaps':race.get('LapsComplete'),'pace':'—','isPlayer':idx==team_idx,
+            'positionSource':race.get('positionSource') or ('RESULTS_POSITIONS' if race.get('ClassPosition') is not None else 'UNAVAILABLE')})
     rows.sort(key=lambda row:(row['pos'] is None,row['pos'] or 99999,row['idx']))
     return rows
 
@@ -310,7 +313,7 @@ class DashboardSource:
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
-        self.race_director=RaceDirector();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
+        self.race_director=RaceDirector();self.race_class_candidates=set();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar';self.sector_tracking_armed=False;self.sector_last_sample=None
 
     def handle_race_plan_audio(self, payload):
@@ -567,7 +570,10 @@ class DashboardSource:
                 if valid_live_pct:relative_candidates.append(row.copy())
             standing_rows.sort(key=lambda row:(row["pos"]==0,row["pos"]))
             overall_player=next((row for row in standing_rows if row["isPlayer"]),None)
-            category_rows=class_results_rows(results,cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text,live_class_pos)
+            class_cars={idx:entry.get("_car",{}) for idx,entry in self.competitor_presence_history.items()
+                        if isinstance(idx,int) and isinstance(entry,dict) and entry.get("_car")}
+            class_cars.update(cars)
+            category_rows=class_results_rows(results,class_cars,roster_conflicts,player_class_id,pilot_idx,live_last,self.lap_text,live_class_pos)
             for row in category_rows:
                 idx=row.get("idx")
                 if row["idx"]==pilot_idx:
@@ -742,6 +748,16 @@ class DashboardSource:
             self.flush_race_engineer_audio()
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
+            self.race_class_candidates={row.get("idx") for row in category_rows
+                                        if row.get("idx") is not None and row.get("idx")!=pilot_idx}
+            if session_coach_mode=="race_engineer":
+                payload["raceDashboard"]=race_view(
+                    session_identity=identity,own_idx=pilot_idx,class_rows=category_rows,
+                    results=results,cars=class_cars,best_laps=self.get("CarIdxBestLapTime",[]) or [],
+                    last_laps=live_last,intelligence=payload["sessionIntelligence"],
+                    own_history=self.lap_history,director=payload["raceDirector"],fuel=fuel,
+                    fuel_history=self.fuel_per_lap,race_plan=payload["racePlanVNext"],
+                    session_time=session_time)
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
             behind=max((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']<0),key=lambda r:r['gapSeconds'],default=None)
@@ -1104,7 +1120,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None
+        self.personal_lap_clean=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None
 
     def _quali_sdk_delta(self,key):
         raw=number(self.get(key))
@@ -1545,7 +1561,17 @@ async def websocket(request):
                     setting=json.loads(message.data)
                     if not isinstance(setting,dict):continue
                     if setting.get("type")=="settings" and setting.get("key")=="audio" and setting.get("value")=="auto":source.audio_mode="auto"
-                    elif setting.get("type")=="settings" and setting.get("key")=="rival":source.race_director.set_selected(setting.get("value"))
+                    elif setting.get("type")=="settings" and setting.get("key")=="rival":
+                        selected=setting.get("value")
+                        if selected in (None,"","auto",-1,"-1"):
+                            source.race_director.set_selected("auto")
+                        else:
+                            try:requested=int(selected)
+                            except (TypeError,ValueError):requested=None
+                            if requested is not None and requested in source.race_class_candidates:
+                                source.race_director.set_selected(requested)
+                                source.recorder.write({"type":"strategic_rival_selection","carIdx":requested,
+                                                       "mode":"manual","source":"ZRE_USER_ACTION"})
                     elif setting.get("type")=="settings" and setting.get("key")=="strategy":source.apply_strategy_settings(setting.get("value"))
                     elif setting.get("type")=="settings" and setting.get("key")=="role" and setting.get('value') in ('auto','driver','spotter'):
                         role_preference=setting['value']
