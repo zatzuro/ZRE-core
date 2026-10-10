@@ -124,14 +124,15 @@
    set('rv2-plan-status',status);
    for(const [id,key] of [['rv2-earliest','earliest_safe'],['rv2-target','target'],['rv2-fuel-limit','fuel_limit']])
       set(id,has&&window[key]!=null?'V'+window[key]:'—');
-   const bar=el('rv2-window-marker');
-   if(bar){
-      const e=window.earliest_safe,f=window.fuel_limit;
-      const ready=has&&good(e)&&good(f)&&f>e&&good(current);
-      bar.hidden=!ready;if(ready)bar.style.left=Math.max(0,Math.min(100,(current-e)/(f-e)*100))+'%';
-   }
+   const bar=el('rv2-window-marker'),track=el('rv2-window-track');
+   const e=window.earliest_safe,f=window.fuel_limit,t=window.target;
+   const ready=has&&good(e)&&good(f)&&good(t)&&e<=t&&t<=f&&f>e;
+   if(track)track.hidden=!ready;
+   if(bar){bar.hidden=!ready||!good(current);if(ready&&good(current))bar.style.left=Math.max(0,Math.min(100,(current-e)/(f-e)*100))+'%';}
    set('rv2-add-fuel',has&&good(next.fuel_to_add_liters)?'+'+next.fuel_to_add_liters.toFixed(1)+' L':'—');
    set('rv2-stops-left',has&&Number.isFinite(Number(plan.minimum_stops))?plan.minimum_stops:'—');
+   const autonomy=data.raceDashboard?.fuel?.autonomyLaps ?? plan.current_autonomy_laps;
+   set('rv2-plan-autonomy',has&&good(autonomy)?'≈'+Number(autonomy).toFixed(1)+' V':'—');
    set('rv2-tyres',state.require_tire_change===true?'REGLA ACTIVA · SIN DECISIÓN':'NO DEFINIDO');
    const future=(data.enduranceStrategy?.timeline||[]).find(x=>x.status==='future'&&x.driver);
    set('rv2-next-driver',next.driver||future?.driver||'SIN ASIGNAR');
