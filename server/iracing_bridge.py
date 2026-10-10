@@ -490,7 +490,7 @@ class DashboardSource:
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
                 self.last_strategy_log_signature=None
             self.session_key=identity;self.last_session_time=session_time;self._last_session_type=session.get("SessionType")
-            self.quali.observe(identity,session.get("SessionType"),self.get("Lap"),self.get("LapDistPct"),session_time)
+            self.quali.observe(identity,session.get("SessionType"),self.get("Lap"),self.get("LapDistPct"),session_time,self.get("IsOnTrack"),self.get("OnPitRoad"))
             if self.recorder.session_id is None:
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
