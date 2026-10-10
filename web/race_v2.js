@@ -9,6 +9,8 @@
  const colors={YOU:'#7dcbfc',AHEAD:'#83e6a8',BEHIND:'#ffcb82',RIVAL:'#c7a0fd'};
  const labels={YOU:'TÚ',AHEAD:'ADELANTE',BEHIND:'DETRÁS',RIVAL:'RIVAL'};
  let latest=null,command=null,cache=new Map(),choices=[],pending=null,lastIdentity=null;
+ let emphasis='auto';
+ try{const stored=localStorage.getItem('zre-race-v2-emphasis');if(['auto','sprint','endurance'].includes(stored))emphasis=stored}catch(_){};
  const signature=rows=>JSON.stringify(rows||[]);
  const card=(key,value)=>{if(cache.get(key)===value)return false;cache.set(key,value);return true};
  function send(choice){
@@ -234,7 +236,9 @@
     set('rv2-fuel-autonomy',good(f.autonomyLaps)?'≈'+f.autonomyLaps.toFixed(1)+' V':'—');
     const window=vnext.currentPlan?.window||{};
     set('rv2-fuel-context',vnext.available?'PRÓXIMA PARADA: '+(window.target!=null?'V'+window.target:'NO DEFINIDA')+' · '+(vnext.fuelModel?.confidence||'SIN CONFIANZA'):'PLAN NO DISPONIBLE · no asumir que se evita una parada');
-    set('rv2-race-emphasis',data.enduranceStrategy?.raceFormat?'FORMATO '+data.enduranceStrategy.raceFormat:'FORMATO: NO CONFIRMADO · VISTA GENERAL');
+    const official=data.enduranceStrategy?.raceFormat;
+    set('rv2-race-emphasis',emphasis==='auto'?(official?'FORMATO '+official+' · SDK / MODELO':'FORMATO: NO CONFIRMADO · VISTA GENERAL'):
+        'ÉNFASIS VISUAL '+emphasis.toUpperCase()+' · NO ALTERA ESTRATEGIA');
  }
  function render(data){
     latest=data;const race=data.raceDashboard;
@@ -245,6 +249,16 @@
  }
  function init(sendSetting){
     command=sendSetting;
+    document.body.dataset.raceEmphasis=emphasis;
+    if(el('rv2-emphasis-select')){
+      el('rv2-emphasis-select').value=emphasis;
+      el('rv2-emphasis-select').addEventListener('change',event=>{
+        emphasis=['auto','sprint','endurance'].includes(event.target.value)?event.target.value:'auto';
+        document.body.dataset.raceEmphasis=emphasis;
+        try{localStorage.setItem('zre-race-v2-emphasis',emphasis)}catch(_){}
+        if(latest)fuel(latest);
+      });
+    }
     el('rv2-rival-auto')?.addEventListener('click',()=>{send('auto');listCandidates()});
     el('rv2-rival-search')?.addEventListener('input',()=>{cache.delete('candidate-list');listCandidates()});
     el('rv2-rival-select')?.addEventListener('change',e=>send(e.target.value));
