@@ -76,18 +76,21 @@ class QualiRuns:
     def observe(self, identity, official_type, lap, pct, clock, on_track=False, on_pit=False):
         key = str(identity)
         new_kind = self.classify(official_type)
+        changed = key != self.identity or new_kind != self.official_type
+        # Close the previous session using its OWN last observed lap and clock.
+        # Never assign the incoming session's lap to an outgoing attempt.
+        if changed:
+            self.close_session("sdk-session-change")
+            self.identity = key
+            self.official_type = new_kind
         self.lap = int(float(lap)) if finite(lap) is not None and float(lap) >= 0 else None
         self.pct = finite(pct)
         self.clock = finite(clock)
         self.on_track = bool(on_track)
         self.on_pit = bool(on_pit)
-        if key != self.identity or new_kind != self.official_type:
-            self.close_session("sdk-session-change")
-            self.identity = key
-            self.official_type = new_kind
-            if new_kind == "qualifying":
-                self.mode = "official"
-                self._start("official")
+        if changed and new_kind == "qualifying":
+            self.mode = "official"
+            self._start("official")
         if new_kind in ("race", "other"):
             self.close_session("official-mode-priority")
         return self.snapshot()
@@ -179,16 +182,16 @@ class QualiRuns:
                 "activeRunId": active["runId"] if active else None,
                 "activeAttemptId": live["attemptId"] if live else attempts[-1]["attemptId"] if attempts else None,
                 "activeRun": self._public(active) if active else None,
-                "previousRuns": [self._public(r) for r in previous[-12:]],
+                "previousRuns": [self._public(r,limit=30) for r in previous[-12:]],
                 "lastError": self.last_error}
 
     @staticmethod
-    def _public(run):
+    def _public(run,limit=120):
         if not run:
             return None
         items = run["attempts"]
         return {k: v for k, v in run.items() if k not in ("gateLap", "generation", "attempts")} | {
-            "attemptIds": [a["attemptId"] for a in items],
-            "attempts": [dict(a) for a in items[-120:]],
+            "attemptIds": [a["attemptId"] for a in items[-limit:]],
+            "attempts": [dict(a) for a in items[-limit:]],
             "counts": {key: sum(a["status"] == key for a in items) for key in
                        ("VALID", "INVALID", "PENDING VALIDATION", "OUT LAP", "IN LAP", "INCOMPLETE")}}
