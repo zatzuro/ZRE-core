@@ -51,13 +51,14 @@ jobs:
           node tests/frontend_kpi_library_265.cjs
           node tests/frontend_kpi_workflows_265.cjs
           node tests/frontend_practice_266.cjs
+          node tests/frontend_quali_266.cjs
 
       - name: Server and WebSocket demo smoke
         if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || github.head_ref == 'develop/2.6.6-practice'
         run: python diagnostics/smoke_264.py
 
   practice-visual:
-    if: github.event_name == 'pull_request' && github.head_ref == 'develop/2.6.6-practice'
+    if: github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali')
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -71,13 +72,22 @@ jobs:
           python -m pip install -r requirements.txt playwright
           python -m playwright install --with-deps chromium
       - name: Browser layout QA at 1366, 1920 and 2560
-        run: python diagnostics/practice_visual_266.py
+        run: |
+          python diagnostics/practice_visual_266.py
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-quali" ]; then python diagnostics/quali_visual_266.py; fi
       - name: Archive actual Chromium screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: practice-266-chromium-screenshots
           path: diagnostics/practice-screenshots/
+          if-no-files-found: warn
+      - name: Archive Quali screenshots
+        if: always() && github.head_ref == 'develop/2.6.6-quali'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quali-266-chromium-screenshots
+          path: diagnostics/quali-screenshots/
           if-no-files-found: warn
 
   windows-test-install:
