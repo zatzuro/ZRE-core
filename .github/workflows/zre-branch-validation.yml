@@ -50,10 +50,35 @@ jobs:
           node tests/frontend_screen_admin_2651.cjs
           node tests/frontend_kpi_library_265.cjs
           node tests/frontend_kpi_workflows_265.cjs
+          node tests/frontend_practice_266.cjs
 
       - name: Server and WebSocket demo smoke
         if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5')
         run: python diagnostics/smoke_264.py
+
+  practice-visual:
+    if: github.event_name == 'pull_request' && github.head_ref == 'develop/2.6.6-practice'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install existing runtime and headless browser test tools
+        run: |
+          python -m pip install -r requirements.txt playwright
+          python -m playwright install --with-deps chromium
+      - name: Browser layout QA at 1366, 1920 and 2560
+        run: python diagnostics/practice_visual_266.py
+      - name: Archive actual Chromium screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: practice-266-chromium-screenshots
+          path: diagnostics/practice-screenshots/
+          if-no-files-found: warn
 
   windows-test-install:
     if: github.ref == 'refs/heads/develop/2.6.5.1'
