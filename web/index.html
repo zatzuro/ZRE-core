@@ -6,7 +6,7 @@
   <meta name="zre-build" content="2.6.5.3">
   <title>ZRE Core · iRacing Team Engineer</title>
   <link rel="stylesheet" href="/static/style.css?v=2.6.5.3">
-  <link rel="stylesheet" href="/static/screen_admin.css?v=2.6.5.3">
+  <link rel="stylesheet" href="/static/practice.css?v=2.6.5.3">
   <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.5.3">
 </head>
 <body data-view="live">
@@ -28,7 +28,7 @@
 
   <nav id="screen-nav" class="screen-nav" aria-label="Pantallas personalizadas">
     <button id="header-collapse-toggle" type="button" aria-expanded="true" title="Plegar o desplegar controles">PLEGAR CONTROLES</button>
-    <button type="button" data-zre-view="admin">ADMINISTRACIÓN</button>
+    
   </nav>
 
   <aside id="lap-flash" class="lap-flash" hidden>
@@ -39,6 +39,50 @@
   </aside>
 
   <section id="live-view" class="screen live-view">
+      <section id="practice-workspace" class="practice-workspace" aria-label="Dashboard de entrenamiento" hidden>
+        <section class="practice-stat-row" aria-label="Rendimiento">
+          <div><small>MEJOR REAL</small><strong id="pr-best">—</strong></div>
+          <div><small>ÚLTIMA VÁLIDA</small><strong id="pr-last">—</strong></div>
+          <div><small>ÓPTIMA</small><strong id="pr-optimal">—</strong></div>
+          <div><small>Δ VS MEJOR REAL</small><strong id="pr-delta">—</strong></div>
+          <div><small>PROMEDIO VÁLIDO</small><strong id="pr-average">—</strong></div>
+          <div><small>CONSISTENCIA · σ</small><strong id="pr-consistency">—</strong></div>
+        </section>
+        <section class="practice-focus-row">
+          <article class="practice-map-panel">
+            <header><b>MAPA DEL CIRCUITO</b><span id="pr-map-status">SIN TRAZADO VALIDADO</span></header>
+            <div class="practice-map-stage">
+              <svg id="pr-track-map" viewBox="0 0 100 100" role="img" aria-label="Trazado real capturado por ZRE">
+                <polyline id="pr-track-line" points=""></polyline><g id="pr-track-zones"></g>
+              </svg>
+              <p id="pr-map-empty">El trazado se construye al completar vueltas con telemetría de posición.</p>
+            </div>
+            <footer><span><i class="pr-key pr-key-loss"></i> Pérdida validada</span><span><i class="pr-key pr-key-info"></i> Curva sin análisis</span></footer>
+          </article>
+          <article class="practice-coach-panel">
+            <header><b>COACH · TODAS LAS CURVAS</b><span id="pr-coach-status">CONSTRUYENDO REFERENCIA</span></header>
+            <div id="pr-corners" class="pr-corners" aria-live="polite"></div>
+            <p id="pr-corner-hint">Selecciona cualquier curva para leer su recomendación íntegra.</p>
+          </article>
+        </section>
+        <section class="practice-bottom-row">
+          <article class="pr-fuel-panel">
+            <header><b>EFICIENCIA · COMBUSTIBLE</b><span id="pr-fuel-source">SIN DATO</span></header>
+            <div class="pr-fuel-values">
+              <div><small>ACTUAL</small><strong id="pr-fuel">—</strong></div>
+              <div><small>PROM. VÁLIDO</small><strong id="pr-fuel-avg">—</strong></div>
+              <div><small>ÚLTIMA VÁLIDA</small><strong id="pr-fuel-last">—</strong></div>
+              <div><small>AUTONOMÍA EST.</small><strong id="pr-fuel-range">—</strong></div>
+            </div>
+            <p>MÍN <b id="pr-fuel-min">—</b> · MÁX <b id="pr-fuel-max">—</b> · Solo vueltas válidas</p>
+          </article>
+          <article class="pr-pace-panel">
+            <header><b>EVOLUCIÓN DE RITMO</b><span id="pr-pace-status">SIN VUELTAS VÁLIDAS</span></header>
+            <svg id="pr-pace-svg" viewBox="0 0 400 94" role="img" aria-label="Evolución de tiempos de vueltas válidas"><polyline id="pr-pace-line" points=""></polyline><g id="pr-pace-dots"></g></svg>
+            <div class="pr-pace-caption"><span id="pr-pace-count">0 vueltas válidas</span><span id="pr-pace-fuel">Consumo por vuelta: —</span></div>
+          </article>
+        </section>
+      </section>
     <section class="telemetry-grid live-telemetry">
       <article class="data-card lap-card"><h2>REFERENCIA PERSONAL</h2><div><span>ÚLTIMA</span><strong id="last-lap">—</strong></div><div><span>MEJOR REAL</span><strong id="best-lap">—</strong></div><div><span>ÓPTIMA</span><strong id="optimal-lap">—</strong></div></article>
       <article class="data-card"><h2>NEUMÁTICOS</h2><div><span>FL</span><strong id="wear-fl">—</strong></div><div><span>FR</span><strong id="wear-fr">—</strong></div><div><span>RL</span><strong id="wear-rl">—</strong></div><div><span>RR</span><strong id="wear-rr">—</strong></div></article>
@@ -195,10 +239,11 @@
     <div id="custom-screen-grid"></div>
   </section>
 
+  <dialog id="pr-corner-dialog" class="pr-corner-dialog"><form method="dialog"><button aria-label="Cerrar detalle" type="submit">CERRAR ×</button><h2 id="pr-detail-zone">—</h2><b id="pr-detail-title">—</b><p id="pr-detail-advice">—</p><small id="pr-detail-confidence">—</small></form></dialog>
   <aside id="debug-panel" class="debug-panel" hidden><div><strong>COACH DEBUG</strong><span>?debug=1</span></div><pre id="debug-content">Esperando telemetría…</pre></aside>
   <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.6.5.3</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
 </main>
-<script src="/static/screen_admin.js?v=2.6.5.3"></script>
+<script src="/static/practice.js?v=2.6.5.3"></script>
 <script src="/static/kpi_library.js?v=2.6.5.3"></script>
 <script src="/static/app.js?v=2.6.5.3"></script>
 </body>
