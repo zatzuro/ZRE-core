@@ -76,7 +76,7 @@
    const scope=el('rv2-standing-scope')?.value||'near';
    choices=rows.filter(x=>!x.isPlayer);
    if(lastIdentity!==race.sessionIdentity){
-     lastIdentity=race.sessionIdentity;pending=null;cache.delete('candidate-list');cache.delete('standings-near');cache.delete('standings-full');
+     lastIdentity=race.sessionIdentity;pending=null;cache.clear();
    }
    const center=own>=0?rows.slice(Math.max(0,own-4),Math.min(rows.length,own+5)):rows.slice(0,9);
    const shown=scope==='all'?rows:center;
