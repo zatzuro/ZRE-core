@@ -53,7 +53,7 @@ jobs:
           node tests/frontend_practice_266.cjs
 
       - name: Server and WebSocket demo smoke
-        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5')
+        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || github.head_ref == 'develop/2.6.6-practice'
         run: python diagnostics/smoke_264.py
 
   practice-visual:
