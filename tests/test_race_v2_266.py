@@ -282,6 +282,44 @@ class RaceV2Tests(unittest.TestCase):
         self.state()
         self.assertEqual(self.director.selected_idx,selected)
 
+    def test_fuel_model_is_sole_source_for_operational_average(self):
+        p=deepcopy(self.plan);p["fuelModel"]["observed_lpl"]=None
+        view=self.state(plan=p)
+        self.assertIsNone(view["fuel"]["observedLpl"])
+        self.assertIsNone(view["fuel"]["autonomyLaps"])
+        self.assertIsNone(view["fuel"]["deviationLpl"])
+
+    def test_offline_after_race_marks_dynamic_positions_stale(self):
+        s=bridge.DashboardSource(force_demo=True)
+        view=self.state()
+        last={"header":{"car":"QA GT3","track":"QA Road",
+                        "driver":"QA","state":"RUNNING"},
+              "self":{"fuel":"42.5 L","lastLap":"1:32.400"},
+              "connected":True,"sessionType":"Race","sessionMode":"race_engineer",
+              "raceDashboard":view,"racePlanVNext":self.plan}
+        s.session_state.remember_payload(last)
+        disconnected=s.disconnected_payload("SDK desconectado")
+        race=disconnected["raceDashboard"]
+        self.assertFalse(disconnected["connected"])
+        self.assertTrue(race["stale"])
+        self.assertIsNone(race["physical"]["ahead"])
+        self.assertIsNone(race["physical"]["behind"])
+        self.assertTrue(all(row["presence"]=="STALE" for row in race["classStandings"]))
+        self.assertTrue(all(row["observationState"]=="STALE" for row in race["paceSeries"]))
+        self.assertIsNone(race["fuel"]["currentLiters"])
+        self.assertFalse(disconnected["racePlanVNext"]["available"])
+
+    def test_no_prior_sdk_sample_never_pretends_demo_is_live(self):
+        s=bridge.DashboardSource(force_demo=True)
+        no_data=s.disconnected_payload("SDK ausente")
+        self.assertFalse(no_data["connected"])
+        self.assertFalse(no_data["demo"])
+        self.assertEqual(no_data["sessionType"],"UNKNOWN")
+        self.assertEqual(no_data["header"]["car"],"—")
+        self.assertEqual(no_data["standing"],[])
+        self.assertEqual(no_data["relative"],[])
+        self.assertEqual(no_data["coach"],{})
+
     def test_no_unbounded_lap_array_sent_to_browser(self):
         laps=[{"lap":i+1,"time":80+i*.005,"source":"SDK_OBSERVED"} for i in range(200)]
         row=clean_history(laps,laps)
