@@ -72,7 +72,7 @@ def main():
                         measured=page.evaluate("""() => {
                             let stage=document.getElementById('practice-workspace');
                             const corners=[...document.querySelectorAll('.pr-corner')];
-                            const rect=id=>{let r=document.getElementById(id).getBoundingClientRect();
+                            const rect=id=>{let r=(document.getElementById(id)||document.querySelector('.'+id)).getBoundingClientRect();
                                 return {x:r.x,y:r.y,left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
                             return {count:corners.length,viewport:innerHeight,
                                 bodyScroll:document.documentElement.scrollHeight>innerHeight+3,
