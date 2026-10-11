@@ -364,6 +364,21 @@
         <section class="admin-panel"><h2>CATÁLOGO DE COMPONENTES</h2><div id="admin-component-catalog"></div></section>
       </aside>
     </div>
+    <section class="admin-panel archive-admin" aria-label="Registros de sesiones y privacidad">
+      <header><div><h2>HISTORIAL AUTOMÁTICO · SESIONES</h2><p>Datos temporales locales del SDK. Retención desde la finalización real; las sesiones sin cierre no se eliminan automáticamente.</p></div>
+        <div class="archive-quick"><strong id="archive-size">—</strong><small>ESPACIO</small><strong id="archive-count">—</strong><small>REGISTROS</small></div>
+      </header>
+      <div class="archive-toolbar"><span>REGISTRO MÁS ANTIGUO <b id="archive-oldest">—</b></span>
+        <label>RETENCIÓN <input id="archive-retention-days" type="number" min="1" max="365" value="7"> DÍAS</label>
+        <button id="archive-retention-save" type="button">GUARDAR RETENCIÓN</button>
+        <button id="archive-refresh" type="button">ACTUALIZAR</button>
+        <button id="archive-clean" class="danger" type="button">LIMPIAR FINALIZADAS SIN PROTEGER</button>
+      </div>
+      <p id="archive-warnings" role="status">ESPERANDO ESTADO DEL REGISTRO</p>
+      <div class="archive-table-wrap"><table class="archive-table"><thead><tr><th>SESIÓN / PISTA</th><th>FECHA</th><th>ESTADO</th><th>ESPACIO</th><th>ACCIONES</th></tr></thead>
+        <tbody id="archive-sessions"></tbody></table></div>
+      <p id="archive-message" role="status" aria-live="polite">Los archivos de setups, preferencias y reportes nunca se borran desde esta limpieza.</p>
+    </section>
   </section>
 
   <section id="custom-view" class="screen custom-screen" hidden>
@@ -379,6 +394,7 @@
  <script src="/static/quali.js?v=2.6.6.1"></script>
  <script src="/static/race_v2.js?v=2.6.6.1"></script>
 <script src="/static/kpi_library.js?v=2.6.6.1"></script>
+<script src="/static/session_archive.js?v=2.6.7"></script>
 <script src="/static/app.js?v=2.6.6.1"></script>
 </body>
 </html>
