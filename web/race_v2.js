@@ -291,28 +291,28 @@
     command=sendSetting;
     if(window.ResizeObserver&&el('rv2-pace-chart'))new ResizeObserver(()=>{cache.delete('chart');if(latest)pace(latest)}).observe(el('rv2-pace-chart'));
     document.body.dataset.raceEmphasis=emphasis;
+    document.body.dataset.raceFont=fontSize;
+    if(el('rv2-font-select')){
+      el('rv2-font-select').value=fontSize;
+      el('rv2-font-select').addEventListener('change',event=>{
+        fontSize=['normal','large','xlarge'].includes(event.target.value)?event.target.value:'normal';
+        document.body.dataset.raceFont=fontSize;
+        try{localStorage.setItem('zre-race-font',fontSize)}catch(_){}
+      });
+    }
+    if(el('rv2-visible-count')){
+      el('rv2-visible-count').value=String(visibleCount);
+      el('rv2-visible-count').addEventListener('change',event=>{
+        const n=Number(event.target.value);visibleCount=Number.isInteger(n)?Math.max(1,Math.min(4,n)):2;
+        try{localStorage.setItem('zre-race-visible',String(visibleCount))}catch(_){}
+        cache.delete('standings-near');if(latest)standings(latest);
+      });
+    }
     if(el('rv2-emphasis-select')){
       el('rv2-emphasis-select').value=emphasis;
       el('rv2-emphasis-select').addEventListener('change',event=>{
         emphasis=['auto','sprint','endurance'].includes(event.target.value)?event.target.value:'auto';
         document.body.dataset.raceEmphasis=emphasis;
-     document.body.dataset.raceFont=fontSize;
-     if(el('rv2-font-select')){
-       el('rv2-font-select').value=fontSize;
-       el('rv2-font-select').addEventListener('change',event=>{
-         fontSize=['normal','large','xlarge'].includes(event.target.value)?event.target.value:'normal';
-         document.body.dataset.raceFont=fontSize;
-         try{localStorage.setItem('zre-race-font',fontSize)}catch(_){}
-       });
-     }
-     if(el('rv2-visible-count')){
-       el('rv2-visible-count').value=String(visibleCount);
-       el('rv2-visible-count').addEventListener('change',event=>{
-         const n=Number(event.target.value);visibleCount=Number.isInteger(n)?Math.max(1,Math.min(4,n)):2;
-         try{localStorage.setItem('zre-race-visible',String(visibleCount))}catch(_){}
-         cache.delete('standings-near');if(latest)standings(latest);
-       });
-     }
         try{localStorage.setItem('zre-race-v2-emphasis',emphasis)}catch(_){}
         if(latest)fuel(latest);
       });
