@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import datetime,timezone
 import json
+import math
 from pathlib import Path
 import queue
 import re
@@ -47,10 +48,10 @@ class SessionRecorder:
 
     def write(self,record):
         if not self.session_dir:return
-        item=dict(record or {});item.pop('telemetry',None) # Do not duplicate raw lap telemetry.
+        item=dict(record or {})
         item.setdefault('utc',datetime.now(timezone.utc).isoformat())
         item.setdefault('source','SDK_OBSERVED' if item.get('type')=='lap' else 'ZRE_INFERRED')
-        self._enqueue(('event',self.session_dir,deepcopy(item)))
+        self._enqueue(('event',self.session_dir,self._safe(deepcopy(item))))
 
     def finish_session(self,reason='session-change',extra=None):
         if not self.session_dir:return None
@@ -111,6 +112,21 @@ class SessionRecorder:
         # Signatures are bounded even for many stops in a long session.
         if len(self._signatures)>2048:self._signatures={k:v for k,v in self._signatures.items() if not isinstance(k,tuple) or k[0]!='pit'}
 
+    @staticmethod
+    def _safe(value,depth=0):
+        """Normalize SDK NaN, tuples, and unusual types before durable JSON serialization."""
+        if depth>12:return str(type(value).__name__)
+        if value is None or isinstance(value,(bool,str,int)):
+            return value if not isinstance(value,str) else value[:4096]
+        if isinstance(value,float):
+            return value if math.isfinite(value) else None
+        if isinstance(value,(list,tuple)):
+            return [SessionRecorder._safe(x,depth+1) for x in value[:2048]]
+        if isinstance(value,dict):
+            return {str(k)[:120]:SessionRecorder._safe(v,depth+1)
+                    for k,v in list(value.items())[:512]}
+        return str(value)[:512]
+
     def maintenance_if_due(self):
         """Queue hourly cleanup; actual I/O runs exclusively on the writer thread."""
         now=time.monotonic()
@@ -129,8 +145,12 @@ class SessionRecorder:
         stamp=float(session_time) if isinstance(session_time,(int,float)) else None
         if stamp is None:
             return
-        if self._last_telemetry_clock is not None and stamp<=self._last_telemetry_clock+0.075:
-            return
+        if self._last_telemetry_clock is not None:
+            if stamp<self._last_telemetry_clock-1:
+                self._last_roster_clock=None
+                self._last_driverinfo_clock=None
+            elif stamp<=self._last_telemetry_clock+0.075:
+                return
         self._last_telemetry_clock=stamp
         sample_keys=("Lap","LapCompleted","LapDistPct","LapCurrentLapTime","LapLastLapTime",
                      "LapBestLap","LapBestLapTime","LapDeltaToBestLap","LapDeltaToBestLap_OK",
