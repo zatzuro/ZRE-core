@@ -314,6 +314,7 @@ class DashboardSource:
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
+        self._stint_offtrack_since = None
         self.race_director=RaceDirector();self.race_class_candidates=set();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar';self.sector_tracking_armed=False;self.sector_last_sample=None
 
@@ -494,7 +495,13 @@ class DashboardSource:
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
                 self.last_strategy_log_signature=None
             self.session_key=identity;self.last_session_time=session_time;self._last_session_type=session.get("SessionType")
-            self.quali.observe(identity,session.get("SessionType"),self.get("Lap"),self.get("LapDistPct"),session_time,self.get("IsOnTrack"),self.get("OnPitRoad"))
+            # Quali history belongs to the official iRacing session, not to a
+            # potentially changing auto-detected team CarIdx. Preserve runs
+            # during ambiguous local/team ownership resolution and driver swaps.
+            quali_identity=(identity.session_id,identity.subsession_id,identity.track_id,identity.session_num)
+            self.quali.observe(quali_identity,session.get("SessionType") or session.get("SessionName"),
+                               self.get("Lap"),self.get("LapDistPct"),session_time,
+                               self.get("IsOnTrack"),self.get("OnPitRoad"))
             if self.recorder.session_id is None:
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
@@ -629,7 +636,18 @@ class DashboardSource:
             explicit_on_track = self.get("IsOnTrack")
             on_track = bool(explicit_on_track) if explicit_on_track is not None else player_pct is not None
             in_garage = not on_track and not on_pit_road
-            driving_stint = bool(session_coach_mode!="qualifying" and on_track and not on_pit_road)
+            requested_stint=bool(session_coach_mode!="qualifying" and on_track and not on_pit_road)
+            # A single false SDK IsOnTrack frame must NOT close/reopen a stint.
+            # Real pit entries and official session transitions are immediate.
+            clock=number(session_time)
+            clock=clock if clock is not None else time.monotonic()
+            if self.stint_active and not requested_stint and session_coach_mode!="qualifying" and not on_pit_road:
+                if self._stint_offtrack_since is None or clock<self._stint_offtrack_since:
+                    self._stint_offtrack_since=clock
+                driving_stint=(clock-self._stint_offtrack_since)<2.0
+            else:
+                self._stint_offtrack_since=None
+                driving_stint=requested_stint
             if self.stint_active and not driving_stint:
                 engineering=self.coach.engineering_snapshot()
                 frozen = self.coach.freeze_stint_summary()
@@ -646,7 +664,11 @@ class DashboardSource:
                 setup_tires=capture_tires(self.get)
                 setup_controls=driver_controls(self.get)
                 self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls)
-                logger.info("COACH STINT START setup=%s source=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"))
+                logger.info("COACH STINT START setup=%s source=%s session=%s lap=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"),identity,lap_number)
+                self.recorder.write({"type":"stint_start","sessionTime":session_time,
+                    "lap":lap_number,"sessionIdentity":str(identity),
+                    "setupFingerprint":setup_snapshot.get("fingerprint"),
+                    "source":"SDK_OBSERVED"})
             if driving_stint and self.setup_engineer.current is not None:
                 self.setup_engineer.observe_controls(driver_controls(self.get),session_time=session_time,lap=lap_number)
             self.stint_active = driving_stint
@@ -793,6 +815,7 @@ class DashboardSource:
                 average_lap=average_lap,stint_laps=payload["teamContext"]["stintLaps"],
                 current_driver=context.current_driver or player_driver.get("UserName"),last_valid=self.kpi_last_valid)
             self.recorder.observe(payload,session_time)
+            self.recorder.observe_sdk(self.get,session_time=session_time)
             return payload
         finally:
             self.ir.unfreeze_var_buffer_latest()
@@ -1080,6 +1103,7 @@ class DashboardSource:
             completed_laps=completed,current_lap=lap,fuel_value=fuel_used,fuel_source=fuel_source,
             average_lap=pace,stint_laps=payload["teamContext"]["stintLaps"],current_driver=driver,last_valid={})
         self.recorder.observe(payload,session_time)
+        self.recorder.observe_sdk(self.get,session_time=session_time,own_car=False)
         self.handle_race_plan_audio(payload)
         self.flush_race_engineer_audio()
         return payload
@@ -1123,7 +1147,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_lap_caution=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None
+        self.personal_lap_clean=False; self.personal_lap_caution=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None;self._stint_offtrack_since=None
 
     def _quali_sdk_delta(self,key):
         raw=number(self.get(key))
