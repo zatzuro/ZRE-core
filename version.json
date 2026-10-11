@@ -1,8 +1,8 @@
 {
   "product": "ZRE Core",
   "name": "Zatzuro Race Engineering",
-  "version": "2.6.6.1",
-  "channel": "stable",
+  "version": "2.6.7",
+  "channel": "development",
   "repository": "zatzuro/ZRE-core",
-  "archive_ref": "release-2.6.6.1"
+  "archive_ref": "develop/2.6.7-functionality-storage-quali-race"
 }
