@@ -41,6 +41,8 @@
     </div>
     <label id="quali-mode-control" hidden>SESIÓN ZRE<select id="quali-mode-select"><option value="training">ENTRENAMIENTO</option><option value="simulate">QUALI SIMULADA</option></select></label>
     <button id="quali-new-run" type="button" hidden>NUEVA TANDA</button>
+    <label class="rv2-control-mini rv2-font-control" for="rv2-font-select">LETRA
+      <select id="rv2-font-select" aria-label="Tamaño de fuente en Carrera"><option value="normal">NORMAL</option><option value="large">GRANDE</option><option value="xlarge">EXTRA</option></select></label>
     <label id="rv2-emphasis-control" hidden>ÉNFASIS CARRERA<select id="rv2-emphasis-select" aria-label="Énfasis visual sin cambiar la sesión"><option value="auto">AUTO</option><option value="sprint">SPRINT</option><option value="endurance">ENDURANCE</option></select></label>
     <button id="header-collapse-toggle" type="button" aria-expanded="true" title="Plegar o desplegar controles">PLEGAR CONTROLES</button>
     
@@ -193,20 +195,25 @@
     </section>
   </section>
   <section id="race-v2-view" class="screen race-v2-view" hidden aria-label="ZRE Carrera V2">
-    <div class="rv2-kpis" aria-label="Indicadores operativos de carrera">
-      <div class="rv2-kpi"><small>POSICIÓN CLASE</small><strong id="rv2-position">—</strong><em id="rv2-position-source">SDK</em></div>
-      <div class="rv2-kpi"><small>DELANTE · FÍSICO</small><strong id="rv2-gap-ahead">—</strong><em id="rv2-car-ahead">SIN DATO</em></div>
-      <div class="rv2-kpi"><small>DETRÁS · FÍSICO</small><strong id="rv2-gap-behind">—</strong><em id="rv2-car-behind">SIN DATO</em></div>
-      <div class="rv2-kpi"><small>ÚLTIMA PROPIA</small><strong id="rv2-last-lap">—</strong></div>
-      <div class="rv2-kpi"><small>MI RITMO · 5 V.</small><strong id="rv2-my-pace">—</strong><em id="rv2-my-count">SIN MUESTRAS</em></div>
-      <div class="rv2-kpi"><small>FUEL ACTUAL</small><strong id="rv2-fuel">—</strong><em id="rv2-fuel-source">SIN DATO</em></div>
-      <div class="rv2-kpi"><small>CONSUMO</small><strong id="rv2-consumption">—</strong><em id="rv2-use-source">L/VUELTA</em></div>
-      <div class="rv2-kpi"><small>RESTANTE</small><strong id="rv2-remaining">—</strong></div>
+    <div class="rv2-kpis" aria-label="Indicadores críticos durante carrera">
+      <div class="rv2-kpi"><small>POSICIÓN · CLASE</small><strong id="rv2-position">—</strong><em id="rv2-position-source">SIN DATO SDK</em></div>
+      <div class="rv2-kpi"><small>GAP DELANTE</small><strong id="rv2-gap-ahead">—</strong><em id="rv2-car-ahead">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>GAP DETRÁS</small><strong id="rv2-gap-behind">—</strong><em id="rv2-car-behind">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>VUELTA ACTUAL</small><strong id="rv2-lap">—</strong><em>SDK · EN CURSO</em></div>
+      <div class="rv2-kpi"><small>COMBUSTIBLE</small><strong id="rv2-fuel">—</strong><em id="rv2-fuel-source">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>AUTONOMÍA</small><strong id="rv2-autonomy">—</strong><em>VUELTAS OBSERVADAS</em></div>
+      <div class="rv2-kpi rv2-kpi-alert" data-severity="none"><small>ALERTA OPERATIVA</small><strong id="rv2-alert">SIN ALERTAS</strong><em id="rv2-alert-source">SDK / RACE PLAN</em></div>
+      <div class="rv2-kpi"><small>TIEMPO RESTANTE</small><strong id="rv2-remaining">—</strong><em>iRacing SDK</em></div>
     </div>
     <section class="rv2-main">
       <article class="rv2-panel rv2-standings-panel">
-        <header><strong>CLASS STANDINGS · OFICIAL</strong><div><select id="rv2-standing-scope" aria-label="Vista de clasificación"><option value="near">CERCA DE MÍ</option><option value="all">TODOS</option></select><button type="button" id="rv2-standings-expand" title="Abrir clasificación completa">AMPLIAR ↗</button></div></header>
-        <div class="rv2-standing-head"><span>POS.</span><span>#</span><span>PILOTO / COCHE</span><span>MEJOR</span><span>ÚLTIMA</span></div>
+        <header><strong id="rv2-standings-title">CLASS STANDINGS</strong><div>
+        <label class="rv2-control-mini" for="rv2-visible-count">± PILOTOS
+          <select id="rv2-visible-count" aria-label="Cantidad de pilotos delante y detrás"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select>
+        </label>
+        <select id="rv2-standing-scope" aria-label="Vista de clasificación"><option value="near">CERCA DE MÍ</option><option value="all">TODOS</option></select>
+        <button type="button" id="rv2-standings-expand" title="Consultar clasificación completa">AMPLIAR ↗</button></div></header>
+        <div class="rv2-standing-head"><span>POS.</span><span>PILOTO · #</span><span>GAP</span><span>MEJOR</span><span>RITMO</span></div>
         <div id="rv2-standing-rows" class="rv2-standing-rows" role="list" aria-label="Orden oficial de clase"></div>
         <footer><span id="rv2-standing-summary">ESPERANDO CLASIFICACIÓN</span><span>SELECCIONA UN RIVAL</span></footer>
       </article>
@@ -234,7 +241,12 @@
     </section>
     <section class="rv2-bottom">
       <article class="rv2-panel rv2-chart-panel">
-        <header><strong>COMPARADOR DE 4 RITMOS · ÚLTIMAS 8 VUELTAS POR COCHE</strong><span>RITMO = 3–5 V. COMPARABLES</span></header>
+        <header><strong>COMPARADOR DE RITMOS</strong><div class="rv2-secondary-stats">
+        <span>ÚLT. <b id="rv2-last-lap">—</b></span>
+        <span>MI RITMO <b id="rv2-my-pace">—</b></span>
+        <span>CONSUMO <b id="rv2-consumption">—</b></span>
+        <small id="rv2-my-count">SIN MUESTRAS</small><small id="rv2-use-source">SIN MUESTRAS</small>
+      </div></header>
         <div id="rv2-pace-legend" class="rv2-pace-legend" aria-label="Referencias y promedios">SIN SERIES</div>
         <div class="rv2-chart-content"><svg id="rv2-pace-chart" viewBox="0 0 900 210" role="img" aria-label="Tiempos por vuelta para los cuatro roles"><g id="rv2-pace-grid"></g><g id="rv2-pace-series"></g></svg></div>
         <footer><span>ÍNDICE RELATIVO (−7…ACTUAL) · VUELTAS NO NECESARIAMENTE SIMULTÁNEAS</span><span id="rv2-pace-difference">Δ RITMO VS RIVAL: —</span></footer>
@@ -247,7 +259,7 @@
       </article>
     </section>
   </section>
-  <dialog id="rv2-standings-dialog" class="rv2-standings-dialog"><form method="dialog"><header><strong>CLASIFICACIÓN COMPLETA DE CLASE</strong><button type="submit" aria-label="Cerrar clasificación">CERRAR ×</button></header></form><div class="rv2-standing-head"><span>POS.</span><span>#</span><span>PILOTO / COCHE</span><span>MEJOR</span><span>ÚLTIMA</span></div><div id="rv2-standing-all" class="rv2-standing-all"></div></dialog>
+  <dialog id="rv2-standings-dialog" class="rv2-standings-dialog"><form method="dialog"><header><strong>CLASIFICACIÓN COMPLETA DE CLASE</strong><button type="submit" aria-label="Cerrar clasificación">CERRAR ×</button></header></form><div class="rv2-standing-head"><span>POS.</span><span>PILOTO · #</span><span>GAP</span><span>MEJOR</span><span>RITMO</span></div><div id="rv2-standing-all" class="rv2-standing-all"></div></dialog>
   <section id="spotter-view" class="screen spotter-screen" hidden>
     <div class="spotter-kpis"><div><small># COCHE · PILOTO</small><strong id="spotter-car">—</strong><small id="spotter-driver">AUTO · no confirmado</small></div><div><small>POS CLASE</small><strong id="spotter-position">—</strong></div><div><small>VUELTA</small><strong id="spotter-lap">—</strong></div><div><small>TIEMPO RESTANTE</small><strong id="spotter-time">—</strong></div><div><small>FUEL</small><strong id="spotter-fuel">—</strong></div><div><small>AUTONOMÍA</small><strong id="spotter-autonomy">—</strong></div><div><small>PRÓXIMA PARADA</small><strong id="spotter-next-stop">—</strong></div><div><small>PARADAS RESTANTES</small><strong id="spotter-stops">—</strong></div></div>
     <div class="spotter-choice"><label>COCHE DEL EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label><label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label><span id="spotter-identity-warning">Selecciona el coche si ZRE no lo identifica.</span></div>
