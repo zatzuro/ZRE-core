@@ -769,13 +769,15 @@ class DashboardSource:
                 {"cleanPace":clean_pace,"cleanLaps":clean_laps,"planAvailable":bool(plan.get("available")),
                  "fuelSource":"REAL LOCAL" if context.local_driving and fuel is not None else "SIN DATO",
                  "caution":intel["caution"],"pitsOpen":intel["session"]["observed"].get("pitsOpen"),"trafficClear":traffic_clear}) if session_coach_mode=="race_engineer" else {"available":False,"source":"ZRE_INFERRED"}
-            self.handle_race_plan_audio(payload)
+            if session_coach_mode=="race_engineer":self.handle_race_plan_audio(payload)
             self.flush_race_engineer_audio()
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
             self.race_class_candidates={row.get("idx") for row in category_rows
                                         if row.get("idx") is not None and row.get("idx")!=pilot_idx}
-            if session_coach_mode=="race_engineer":
+            if session_coach_mode in ("race_engineer","practice"):
+                # Practice Race preview reuses the same observed SDK roster and
+                # timing, but is explicitly NOT an official Race result or plan.
                 payload["raceDashboard"]=race_view(
                     session_identity=identity,own_idx=pilot_idx,class_rows=category_rows,
                     results=results,cars=class_cars,best_laps=self.get("CarIdxBestLapTime",[]) or [],
@@ -783,6 +785,7 @@ class DashboardSource:
                     own_history=self.lap_history,director=payload["raceDirector"],fuel=fuel,
                     fuel_history=self.fuel_per_lap,race_plan=payload["racePlanVNext"],
                     session_time=session_time)
+                payload["raceDashboard"]["practicePreview"]=session_coach_mode=="practice"
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
             behind=max((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']<0),key=lambda r:r['gapSeconds'],default=None)
