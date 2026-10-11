@@ -21,7 +21,7 @@ function mode(data,garage){
   put('q-kind',q.qualifyingMode==='official'?'OFICIAL':q.qualifyingMode==='simulated'?'SIMULADA':'NO ACTIVA');
   put('q-run-id',run.runId?'TANDA '+run.runId:'SIN TANDA');
   put('q-session-source',q.officialSessionType?'iRacing '+q.officialSessionType:'SDK NO DISPONIBLE');
-  put('q-lap-state',q.inGarage?'GARAGE':q.onPitRoad?'PIT LANE':q.activeAttempt?.status|| (q.onTrack?'EN PISTA':'SIN POSICIÓN CONFIRMADA'));
+  put('q-lap-state',q.lastError?'ERROR · '+q.lastError:q.inGarage?'GARAGE':q.onPitRoad?'PIT LANE':q.activeAttempt?.status|| (q.onTrack?'EN PISTA':'SIN POSICIÓN CONFIRMADA'));
   $('quali-view')?.classList.toggle('q-garage-active',Boolean(garage));
   if($('q-garage'))$('q-garage').hidden=!garage;
 }
@@ -52,21 +52,35 @@ function map(data){
  }):[];
  g.replaceChildren(...nodes);
 }
+function timingLoss(item){
+ const n=Number(item?.lossSeconds);
+ return item?.lossSeconds!=null&&Number.isFinite(n)&&n>0?('+'+n.toFixed(3)+' s'):'SIN PÉRDIDA CUANTIFICADA';
+}
 function priorities(data){
- const host=$('q-priorities'),list=(data.coach?.curveRecommendations||[]).slice(0,3);if(!host)return;
- const sig=JSON.stringify(list);if(host.dataset.signature===sig)return;host.dataset.signature=sig;
- if(!list.length){put('q-focus-zone','SIN DIAGNÓSTICO');put('q-focus-advice','Completa vueltas comparables; no hay una causa validada.');const p=document.createElement('p');p.textContent='Sin recomendaciones contrastadas. Completa vueltas comparables.';host.replaceChildren(p);return}
+ // Quali Coach reports TIMING losses, not advice on driving technique or setup.
+ const host=$('q-priorities'),list=(data.coach?.curveRecommendations||[]).slice(0,3);
+ if(!host)return;
+ const sig=JSON.stringify(list.map(c=>[c.zone,c.lossSeconds,c.confidence]));
+ if(host.dataset.signature===sig)return;host.dataset.signature=sig;
+ if(!list.length){
+   put('q-focus-zone','SIN REFERENCIA');
+   put('q-focus-advice','Completa vueltas cronometradas comparables.');
+   const p=document.createElement('p');p.textContent='Sin datos suficientes para cuantificar pérdidas.';host.replaceChildren(p);return;
+ }
  host.replaceChildren(...list.map(c=>{
-  const d=document.createElement('div');d.className='q-priority';
-  const b=document.createElement('b');b.textContent=c.zone||'ZONA';
-  const t=document.createElement('span');t.textContent=(c.title||'')+' · '+(c.advice||'');
-  t.title=c.advice||'';d.append(b,t);return d;
+   const d=document.createElement('div');d.className='q-priority';
+   const b=document.createElement('b');b.textContent=c.zone||'ZONA';
+   const t=document.createElement('span');t.textContent=timingLoss(c)+' · '+(c.confidence||'EVIDENCIA LIMITADA');
+   d.append(b,t);return d;
  }));
- const first=list[0];put('q-focus-zone',first.zone);put('q-focus-advice',first.advice||first.title);
+ const first=list[0];put('q-focus-zone',first.zone||'ZONA');
+ put('q-focus-advice','Pérdida respecto a referencia cronométrica: '+timingLoss(first)+'.');
 }
 function sectors(data){
  const q=data.qualifying||{},starts=q.sectorBoundaries||[],elapsed=q.sectorTimes||[],last=q.lastSectors||[];
- const run=q.activeRun||{},valid=(run.attempts||[]).filter(a=>a.status==='VALID'&&a.sectorTimes?.length===starts.length);
+ const run=q.activeRun||{},valid=(run.attempts||[]).filter(a=>
+   (a.status==='VALID'||(a.status==='PENDING VALIDATION'&&a.validity==='ZRE_CLEAN_ESTIMATE'))
+   &&a.sectorTimes?.length===starts.length);
  const reference=valid.sort((a,b)=>a.lapTime-b.lapTime)[0]?.sectorTimes||[];
  const sig=JSON.stringify([starts,elapsed,last,reference]);if(sectorSignature===sig)return;sectorSignature=sig;
  put('q-sector-source',starts.length?'ZRE CALCULADO · LÍMITES SDK':'SIN SECTORES SDK');
@@ -123,12 +137,14 @@ function updateSelection(select,items,prefer){
 function comparison(q){
  const runs=[...(q.previousRuns||[]),q.activeRun].filter(Boolean);
  const arr=runs.flatMap(run=>(run.attempts||[]).map(a=>({...a,runLabel:run.runId})))
-  .filter(a=>a.status==='VALID'&&a.sectorTimes?.length===q.sectorBoundaries?.length);
+  .filter(a=>(a.status==='VALID'||(a.status==='PENDING VALIDATION'&&a.validity==='ZRE_CLEAN_ESTIMATE'))
+   &&a.sectorTimes?.length===q.sectorBoundaries?.length);
  updateSelection($('q-compare-a'),arr,arr.at(-2)?.attemptId);
  updateSelection($('q-compare-b'),arr,arr.at(-1)?.attemptId);
  const a=arr.find(x=>x.attemptId===$('q-compare-a')?.value),b=arr.find(x=>x.attemptId===$('q-compare-b')?.value);
  if(!a||!b||a===b||a.sectorSource!==b.sectorSource){put('q-comparison','Comparación no disponible: se requieren dos vueltas validadas con sectores y fuentes compatibles.');put('q-comparison-sectors','—');return}
- put('q-comparison','T '+a.runLabel+' V'+a.sourceLap+' '+format(a.lapTime)+' vs T '+b.runLabel+' V'+b.sourceLap+' '+format(b.lapTime)+' · Δ '+signed(b.lapTime-a.lapTime)+' · '+(a.sectorSource||'FUENTE DESCONOCIDA'));
+ const official=a.status==='VALID'&&b.status==='VALID';
+  put('q-comparison','T '+a.runLabel+' V'+a.sourceLap+' '+format(a.lapTime)+' vs T '+b.runLabel+' V'+b.sourceLap+' '+format(b.lapTime)+' · Δ '+signed(b.lapTime-a.lapTime)+' · '+(official?'SDK CONFIRMADO':'COMPARACIÓN ZRE · LEGALIDAD SDK NO CONFIRMADA'));
  const sectors=a.sectorTimes.map((n,i)=>'S'+(i+1)+' '+signed(b.sectorTimes[i]-n));
  put('q-comparison-sectors',sectors.join('   |   '));
 }
@@ -140,8 +156,8 @@ function garage(data){
  const rows=data.coach?.allCorners||[];const sig=JSON.stringify(rows);if(garageSignature===sig)return;garageSignature=sig;
  host.replaceChildren(...rows.map(c=>{
    const card=document.createElement('div');card.className='q-garage-curve';card.dataset.valid=String(c.state==='diagnosis');
-   const title=document.createElement('strong');title.textContent=(c.zone||'TRAMO')+' · '+(c.title||'Sin diagnóstico');
-   const p=document.createElement('p');p.textContent=c.advice||'Completa más vueltas comparables.';card.append(title,p);return card;
+   const title=document.createElement('strong');title.textContent=(c.zone||'TRAMO')+' · '+timingLoss(c);
+   const p=document.createElement('p');p.textContent='Referencia cronométrica · '+(c.confidence||'evidencia limitada');card.append(title,p);return card;
  }));
 }
 function render(data,options={}){
