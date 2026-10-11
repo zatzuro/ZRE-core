@@ -95,12 +95,16 @@ def race_view(*, session_identity, own_idx, class_rows, results, cars, best_laps
             position_source = "CARIDX_CLASS_POSITION_FALLBACK"
         else:
             position_source = "UNAVAILABLE"
+        observed_history=clean_history(obs.get("lapTimes"),obs.get("cleanLapTimes")) if idx!=own_idx else clean_history(own_history,None,own=True)
         entry = {"carIdx": idx, "carNumber": row.get("number"), "driverName": row.get("driver"),
                  "carModel": row.get("car"), "teamName": row.get("team"),
                  "classId": row.get("classId"), "officialClassPosition": pos if position_source == "RESULTS_POSITIONS" else None,
                  "classPosition": pos, "overallPosition": result.get("Position"),
                  "positionSource": position_source, "bestLapSeconds": best, "lastLapSeconds": last,
                  "timingSource": "CARIDX_LIVE" if sdk_last is not None else "RESULTS_OR_LAST_VALID",
+                 "recentPaceSeconds":observed_history.get("recentAverageSeconds"),
+                 "recentPaceSamples":observed_history.get("sampleCount"),
+                 "recentPaceSource":"ZRE_COMPARABLE_FILTER" if observed_history.get("representative") else "INSUFFICIENT_SAMPLES",
                  "lastSeenSessionTime": obs.get("lastSeenSessionTime"),
                  "lastSeenAgo": obs.get("lastSeenAgo"), "presence": obs.get("presence") or "UNKNOWN",
                  "isPlayer": idx == own_idx, "identityAmbiguous": row.get("driver") in (None, "—")}
@@ -118,6 +122,13 @@ def race_view(*, session_identity, own_idx, class_rows, results, cars, best_laps
         ahead = None
     if behind and behind.get("relativeLapFraction", 0) >= 0:
         behind = None
+
+    # Physical gaps only when independently observed for that exact neighbor.
+    # No conversion of class positions or inferred pace into live seconds.
+    for entry in official:
+        candidate=ahead if ahead and entry["carIdx"]==ahead["carIdx"] else behind if behind and entry["carIdx"]==behind["carIdx"] else None
+        entry["physicalGapSeconds"]=candidate.get("gapSeconds") if candidate else None
+        entry["physicalGapSource"]=candidate.get("gapSource") if candidate else "UNAVAILABLE"
 
     selection = director or {}
     rival_idx = selection.get("requestedCarIdx") if selection.get("selectionMode") == "manual" else selection.get("selectedIdx")
