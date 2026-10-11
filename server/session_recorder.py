@@ -48,7 +48,7 @@ class SessionRecorder:
 
     def write(self,record):
         if not self.session_dir:return
-        item=dict(record or {})
+        item=dict(record or {});item.pop('telemetry',None) # Full SDK samples saved separately by observe_sdk.
         item.setdefault('utc',datetime.now(timezone.utc).isoformat())
         item.setdefault('source','SDK_OBSERVED' if item.get('type')=='lap' else 'ZRE_INFERRED')
         self._enqueue(('event',self.session_dir,self._safe(deepcopy(item))))
