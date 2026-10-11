@@ -103,7 +103,7 @@ def main():
                     changed=fixture(8)
                     changed["coach"]["curveRecommendations"]=[]
                     page.evaluate("data=>window.ZREQuali.render(data,{garage:false})",changed)
-                    assert page.locator("#q-focus-zone").inner_text()=="SIN DIAGNÓSTICO"
+                    assert page.locator("#q-focus-zone").inner_text()=="SIN REFERENCIA"
                     assert "0:29.400" in page.locator("#q-sector-rows").inner_text()
                     assert page.locator("#q-best").inner_text()=="1:29.350"
                     changed["sessionIntelligence"]["session"]["observed"]["flags"]=8
