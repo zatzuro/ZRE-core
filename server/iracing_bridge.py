@@ -1602,6 +1602,69 @@ def installed_version():
     try:return str(json.loads((ROOT/"version.json").read_text(encoding="utf-8"))["version"])
     except Exception:return APP_VERSION
 
+async def archive_request_json(request):
+    """Limit archive mutations to same-origin local JSON POSTs."""
+    if request.content_type != "application/json":
+        raise web.HTTPUnsupportedMediaType()
+    origin=request.headers.get("Origin")
+    if origin and origin.rstrip("/") not in (f"http://{request.host}",f"https://{request.host}"):
+        raise web.HTTPForbidden(reason="Origen distinto del dashboard local")
+    if request.content_length is not None and request.content_length>4096:
+        raise web.HTTPRequestEntityTooLarge(max_size=4096,actual_size=request.content_length)
+    try:
+        body=await request.json()
+        if not isinstance(body,dict):
+            raise ValueError("Cuerpo JSON inválido")
+        return body
+    except (ValueError,TypeError):
+        raise web.HTTPBadRequest(reason="Solicitud JSON inválida")
+
+
+async def archive_status(request):
+    source=request.app["source"]
+    result=await asyncio.to_thread(source.recorder.status)
+    return web.json_response(result,headers={"Cache-Control":"no-store"})
+
+
+async def archive_settings(request):
+    body=await archive_request_json(request)
+    try:
+        days=await asyncio.to_thread(request.app["source"].recorder.set_retention,body.get("days"))
+    except (ValueError,TypeError,OverflowError):
+        raise web.HTTPBadRequest(reason="Retención válida: 1 a 365 días")
+    return web.json_response({"retentionDays":days})
+
+
+async def archive_protect(request):
+    body=await archive_request_json(request)
+    if type(body.get("protected")) is not bool:
+        raise web.HTTPBadRequest(reason="Se requiere protected booleano")
+    try:
+        value=await asyncio.to_thread(request.app["source"].recorder.protect,
+                                      body.get("sessionId"),body["protected"])
+    except (ValueError,TypeError):
+        raise web.HTTPBadRequest(reason="Sesión desconocida o inválida")
+    return web.json_response({"protected":value})
+
+
+async def archive_cleanup(request):
+    body=await archive_request_json(request)
+    if body.get("confirm") != "DELETE_FINISHED_TEMPORARY":
+        raise web.HTTPBadRequest(reason="Confirmación explícita requerida")
+    result=await asyncio.to_thread(request.app["source"].recorder.clear_completed,True)
+    return web.json_response(result)
+
+
+async def archive_export(request):
+    try:
+        path=await asyncio.to_thread(request.app["source"].recorder.export_session,
+                                     request.query.get("sessionId"),ROOT/"reports")
+    except (ValueError,TypeError):
+        raise web.HTTPNotFound(reason="Sesión no disponible")
+    return web.FileResponse(path,headers={"Cache-Control":"no-store",
+                                        "Content-Disposition":f'attachment; filename="{path.name}"'})
+
+
 async def close_session_journal(app):
     source=app["source"]
     source.finalize_setup_stint_before_reset("shutdown")
@@ -1691,7 +1754,7 @@ def main():
     app.on_cleanup.append(close_session_journal)
     if start_background_updater is not None:
         start_background_updater();print("ZRE Update: vigilancia automatica activa cada 2 minutos; nunca reinicia una carrera.")
-    app.router.add_get("/",index);app.router.add_get("/version",version_status);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
+    app.router.add_get("/",index);app.router.add_get("/version",version_status);app.router.add_get("/api/session-archive",archive_status);app.router.add_post("/api/session-archive/settings",archive_settings);app.router.add_post("/api/session-archive/protect",archive_protect);app.router.add_post("/api/session-archive/cleanup",archive_cleanup);app.router.add_get("/api/session-archive/export",archive_export);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
     print(f"Dashboard ready at http://localhost:{args.port} ({'demo' if args.demo else 'iRacing SDK'})")
     web.run_app(app,host="127.0.0.1",port=args.port,print=None)
 
