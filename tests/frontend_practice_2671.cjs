@@ -15,7 +15,10 @@ const ids=['pr-pace-svg','pr-pace-line','pr-pace-dots','pr-pace-status',
  'pr-pace-count','pr-pace-scale','pr-pace-fuel','header-collapse-toggle'];
 const items=Object.fromEntries(ids.map(id=>[id,node()]));
 items['pr-pace-scale'].value='focus';
-const context={document:{body:node(),getElementById:id=>items[id]||null,
+const context={document:{body:node(),
+    getElementById:id=>items[id]||(items[id]=node()),
+    querySelectorAll:()=>[],
+    createElement:tag=>node(tag),
     createElementNS:(ns,tag)=>node(tag)},
  localStorage:{getItem:()=>null,setItem(){}},
  window:{},console};
