@@ -173,6 +173,7 @@ class SessionArchive:
                 if not isinstance(recovery,dict):
                     continue
                 return {"fromSessionId":folder.name,
+                        "carIdx":meta.get("carIdx"),
                         "lastObservedAt":recovery.get("lastObservedAt"),
                         "grid":recovery.get("grid") or {},
                         "roster":recovery.get("roster") or {},
