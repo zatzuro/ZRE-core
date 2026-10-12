@@ -171,6 +171,17 @@ def race_view(*, session_identity, own_idx, class_rows, results, cars, best_laps
     # Reuse the existing Race Plan fuel estimates; never invent a fuel target.
     fm = (race_plan or {}).get("fuelModel") or {}
     observed = numeric(fm.get("observed_lpl"), positive=True)
+    # The existing race FuelModel remains first choice; while iRacing is in
+    # Practice it can be uninitialized, despite validated local fuel laps.
+    # Reuse the same filtered SDK lap history, never pit/caution/invalid laps.
+    local_uses=[numeric(row.get("fuelUse"),positive=True)
+                for row in own_history if isinstance(row,dict)
+                and row.get("valid") and not row.get("caution") and not row.get("onPitRoad")]
+    local_uses=[v for v in local_uses if v is not None and 0<v<30]
+    if observed is None and len(local_uses)>=2:
+        recent=local_uses[-8:]
+        observed=sum(recent)/len(recent)
+    sample_count=fm.get("green_samples") if numeric(fm.get("observed_lpl"),positive=True) is not None else len(local_uses)
     target = numeric(fm.get("strategy_lpl"), positive=True)
     # Only the existing FuelModel GREEN_FULL classifier may establish an
     # observed race-consumption value. Raw SDK fuel deltas include pit/caution.
@@ -196,7 +207,8 @@ def race_view(*, session_identity, own_idx, class_rows, results, cars, best_laps
                  "deviationLpl": round(observed-target, 4) if observed is not None and target is not None else None,
                  "autonomyLaps": round(autonomy, 2) if autonomy is not None else None,
                  "source": fm.get("source") or ("REAL LOCAL" if available_fuel is not None else "SIN DATO"),
-                 "sampleCount": fm.get("green_samples") if observed is not None else 0,
+                 "sampleCount": sample_count if observed is not None else 0,
+                 "lastUseLpl":local_uses[-1] if local_uses else None,
                  "historicalSamples":fm.get("historical_samples")},
         "source": "RESULTS_POSITIONS / SDK_DYNAMIC / SESSION_INTELLIGENCE",
     }
