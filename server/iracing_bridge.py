@@ -316,6 +316,11 @@ class DashboardSource:
         self.stint_active = False
         self._stint_offtrack_since = None
         self._sdk_link_state = None
+        self._recovery_key = None
+        self._recovery_results = {}
+        self._recovery_provenance = None
+        self._recovered_own_laps = []
+        self._recovered_car_idx = None
         self.race_director=RaceDirector();self.race_class_candidates=set();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar';self.sector_tracking_armed=False;self.sector_last_sample=None
 
@@ -454,6 +459,116 @@ class DashboardSource:
             return False
         return auto_mode == 'spotter'
 
+    def restore_session_journal(self,weekend,session_num):
+        """Recover last observed laps/roster for a late join or process restart.
+
+        Cached ResultsPositions are marked RECOVERED, never official or LIVE.
+        Does no scans on subsequent SDK frames for the same official identity.
+        """
+        key=(weekend.get("SessionID"),weekend.get("SubSessionID"),
+             weekend.get("TrackID"),session_num)
+        if self._recovery_key==key:
+            return
+        self._recovery_key=key
+        self._recovery_results={}
+        self._recovery_provenance=None
+        self._recovered_own_laps=[]
+        self._recovered_car_idx=None
+        archive=getattr(getattr(self,"recorder",None),"archive",None)
+        if archive is None:
+            return
+        try:
+            stored=archive.recover_session(weekend,session_num,
+                         current_session_id=self.recorder.session_id)
+        except (OSError,ValueError,TypeError) as exc:
+            logger.warning("SESSION RECOVERY unavailable: %s",type(exc).__name__)
+            return
+        if not stored:
+            return
+        self._recovery_provenance={"fromSessionId":stored.get("fromSessionId"),
+            "lastObservedAt":stored.get("lastObservedAt"),"source":"LOCAL_SESSION_JOURNAL"}
+        roster=(stored.get("roster") or {}).get("driverInfo") or {}
+        remembered={int(row["CarIdx"]):row for row in roster.get("Drivers",[])
+                    if isinstance(row,dict) and isinstance(row.get("CarIdx"),int)
+                    and 0<=row["CarIdx"]<64}
+        grid=stored.get("grid") or {}
+        for result in grid.get("ResultsPositions") or []:
+            if not isinstance(result,dict):
+                continue
+            idx=result.get("CarIdx")
+            if isinstance(idx,int) and 0<=idx<64 and result.get("ClassPosition") is not None:
+                self._recovery_results[idx]={**result,
+                    "positionSource":"RECOVERED_SDK_SNAPSHOT"}
+        for idxstr,observed in (stored.get("competitors") or {}).items():
+            try:idx=int(idxstr)
+            except (TypeError,ValueError):continue
+            if idx<0 or idx>=64 or not isinstance(observed,dict):
+                continue
+            source_car=remembered.get(idx) or {}
+            car={"CarIdx":idx,
+                 "CarClassID":source_car.get("CarClassID",observed.get("classId")),
+                 "CarNumber":source_car.get("CarNumber",observed.get("number")),
+                 "UserName":source_car.get("UserName") or observed.get("driver"),
+                 "TeamName":source_car.get("TeamName") or observed.get("team"),
+                 "CarScreenName":source_car.get("CarScreenName") or observed.get("car")}
+            lap_history=observed.get("lapTimes") or []
+            clean=observed.get("cleanLapTimes") or []
+            latest=observed.get("lastLap")
+            completed=observed.get("lapsComplete")
+            self.competitor_presence_history[idx]={
+                "_car":car,"driver":observed.get("driver"),
+                "number":observed.get("number"),"classId":observed.get("classId"),
+                "lapTimes":lap_history[-24:],"cleanLapTimes":clean[-12:],
+                "pitHistory":(observed.get("pitHistory") or [])[-10:],
+                "lastLap":latest,"bestLap":observed.get("bestLap"),
+                "lastSeenSessionTime":observed.get("lastSeenSessionTime"),
+                "lap":observed.get("lap"),"lapsComplete":completed,
+                "presence":"STALE","source":"LOCAL_SESSION_JOURNAL",
+                "_state":{"completed":completed,"time":latest,"pending":None,
+                          "cycle":None,"pit":None,"incidents":None}}
+        self._recovered_own_laps=stored.get("ownLaps") or []
+        self._recovered_car_idx=stored.get("carIdx")
+        logger.info("SESSION RECOVERY from=%s rivals=%s laps=%s",
+            stored.get("fromSessionId"),len(self.competitor_presence_history),
+            len(self._recovered_own_laps))
+
+    def restore_local_laps_once(self,pilot_idx,completed_laps,results):
+        """Bootstrap display history, but never fabricate a validated SDK lap."""
+        if not self._recovered_own_laps or self.last_lap_number is not None:
+            return
+        if self._recovered_car_idx is not None and self._recovered_car_idx!=pilot_idx:
+            self._recovered_own_laps=[]
+            return
+        restored=[]
+        for event in self._recovered_own_laps:
+            if not isinstance(event,dict):
+                continue
+            lap=event.get("lap");duration=number(event.get("officialTime"))
+            if not isinstance(lap,int) or lap<=0 or duration is None or duration<=0:
+                continue
+            if isinstance(completed_laps,int) and lap>completed_laps:
+                continue
+            restored.append({"lap":lap,"time":duration,
+                "sectors":event.get("sectors") or [],"priorBest":None,
+                "fuelUse":event.get("fuelUse"),"valid":bool(event.get("valid")),
+                "caution":bool(event.get("caution")),
+                "sessionTime":event.get("sessionTime"),
+                "driverName":event.get("driverName"),
+                "source":"ZRE_RECORDED_RECOVERED"})
+        self._recovered_own_laps=[]
+        if not restored:
+            return
+        self.lap_history=sorted({e["lap"]:e for e in restored}.values(),
+                                key=lambda x:x["lap"])[-10:]
+        last=self.lap_history[-1]
+        self.last_lap_number=completed_laps if isinstance(completed_laps,int) else last["lap"]
+        self.last_recorded_lap_time=last["time"]
+        self.last_observed_lap_time=last["time"]
+        valid=[x["time"] for x in self.lap_history if x["valid"]]
+        if valid:
+            self.personal_session_best=min(valid)
+        logger.info("LOCAL LAP RECOVERY count=%s last=%s",len(self.lap_history),last["lap"])
+
     def live_payload(self,force_driver=False,force_spotter=False):
         self.ir.freeze_var_buffer_latest()
         try:
@@ -509,8 +624,14 @@ class DashboardSource:
                 self.recorder.finish_session("session-change")
                 self.reset_session_tracking()
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
-                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
+                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"trackId":weekend.get("TrackID"),"sessionNum":session_num,"carIdx":context.car_idx})
                 self.last_strategy_log_signature=None
+            self.restore_session_journal(weekend,session_num)
+            # SDK results always win. Previously captured results are only
+            # displayed as STALE history when the current ResultsPositions
+            # packet is missing/incomplete (common after a reconnect).
+            for recovered_idx,recovered_result in self._recovery_results.items():
+                results.setdefault(recovered_idx,recovered_result)
             self.session_key=identity;self.last_session_time=session_time;self._last_session_type=session.get("SessionType")
             # Quali history belongs to the official iRacing session, not to a
             # potentially changing auto-detected team CarIdx. Preserve runs
@@ -521,7 +642,7 @@ class DashboardSource:
                                self.get("IsOnTrack"),self.get("OnPitRoad"))
             if self.recorder.session_id is None:
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
-                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
+                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"trackId":weekend.get("TrackID"),"sessionNum":session_num,"carIdx":context.car_idx})
             if context.local_driving and context.car_idx is not None:
                 if not self.strategy_settings.get('tankCapacityLiters'):
                     measured_capacity=number(driver_info.get('DriverCarFuelMaxLtr'))
@@ -625,6 +746,7 @@ class DashboardSource:
             session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
             self.coach_session_mode="qualifying" if self.quali.mode else session_coach_mode
             self.update_sector_tracking(lap_number,self.get("LapDistPct",player_pct),last_lap)
+            self.restore_local_laps_once(pilot_idx,completed_laps,results)
             if completed_laps is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
             self.update_race_engineer_audio(self.coach_session_mode,pilot_idx,category_rows,live_last,car_completed,results)
@@ -803,6 +925,7 @@ class DashboardSource:
                     fuel_history=self.fuel_per_lap,race_plan=payload["racePlanVNext"],
                     session_time=session_time)
                 payload["raceDashboard"]["practicePreview"]=session_coach_mode=="practice"
+                payload["raceDashboard"]["recoveredFromJournal"]=self._recovery_provenance
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
             behind=max((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']<0),key=lambda r:r['gapSeconds'],default=None)
@@ -1405,7 +1528,11 @@ class DashboardSource:
                       sdk_fast is not None and abs(sdk_fast-completed)<.001),
             sectors=sectors,sector_source="ZRE_RECONSTRUCTED_FROM_SDK_SPLITS" if sectors else "UNAVAILABLE",
             in_pit=bool(self.get("OnPitRoad",False)))
-        self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"source":"SDK_OBSERVED"})
+        self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),
+            "officialTime":round(completed,4),"sectors":sectors,"sessionTime":number(self.get("SessionTime")),
+            "caution":bool(pending.get("caution")),"driverName":self.local_driver_name,
+            "fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,
+            "optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"source":"SDK_OBSERVED"})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
             on_pit=bool(self.get("OnPitRoad",False)),caution=bool(pending.get("caution")) or is_caution_flag(self.get("SessionFlags")))
