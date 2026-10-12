@@ -55,6 +55,8 @@ with tempfile.TemporaryFile(mode="w+") as log:
    feed(pr)
    assert page.locator("#practice-workspace").is_visible()
    page.locator("#screen-mode-select").select_option("quali")
+   assert not page.evaluate("window.__messages.some(m=>m.action==='quali_mode'&&m.value==='simulate')")
+   page.locator("#quali-mode-select").select_option("simulate")
    assert page.evaluate("window.__messages.some(m=>m.action==='quali_mode'&&m.value==='simulate')")
    q=quali(12)
    sim=packet(q,"Practice","P-101",{**q["qualifying"],"officialSessionIdentity":"P-101"})
@@ -82,13 +84,14 @@ with tempfile.TemporaryFile(mode="w+") as log:
    official=quali(20,True)
    qa=packet(official,"Qualify","Q-102",{**official["qualifying"],"officialSessionIdentity":"Q-102"})
    feed(qa)
-   assert page.locator("#screen-mode-select").input_value()=="auto"
+   assert page.locator("#screen-mode-select").input_value()=="quali"  # user visual choice persists
    assert page.locator("#q-kind").inner_text()=="OFICIAL"
    assert page.locator("#q-best").inner_text()!="—"
    assert page.locator("#q-last").inner_text()!="—"
    # No braking/setup technique advice exposed in Quali time-only Coach.
    assert "Retrasa 5 metros" not in page.locator("#q-priorities").inner_text()
    assert page.locator("#q-delta").inner_text()!=""
+   page.locator("#screen-mode-select").select_option("auto")
    rc=packet(test_race,"Race","R-103")
    feed(rc)
    assert page.locator("#race-v2-view").is_visible()
@@ -114,20 +117,22 @@ with tempfile.TemporaryFile(mode="w+") as log:
     assert dims["scrollWidth"]<=dims["viewport"]+3,dims
     assert dims["scrollHeight"]<=dims["height"]+3,dims
     page.screenshot(path=str(OUT/f"race-{width}.png"))
-   # Existing Builder administration, with actual local storage management API.
-   admin=page.locator('[data-zre-view="admin"]')
-   if admin.count() and admin.is_visible():
-    admin.click()
-    assert page.locator("#admin-view").is_visible()
-    page.locator("#archive-refresh").click()
-    page.wait_for_function("document.getElementById('archive-retention-days').value!==''")
-    archive=page.evaluate("""async()=>await(await fetch('/api/session-archive')).json()""")
-    assert archive["retentionDays"]>=1
-    assert "sizeBytes" in archive and "sessions" in archive
-    page.screenshot(path=str(OUT/"admin-storage.png"))
+   # History management remains accessible without restoring the archived builder.
+   assert page.locator("#archive-open").is_visible()
+   page.locator("#archive-open").click()
+   assert page.locator("#zre-archive-dialog").is_visible()
+   page.locator("#archive-refresh").click()
+   page.wait_for_function("document.getElementById('archive-retention-days').value!==''")
+   archive=page.evaluate("""async()=>await(await fetch('/api/session-archive')).json()""")
+   assert archive["retentionDays"]>=1
+   assert "sizeBytes" in archive and "sessions" in archive
+   page.screenshot(path=str(OUT/"session-archive.png"))
+   page.locator("#zre-archive-dialog .zre-archive-dialog-head button").click()
+   assert not page.locator("#zre-archive-dialog").is_visible()
+   assert page.evaluate("getComputedStyle(document.body).backgroundColor")=="rgb(0, 0, 0)"
    assert not errors,errors
    browser.close()
-   print("PASS 2.6.7: simulated Practice → Quali → same run → Carrera preview, official Quali,")
+   print("PASS 2.6.7.1: unrestricted screen selection + explicit Quali action + Carrera,")
    print("  full Race → compact self/rival → all → zoom/resolution 1366/1920/2560 and storage API.")
  finally:
   proc.terminate();proc.wait(timeout=5)
