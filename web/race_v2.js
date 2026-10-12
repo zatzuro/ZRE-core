@@ -64,7 +64,7 @@
    const button=document.createElement('button');button.type='button';button.className='rv2-standing-row';
    button.dataset.player=String(Boolean(row.isPlayer));
    button.dataset.rival=String(row.carIdx===rivalIdx);
-   button.dataset.stale=String(!row.isPlayer&&row.presence!=='LIVE');
+   button.dataset.stale=String(row.positionSource==='RECOVERED_SDK_SNAPSHOT'||(!row.isPlayer&&row.presence!=='LIVE'));
    button.dataset.carIdx=String(row.carIdx);
    button.title=(row.driverName||'SIN IDENTIDAD')+' · #'+(row.carNumber||'—')+
                 ' · '+(row.positionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK':'POSICIÓN FALLBACK');
@@ -108,14 +108,14 @@
      const target=el('rv2-standing-all');
      if(target){const position=target.scrollTop;target.replaceChildren(...rows.map(x=>buildStanding(x,rivalIdx)));target.scrollTop=position;}
    }
-   set('rv2-standing-summary',data.connected?(rows.length+' COCHES · '+(race.practicePreview?'PRÁCTICA · VISTA DE ENSAYO':race.ownPositionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK OFICIAL':'FALLBACK IDENTIFICADO')):'ÚLTIMA CLASIFICACIÓN · SDK DESCONECTADO');
+   set('rv2-standing-summary',data.connected?(rows.length+' COCHES · '+(race.practicePreview?'PRÁCTICA · VISTA DE ENSAYO':race.ownPositionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK OFICIAL':race.ownPositionSource==='RECOVERED_SDK_SNAPSHOT'?'REGISTRO HISTÓRICO · NO EN VIVO':'FALLBACK IDENTIFICADO')):'ÚLTIMA CLASIFICACIÓN · SDK DESCONECTADO');
    set('rv2-standings-title',race.practicePreview?'STANDINGS · PRÁCTICA':'CLASS STANDINGS · CLASE');
    listCandidates();
  }
  function liveMetrics(data){
    const race=data.raceDashboard||{},phys=race.physical||{},fuel=race.fuel||{},you=(race.paceSeries||[]).find(s=>s.carIdx===race.ownCarIdx);
    set('rv2-position',race.ownClassPosition!=null?'P'+race.ownClassPosition:'—');
-   set('rv2-position-source',!data.connected?'ÚLTIMA CLASE · STALE':race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE'+(race.ownOverallPosition!=null?' · GENERAL P'+race.ownOverallPosition:''):'FALLBACK / SIN DATO');
+   set('rv2-position-source',!data.connected?'ÚLTIMA CLASE · STALE':race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE'+(race.ownOverallPosition!=null?' · GENERAL P'+race.ownOverallPosition:''):race.ownPositionSource==='RECOVERED_SDK_SNAPSHOT'?'HISTÓRICO · NO EN VIVO':'FALLBACK / SIN DATO');
    for(const side of ['ahead','behind']){
      const row=phys[side];
      set('rv2-gap-'+side,row?.gapLabel||'SIN DATO');
