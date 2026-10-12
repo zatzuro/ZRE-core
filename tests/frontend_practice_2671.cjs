@@ -3,7 +3,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 function node(tag='div'){
  const n={tag,id:'',dataset:{},attributes:{},textContent:'',style:{setProperty(){}},
-   classList:{toggle(){},add(){},remove(){}},
+   classList:{toggle(){return false},contains(){return false},add(){},remove(){}},
    children:[],append(...a){this.children.push(...a)},
    replaceChildren(...a){this.children=a},
    setAttribute(k,v){this.attributes[k]=String(v)},
