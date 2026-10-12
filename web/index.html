@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/quali.css?v=2.6.7">
   <link rel="stylesheet" href="/static/race_v2.css?v=2.6.7">
   <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.7">
+  <link rel="stylesheet" href="/static/black_theme.css?v=2.6.7.1">
 </head>
 <body data-view="live">
 <main class="dashboard">
@@ -36,6 +37,9 @@
         <option value="practice">PRÁCTICA</option>
         <option value="quali">QUALI</option>
         <option value="race">CARRERA</option>
+        <option value="pit">GARAGE</option>
+        <option value="summary">RESUMEN</option>
+        <option value="spotter">SPOTTER</option>
       </select>
       <span id="screen-mode-context" role="status" aria-live="polite">ESPERANDO SESIÓN iRacing</span>
     </div>
@@ -44,6 +48,7 @@
     <label class="rv2-control-mini rv2-font-control" for="rv2-font-select">LETRA
       <select id="rv2-font-select" aria-label="Tamaño de fuente en Carrera"><option value="normal">NORMAL</option><option value="large">GRANDE</option><option value="xlarge">EXTRA</option></select></label>
     <label id="rv2-emphasis-control" hidden>ÉNFASIS CARRERA<select id="rv2-emphasis-select" aria-label="Énfasis visual sin cambiar la sesión"><option value="auto">AUTO</option><option value="sprint">SPRINT</option><option value="endurance">ENDURANCE</option></select></label>
+    <button id="archive-open" type="button" title="Gestionar historial de sesiones y protección de registros">REGISTROS</button>
     <button id="header-collapse-toggle" type="button" aria-expanded="true" title="Plegar o desplegar controles">PLEGAR CONTROLES</button>
     
   </nav>
