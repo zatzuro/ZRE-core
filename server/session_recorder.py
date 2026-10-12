@@ -289,7 +289,7 @@ class SessionRecorder:
                     elif kind_data=='lap':
                         own=cache['ownLaps'];lap=data.get('lap')
                         if lap is not None and not any(e.get('lap')==lap for e in own):
-                            own.append(data);del own[:-120]
+                            own.append(data);del own[:-1200]
                         cache['lastObservedAt']=data.get('sessionTime') or cache['lastObservedAt']
                     if data.get('type') in ('lap','own_lap_snapshot'):ctx['laps']+=int(data.get('type')=='own_lap_snapshot')
                     if data.get('type')=='strategy_prediction':ctx['predictions']+=1
