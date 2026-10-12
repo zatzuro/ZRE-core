@@ -42,7 +42,7 @@ try:
     from server.setup_ownership import resolve_setup_owner
     from server.quali_runs import QualiRuns
     from server.setup_snapshot import snapshot_from_sdk
-    from server.stint_engineering_snapshot import capture_conditions, capture_tires
+    from server.stint_engineering_snapshot import capture_conditions, capture_tires, capture_garage_tires
     from server.kpi_library import build_kpi_library
 except ModuleNotFoundError:
     from session_state import SessionIdentity, SessionState
@@ -62,7 +62,7 @@ except ModuleNotFoundError:
     from setup_ownership import resolve_setup_owner
     from quali_runs import QualiRuns
     from setup_snapshot import snapshot_from_sdk
-    from stint_engineering_snapshot import capture_conditions, capture_tires
+    from stint_engineering_snapshot import capture_conditions, capture_tires, capture_garage_tires
     from kpi_library import build_kpi_library
 
 from aiohttp import web
@@ -314,6 +314,7 @@ class DashboardSource:
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
+        self._tire_garage_last_check=None
         self._stint_offtrack_since = None
         self._sdk_link_state = None
         self._clock_probe_baseline = None
@@ -852,8 +853,9 @@ class DashboardSource:
                 setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID")}
                 setup_conditions=capture_conditions(self.get)
                 setup_tires=capture_tires(self.get)
+                setup_garage_tires=capture_garage_tires(self.get("CarSetup",{}) or {},session_time)
                 setup_controls=driver_controls(self.get)
-                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls)
+                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls,garage_tires_start=setup_garage_tires)
                 logger.info("COACH STINT START setup=%s source=%s session=%s lap=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"),identity,lap_number)
                 self.recorder.write({"type":"stint_start","sessionTime":session_time,
                     "lap":lap_number,"sessionIdentity":str(identity),
@@ -862,6 +864,22 @@ class DashboardSource:
             if driving_stint and self.setup_engineer.current is not None:
                 self.setup_engineer.observe_controls(driver_controls(self.get),session_time=session_time,lap=lap_number)
             self.stint_active = driving_stint
+            # The sports stint closes immediately, but iRacing publishes tire
+            # inspection values only when they are available in CarSetup.
+            # Reconcile original saved stint (not a new stint); never SPOTTER.
+            if (not driving_stint and self.setup_engineer.current is None and
+                self.setup_engineer.pending_tire_record is not None and
+                (on_pit_road or in_garage) and context.local_driving):
+                stamp=number(session_time)
+                if (self._tire_garage_last_check is None or stamp is None or
+                    stamp<self._tire_garage_last_check or stamp-self._tire_garage_last_check>=1):
+                    self._tire_garage_last_check=stamp
+                    measured_garage=capture_garage_tires(self.get("CarSetup",{}) or {},session_time)
+                    amended=self.setup_engineer.reconcile_tires(
+                        measured_garage,weekend,in_pits=True)
+                    if amended:
+                        logger.info("TIRE INSPECTION RECONCILED stint=%s source=CARSETUP_GARAGE",
+                            amended.get("stintNumber"))
             completed_for_strategy=completed_laps if completed_laps is not None else max(0,lap_number-1)
             if driving_stint and self.strategy_stint_start_lap is None:self.strategy_stint_start_lap=completed_for_strategy
             if on_pit_road and not self.strategy_last_on_pit and self.strategy_stint_start_lap is not None:
