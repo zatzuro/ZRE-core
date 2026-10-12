@@ -598,7 +598,7 @@ class DashboardSource:
         if not restored:
             return
         self.lap_history=sorted({e["lap"]:e for e in restored}.values(),
-                                key=lambda x:x["lap"])[-10:]
+                                key=lambda x:x["lap"])[-1200:]
         last=self.lap_history[-1]
         self.last_lap_number=completed_laps if isinstance(completed_laps,int) else last["lap"]
         self.last_recorded_lap_time=last["time"]
@@ -937,7 +937,11 @@ class DashboardSource:
                 "fuelLapsEstimated":round(fuel/mean_fuel,1)
                     if fuel is not None and mean_fuel is not None and mean_fuel>0 else None,
                 "laps":[{"lap":row.get("lap"),"seconds":round(row["time"],3),
-                         "fuelUse":row.get("fuelUse")} for row in valid_practice],
+                         "fuelUse":row.get("fuelUse"),"valid":bool(row.get("valid")),
+                          "caution":bool(row.get("caution")),"onPitRoad":bool(row.get("onPitRoad")),
+                          "comparable":bool(row.get("valid") and not row.get("caution") and not row.get("onPitRoad")),
+                          "source":row.get("source") or "SDK_OBSERVED"}
+                        for row in self.lap_history if isinstance(row.get("time"),(int,float)) and row["time"]>0],
             }
             payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"owner":dict(self.setup_engineer.owner),"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
@@ -1561,8 +1565,8 @@ class DashboardSource:
         elif sectors and len(sectors)!=len(self._sector_boundaries()):
             sectors=[]
         prior_best=self.personal_session_best
-        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid")),"caution":bool(pending.get("caution")),"sessionTime":number(self.get("SessionTime")),"driverName":self.local_driver_name,"source":"SDK_OBSERVED"})
-        self.lap_history=self.lap_history[-10:]
+        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid")),"caution":bool(pending.get("caution")),"onPitRoad":bool(pending.get("onPitRoad")),"sessionTime":number(self.get("SessionTime")),"driverName":self.local_driver_name,"source":"SDK_OBSERVED"})
+        self.lap_history=self.lap_history[-1200:]  # complete long stint, bounded memory
         for index,value in enumerate(sectors if pending.get("valid") else []):
             while index>=len(self.best_sectors):self.best_sectors.append(None)
             if self.best_sectors[index] is None or value<self.best_sectors[index]:self.best_sectors[index]=value
