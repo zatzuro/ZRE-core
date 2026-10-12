@@ -67,9 +67,25 @@
      message('Limpieza completada: '+(result.removed||[]).length+' sesiones · '+size(result.freedBytes)+' liberados.');await refresh(true);
    }catch(e){message('Falló la limpieza: '+e.message,true)}
  });
- const observer=new MutationObserver(()=>{
-   if($('admin-view')&&!$('admin-view').hidden)refresh();
- });
- if($('admin-view'))observer.observe($('admin-view'),{attributes:true,attributeFilter:['hidden']});
+ // Archive remains operational even though Screen Builder is intentionally archived.
+ const archivePanel=document.querySelector('#admin-view .archive-admin');
+ const archiveOpen=$('archive-open');
+ if(archivePanel&&archiveOpen){
+   const dialog=document.createElement('dialog');
+   dialog.id='zre-archive-dialog';
+   dialog.className='zre-archive-dialog';
+   dialog.setAttribute('aria-label','Historial automático y protección de sesiones');
+   const top=document.createElement('div');top.className='zre-archive-dialog-head';
+   const title=document.createElement('strong');title.textContent='REGISTROS DE SESIÓN · ZRE';
+   const close=document.createElement('button');close.type='button';close.textContent='CERRAR ×';
+   close.addEventListener('click',()=>dialog.close());
+   top.append(title,close);dialog.append(top,archivePanel);
+   (document.querySelector('main.dashboard')||document.body).append(dialog);
+   archiveOpen.addEventListener('click',()=>{
+     if(dialog.open){dialog.close();return}
+     dialog.showModal();refresh(true);
+   });
+   dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close()});
+ }
  window.ZRESessionArchive={refresh};
 })();
