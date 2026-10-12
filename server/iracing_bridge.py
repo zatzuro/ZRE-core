@@ -869,7 +869,8 @@ class DashboardSource:
             # Reconcile original saved stint (not a new stint); never SPOTTER.
             if (not driving_stint and self.setup_engineer.current is None and
                 self.setup_engineer.pending_tire_record is not None and
-                (on_pit_road or in_garage) and context.local_driving):
+                (on_pit_road or in_garage) and resolved_owner.get("authorized") and
+                resolved_owner.get("scope")=="own"):
                 stamp=number(session_time)
                 if (self._tire_garage_last_check is None or stamp is None or
                     stamp<self._tire_garage_last_check or stamp-self._tire_garage_last_check>=1):
