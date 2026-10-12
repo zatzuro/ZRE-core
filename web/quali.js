@@ -18,7 +18,7 @@ function sync(data,role){
 }
 function mode(data,garage){
   const q=data.qualifying||{},run=q.activeRun||{};
-  put('q-kind',q.qualifyingMode==='official'?'OFICIAL':q.qualifyingMode==='simulated'?'SIMULADA':'NO ACTIVA');
+  put('q-kind',q.qualifyingMode==='official'?'OFICIAL':q.qualifyingMode==='simulated'?'SIMULADA':'CONSULTA');
   put('q-run-id',run.runId?'TANDA '+run.runId:'SIN TANDA');
   put('q-session-source',q.officialSessionType?'iRacing '+q.officialSessionType:'SDK NO DISPONIBLE');
   put('q-lap-state',q.lastError?'ERROR · '+q.lastError:q.inGarage?'GARAGE':q.onPitRoad?'PIT LANE':q.activeAttempt?.status|| (q.onTrack?'EN PISTA':'SIN POSICIÓN CONFIRMADA'));
@@ -27,12 +27,23 @@ function mode(data,garage){
 }
 function kpis(data){
  const q=data.qualifying||{},self=data.self||{},coach=data.coach||{};
- const delta=q.deltaReferences?.LapDeltaToBestLap;
- const n=delta?.valid===true?delta.value:null;
- put('q-delta',signed(n));put('q-delta-source',n!=null?'SDK · MEJOR PERSONAL':'SIN DELTA SDK VÁLIDO');
+ const references=[
+   ['LapDeltaToBestLap','MEJOR PERSONAL SDK'],
+   ['LapDeltaToSessionBestLap','MEJOR SESIÓN SDK'],
+   ['LapDeltaToOptimalLap','ÓPTIMA SDK']
+ ];
+ const chosen=references.find(([key])=>q.deltaReferences?.[key]?.valid===true);
+ const n=chosen?q.deltaReferences[chosen[0]].value:null;
+ put('q-delta',signed(n));
+ put('q-delta-source',!data.connected?'SDK DESCONECTADO · HISTÓRICO':
+   chosen?'SDK · '+chosen[1]:'SIN DELTA SDK VÁLIDO');
  if($('q-delta'))$('q-delta').dataset.trend=n>0?'loss':n<0?'gain':'neutral';
- put('q-best',format(q.bestPersonalSDK));put('q-last',self.lastLap);
- put('q-optimal',coach.optimalLap);put('q-potential',coach.potential);
+ const official=finite(q.bestPersonalSDK)&&q.bestPersonalSDK>0;
+ put('q-best',format(official?q.bestPersonalSDK:q.bestPersonalZRE));
+ put('q-best-source',official?'MEJOR REAL · SDK':'MEJOR OBSERVADA · ZRE NO OFICIAL');
+ put('q-current',format(q.currentLapTime));
+ put('q-last',self.lastLap&&self.lastLap!=='—'?self.lastLap:format(q.lastLapSDK));
+ put('q-optimal',coach.optimalLap||format(q.optimalZRE));put('q-potential',coach.potential);
  put('q-position',q.qualifyingMode==='official'&&q.classPosition!=null?'P'+q.classPosition:'NO OFICIAL');
  put('q-time-left',finite(q.timeRemaining)&&q.timeRemaining>=0?Math.floor(q.timeRemaining/60)+':'+String(Math.floor(q.timeRemaining%60)).padStart(2,'0'):'—');
 }
