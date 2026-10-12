@@ -42,8 +42,9 @@ function syncScreenMenu(data,view){
  if(select.value!==screenChoice)select.value=screenChoice;
  const mode=sessionWorkspaceMode(data),label=mode==='race'?'CARRERA':mode==='qualifying'?'QUALI':'PRÁCTICA';
  const selected=screenChoice==='auto'?'AUTO':({practice:'PRÁCTICA',quali:'QUALI',race:'CARRERA',pit:'GARAGE',summary:'RESUMEN',spotter:'SPOTTER'}[screenChoice]||screenChoice.toUpperCase());
- const matches=screenChoice==='auto'||(screenChoice==='practice'&&mode==='practice')||(screenChoice==='quali'&&mode==='qualifying')||(screenChoice==='race'&&mode==='race')||screenChoice==='pit'||screenChoice==='summary'||screenChoice==='spotter';
- const displayOnly=screenChoice!=='auto'&&!matches;
+ const matches=screenChoice==='auto'||(screenChoice==='practice'&&mode==='practice')||(screenChoice==='quali'&&(mode==='qualifying'||data?.qualifying?.qualifyingMode==='simulated'))||(screenChoice==='race'&&mode==='race')||screenChoice==='pit'||screenChoice==='summary'||(screenChoice==='spotter'&&activeRole==='spotter');
+ const rolePreview=activeRole==='spotter'&&screenChoice!=='spotter'&&screenChoice!=='auto';
+ const displayOnly=screenChoice!=='auto'&&(!matches||rolePreview);
  const state=!data?.connected?' · SDK SIN CONEXIÓN':displayOnly?' · SOLO CONSULTA':'';
  const simulation=mode==='practice'&&data?.qualifying?.qualifyingMode==='simulated';
  const status='iRacing: '+label+' · VISTA: '+selected+(simulation?' · SIMULACIÓN QUALI ACTIVA':'')+state;
