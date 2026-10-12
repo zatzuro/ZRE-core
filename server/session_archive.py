@@ -139,6 +139,49 @@ class SessionArchive:
                 continue
         return {"removed": removed, "freedBytes": freed}
 
+    def recover_session(self, weekend, session_num, *, current_session_id=None):
+        """Read last durable SDK/pace checkpoint for the SAME official session.
+
+        Only exact numeric iRacing SessionID/SubSessionID/TrackID/SessionNum match.
+        Never infer an official position from a cached checkpoint.
+        """
+        if not isinstance(weekend, dict) or not self.root.is_dir():
+            return None
+        keys=("SessionID","SubSessionID","TrackID")
+        if any(weekend.get(key) is None for key in keys):
+            return None
+        try:
+            session_num=int(session_num)
+        except (TypeError,ValueError):
+            return None
+        # Filenames start with sortable UTC microsecond timestamps. Scan a
+        # bounded set and inspect only JSON metadata + a small checkpoint file.
+        folders=sorted((p for p in self.root.iterdir() if p.is_dir() and
+                        not p.is_symlink()),reverse=True)
+        for folder in folders[:120]:
+            if current_session_id and folder.name==current_session_id:
+                continue
+            try:
+                session=json.loads((folder/"session.json").read_text(encoding="utf-8"))
+                meta=session.get("metadata") or {}
+                if (meta.get("sessionId")!=weekend["SessionID"] or
+                    meta.get("subSessionId")!=weekend["SubSessionID"] or
+                    meta.get("trackId")!=weekend["TrackID"] or
+                    meta.get("sessionNum")!=session_num):
+                    continue
+                recovery=json.loads((folder/"recovery.json").read_text(encoding="utf-8"))
+                if not isinstance(recovery,dict):
+                    continue
+                return {"fromSessionId":folder.name,
+                        "lastObservedAt":recovery.get("lastObservedAt"),
+                        "grid":recovery.get("grid") or {},
+                        "roster":recovery.get("roster") or {},
+                        "competitors":recovery.get("competitors") or {},
+                        "ownLaps":recovery.get("ownLaps") or []}
+            except (OSError,ValueError,TypeError,AttributeError):
+                continue
+        return None
+
     def export(self, session_id, reports_root):
         folder = self.directory(session_id)
         reports_root = Path(reports_root)
