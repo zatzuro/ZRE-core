@@ -76,8 +76,32 @@ with tempfile.TemporaryFile(mode="w+") as log:
    feed(sim)
    page.locator("#screen-mode-select").select_option("race")
    assert page.locator("#race-v2-view").is_visible()
-   assert "PRÁCTICA" in page.locator("#rv2-plan-status").inner_text()
-   assert page.locator("#rv2-alert").inner_text()=="ENSAYO"
+   assert "ENSAYO" in page.locator("#rv2-plan-status").inner_text()
+   assert "ENSAYO" in page.locator("#rv2-alert").inner_text()
+   assert "PLAN NO DISPONIBLE" in page.locator("#rv2-plan-status").inner_text()
+   # Real local lap consumption + explicitly configured preview plan remain
+   # independent of official RacePlanVNext from race fixture.
+   sim["practiceRacePlan"]={
+      "available":True,"practicePreview":True,"reason":None,
+      "fuelModel":{"observed_lpl":3.18,"green_samples":4,"source":"REAL_LOCAL"},
+      "raceState":{"current_lap":10,"completed_laps":9,"on_pit_road":False},
+      "currentPlan":{"available":True,"minimum_stops":1,
+                     "stops":[{"lap":11,"fuel_to_add_liters":92.0}],
+                     "window":{"state":"BOX NEXT LAP","target":11,
+                               "earliest_safe":10,"fuel_limit":12}}}
+   sim["raceDashboard"]["fuel"]={**sim["raceDashboard"]["fuel"],
+                                    "currentLiters":8.0,"observedLpl":3.18,
+                                    "autonomyLaps":2.52,"sampleCount":4}
+   feed(sim)
+   assert "BOX" in page.locator("#rv2-alert").inner_text()
+   assert "ENSAYO" in page.locator("#rv2-alert").inner_text()
+   assert "PRÓXIMA VUELTA" in page.locator("#rv2-plan-status").inner_text()
+   assert page.locator("#rv2-consumption").inner_text().strip()!="—"
+   assert page.locator("#rv2-box-countdown").inner_text().strip()=="1 VUELTAS"
+   sim["practiceRacePlan"]["currentPlan"]["window"]["state"]="BOX THIS LAP"
+   sim["practiceRacePlan"]["currentPlan"]["window"]["target"]=10
+   feed(sim)
+   assert "BOX ESTA VUELTA" in page.locator("#rv2-plan-status").inner_text()
    page.locator("#screen-mode-select").select_option("quali")
    assert page.locator("#q-kind").inner_text()=="SIMULADA"
 
