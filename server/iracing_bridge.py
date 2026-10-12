@@ -323,7 +323,7 @@ class DashboardSource:
         self._recovery_provenance = None
         self._recovered_own_laps = []
         self._recovered_car_idx = None
-        self.race_director=RaceDirector();self.race_class_candidates=set();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
+        self.race_director=RaceDirector();self.race_class_candidates=set();self.practice_race_configured=False;self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar';self.sector_tracking_armed=False;self.sector_last_sample=None
 
     def handle_race_plan_audio(self, payload):
@@ -993,6 +993,9 @@ class DashboardSource:
                     fuel_history=self.fuel_per_lap,race_plan=payload["racePlanVNext"],
                     session_time=session_time)
                 payload["raceDashboard"]["practicePreview"]=session_coach_mode=="practice"
+                if session_coach_mode=="practice":
+                    payload["practiceRacePlan"]=self.practice_race_preview(
+                        fuel,lap_number,completed_for_strategy,on_pit_road,average_lap)
                 payload["raceDashboard"]["recoveredFromJournal"]=self._recovery_provenance
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
@@ -1125,6 +1128,77 @@ class DashboardSource:
         except (ValueError,TypeError,OverflowError,ZeroDivisionError):
             logger.exception('RACE PLAN VNEXT FAILED carIdx=%s',car_idx)
             return {'available':False,'reason':'Error en Race Plan vNext.'}
+
+    def practice_race_preview(self, fuel, lap, completed, on_pit, pace):
+        """Race Plan *ENSAYO* using real Practice laps, explicit user horizon.
+
+        Reuses the existing stop_plan.race_plan and current local lap filtering.
+        Never uses the official Practice SessionTimeRemain as simulated race time.
+        """
+        clean=[r for r in self.lap_history if isinstance(r,dict)
+               and r.get("valid") and not r.get("caution") and not r.get("onPitRoad")
+               and 0 < (number(r.get("fuelUse")) or 0) < 30]
+        samples=[r["fuelUse"] for r in clean[-8:]]
+        observed=sum(samples)/len(samples) if len(samples)>=2 else None
+        current=number(fuel);current_lap=max(0,int(lap or 0))
+        estimate=(current/observed) if current is not None and observed else None
+        base={"available":False,"practicePreview":True,"mode":"ENSAYO",
+              "source":"PRACTICE_LOCAL_LAP_HISTORY","currentFuelLiters":current,
+              "fuelModel":{"observed_lpl":observed,"green_samples":len(samples),
+                           "last_lpl":samples[-1] if samples else None,
+                           "source":"REAL_LOCAL_CLEAN_LAPS"},
+              "autonomyLaps":round(estimate,2) if estimate is not None else None,
+              "raceState":{"current_lap":current_lap,"completed_laps":completed,
+                           "on_pit_road":bool(on_pit)},
+              "currentPlan":{"available":False,"window":{},
+                             "stops":[],"source":"PRACTICE_TRIAL"},
+              "reason":"SIN CONSUMO COMPARABLE" if observed is None else
+                       "DEFINE OBJETIVO EN AJUSTES" if not self.practice_race_configured
+                       else "OBJETIVO O TANQUE SIN DATOS"}
+        if not self.practice_race_configured or observed is None or current is None:
+            return base
+        horizon=number(self.strategy_settings.get("manualRaceSeconds"))
+        tank=number(self.strategy_settings.get("tankCapacityLiters"))
+        if tank is None:
+            tank=number(self.get("DriverCarFuelMaxLtr"))
+        chosen_pace=number(self.strategy_settings.get("averageLapSeconds")) or number(pace)
+        if tank is None or tank<=0 or chosen_pace is None or chosen_pace<=0 or not horizon:
+            return base
+        strategy=race_plan(remaining_seconds=horizon,current_lap=current_lap,
+                           lap_seconds=chosen_pace,
+                           pit_seconds=self.strategy_settings.get("pitLossSeconds",30),
+                           current_fuel=current,consumption=observed,tank=tank,
+                           base_stint_laps=self.strategy_settings.get("baseStintLaps"),
+                           extended_stint_laps=self.strategy_settings.get("extendedStintLaps"),
+                           stint_start_lap=self.strategy_stint_start_lap)
+        if not strategy.get("available"):
+            return base
+        stops=strategy.get("stops") or []
+        next_stop=stops[0] if stops else None
+        if not next_stop:
+            return {**base,"available":True,"reason":"ENSAYO SIN PARADAS NECESARIAS",
+                    "currentPlan":{"available":True,"minimum_stops":0,"stops":[],
+                                   "window":{},"source":"PRACTICE_TRIAL"}}
+        target=int(next_stop["lap"])
+        # User target is bounded by fuel available: no unobserved refuel.
+        usable_laps=max(0,math.floor(current/observed)-1)
+        fuel_limit=current_lap+usable_laps
+        goal=min(target,fuel_limit)
+        remaining=max(0,goal-current_lap)
+        state="BOX THIS LAP" if remaining<=0 else "BOX NEXT LAP" if remaining==1 else "WINDOW OPEN" if remaining<=2 else "PLAN STABLE"
+        if on_pit:state="IN PIT ROAD"
+        earliest=max(current_lap,goal-2)
+        return {**base,"available":True,"reason":None,
+                "currentPlan":{"available":True,"minimum_stops":len(stops),
+                    "source":"PRACTICE_TRIAL","stops":[{"lap":goal,
+                    "fuel_to_add_liters":next_stop.get("liters"),
+                    "driver":next_stop.get("driver")}],
+                    "window":{"state":state,"target":goal,
+                              "earliest_safe":earliest,"fuel_limit":fuel_limit}},
+                "fuelModel":{**base["fuelModel"],
+                            "strategy_lpl":number(self.strategy_settings.get("consumptionLiters"))},
+                "raceState":{**base["raceState"],"require_tire_change":False},
+                "configuredHorizonSeconds":horizon}
 
     def team_diagnostics(self,context):
         idx=context.car_idx
@@ -1633,6 +1707,7 @@ class DashboardSource:
 
     def apply_strategy_settings(self,values):
         if not isinstance(values,dict):return
+        self.practice_race_configured=values.get("practiceRaceConfigured") is True
         numeric={"baseStintLaps":int,"extendedStintLaps":int,"pitLossSeconds":float,"manualRaceSeconds":float,"averageLapSeconds":float,"consumptionLiters":float,"tankCapacityLiters":float};reset_target=False
         for key,cast in numeric.items():
             if key not in values:continue
