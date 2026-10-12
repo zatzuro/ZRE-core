@@ -792,7 +792,10 @@ class DashboardSource:
                 self.team_fuel_reference=(fuel,int(team_completed))
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
+            previous_coach_mode=self.coach_session_mode
             self.coach_session_mode="qualifying" if self.quali.mode else session_coach_mode
+            if self.coach_session_mode=="qualifying" and previous_coach_mode!="qualifying":
+                if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
             self.update_sector_tracking(lap_number,self.get("LapDistPct",player_pct),last_lap)
             self.restore_local_laps_once(pilot_idx,completed_laps,results)
             if completed_laps is not None:
@@ -890,12 +893,25 @@ class DashboardSource:
             coach = self.coach.payload(self.lap_text)
             payload["capabilities"] = {"coachControls": True}
             payload["sessionMode"] = session_coach_mode
+            payload["coachContract"]={
+                "officialSessionMode":session_coach_mode,
+                "effectiveCoachMode":self.coach_session_mode,
+                "selectedVisualMode":None,  # Client-local view; never shared SDK state.
+                "coachDataSource":"LAP_COACH_OBSERVED",
+                "referenceScope":"ZRE_QUALI_RUN" if self.quali.mode=="simulated" else "OFFICIAL_SDK" if self.quali.mode=="official" else "SESSION",
+                "audioPolicy":"SILENT_DRIVER_COACH" if self.coach_session_mode=="qualifying" else "SESSION_POLICY",
+            }
             quali=self.quali.snapshot()
             payload["effectiveDashboard"]=quali["effectiveDashboard"]
             payload["qualifying"]={**quali,"officialSessionType":session.get("SessionType"),
                 "sessionTime":session_time,"timeRemaining":number(self.get("SessionTimeRemain")),
                 "onTrack":on_track,"onPitRoad":on_pit_road,"inGarage":in_garage,
                 "bestPersonalSDK":number(self.get("LapBestLapTime")),
+                "currentLapTime":number(self.get("LapCurrentLapTime")),
+                "lastLapSDK":seconds(self.get("LapLastLapTime")),
+                "bestPersonalZRE":self.personal_session_best,
+                "optimalZRE":self.coach.optimal,
+                "recoverySource":self._recovery_provenance,
                 "deltaReferences":{key:self._quali_sdk_delta(key) for key in
                     ("LapDeltaToBestLap","LapDeltaToOptimalLap","LapDeltaToSessionBestLap")},
                 "sectorBoundaries":self._sector_boundaries(),"sectorTimes":list(self.current_sector_times),
