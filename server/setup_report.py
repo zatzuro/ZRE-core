@@ -213,8 +213,19 @@ def render_setup_report(stint, previous=None, setup_changes=None):
     deltas=tires.get("delta") or {}
     if status!="CONFIRMED":
         lines.append("### DELTA INICIO → FINAL")
-        lines.append("NO DISPONIBLE: falta inspección final confirmada. "
-                     "No se interpreta ausencia de desgaste ni se publica Δ=0.")
+        observed=tires.get("provisionalDelta") or {}
+        if observed:
+            lines.append("CAMBIO OBSERVADO EN SDK DE TRANSICIÓN · PROVISIONAL, no es inspección final certificada:")
+            for wheel,values in observed.items():
+                wear=(values.get("wearRemainingDelta") or {})
+                temps=(values.get("carcassTempCDelta") or {})
+                lines.append(f"- {wheel} goma restante L/M/R: "
+                             f"{_value(wear.get('left'))}/{_value(wear.get('middle'))}/{_value(wear.get('right'))}; "
+                             f"carcasa °C L/M/R: {_value(temps.get('left'))}/"
+                             f"{_value(temps.get('middle'))}/{_value(temps.get('right'))}")
+        else:
+            lines.append("NO DISPONIBLE: falta inspección final confirmada. "
+                         "No se interpreta ausencia de desgaste ni se publica Δ=0.")
     elif not deltas:
         lines.append("### DELTA INICIO → FINAL")
         lines.append("NO COMPARABLE: no existe evidencia suficiente de que las "
