@@ -45,7 +45,8 @@ function syncScreenMenu(data,view){
  const matches=screenChoice==='auto'||(screenChoice==='practice'&&mode==='practice')||(screenChoice==='quali'&&mode==='qualifying')||(screenChoice==='race'&&mode==='race')||screenChoice==='pit'||screenChoice==='summary'||screenChoice==='spotter';
  const displayOnly=screenChoice!=='auto'&&!matches;
  const state=!data?.connected?' · SDK SIN CONEXIÓN':displayOnly?' · SOLO CONSULTA':'';
- const status='iRacing: '+label+' · VISTA: '+selected+state;
+ const simulation=mode==='practice'&&data?.qualifying?.qualifyingMode==='simulated';
+ const status='iRacing: '+label+' · VISTA: '+selected+(simulation?' · SIMULACIÓN QUALI ACTIVA':'')+state;
  if(context){context.textContent=status;context.title=status;}
  select.setAttribute('aria-label','Elegir cualquier pantalla visual sin cambiar la sesión de iRacing. '+status);
  document.body.dataset.visualConsultation=displayOnly?'true':'false';
