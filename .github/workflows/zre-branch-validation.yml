@@ -12,6 +12,7 @@ on:
       - 'release-2.6.5.1'
       - 'release-2.6.6'
       - 'release-2.6.6.1'
+      - 'release-2.6.7'
       - 'release-2.6.4'
       - 'release-2.6.3'
   pull_request:
@@ -56,13 +57,14 @@ jobs:
           node tests/frontend_quali_266.cjs
           node tests/frontend_race_v2_266.cjs
           node tests/frontend_screen_menu_2661.cjs
+          node tests/frontend_functional_267.cjs
 
       - name: Server and WebSocket demo smoke
-        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || startsWith(github.head_ref, 'develop/2.6.6') || (github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1')
+        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || startsWith(github.head_ref, 'develop/2.6.6') || startsWith(github.head_ref, 'develop/2.6.7') || (github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || github.ref == 'refs/heads/release-2.6.7')
         run: python diagnostics/smoke_264.py
 
   practice-visual:
-    if: github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu')
+    if: github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || github.ref == 'refs/heads/release-2.6.7' || github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.head_ref == 'develop/2.6.7-functionality-storage-quali-race' || github.ref == 'refs/heads/release-2.6.7')
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -78,9 +80,10 @@ jobs:
       - name: Browser layout QA at 1366, 1920 and 2560
         run: |
           python diagnostics/practice_visual_266.py
-          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-quali" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ]; then python diagnostics/quali_visual_266.py; fi
-          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ]; then python diagnostics/race_v2_visual_266.py; python diagnostics/senior_266_browser.py; fi
-          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ]; then python diagnostics/screen_menu_2661_browser.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-quali" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7-functionality-storage-quali-race" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7" ]; then python diagnostics/quali_visual_266.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7-functionality-storage-quali-race" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7" ]; then python diagnostics/race_v2_visual_266.py; python diagnostics/senior_266_browser.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7-functionality-storage-quali-race" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7" ]; then python diagnostics/screen_menu_2661_browser.py; fi
+          if [ "$GITHUB_HEAD_REF" = "develop/2.6.7-functionality-storage-quali-race" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7" ]; then python diagnostics/functional_267_browser.py; fi
       - name: Archive actual Chromium screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -89,14 +92,14 @@ jobs:
           path: diagnostics/practice-screenshots/
           if-no-files-found: warn
       - name: Archive Quali screenshots
-        if: always() && (github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu')
+        if: always() && (github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.head_ref == 'develop/2.6.7-functionality-storage-quali-race')
         uses: actions/upload-artifact@v4
         with:
           name: quali-266-chromium-screenshots
           path: diagnostics/quali-screenshots/
           if-no-files-found: warn
       - name: Archive Carrera V2 screenshots
-        if: always() && (github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.ref == 'refs/heads/release-2.6.6.1')
+        if: always() && (github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.head_ref == 'develop/2.6.7-functionality-storage-quali-race' || github.ref == 'refs/heads/release-2.6.6.1' || github.ref == 'refs/heads/release-2.6.7')
         uses: actions/upload-artifact@v4
         with:
           name: race-v2-266-chromium-screenshots
@@ -104,10 +107,11 @@ jobs:
             diagnostics/race-v2-screenshots/
             diagnostics/senior-266-screenshots/
             diagnostics/screen-menu-2661-screenshots/
+            diagnostics/functionality-267-screenshots/
           if-no-files-found: warn
 
   windows-test-install:
-    if: github.ref == 'refs/heads/develop/2.6.5.1'
+    if: github.ref == 'refs/heads/develop/2.6.5.1' || github.ref == 'refs/heads/release-2.6.7'
     needs: validate
     runs-on: windows-2022
     timeout-minutes: 12
@@ -129,7 +133,18 @@ jobs:
             if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
           }
       - name: Actual Windows installer and same launcher across two restarts
+        if: github.ref == 'refs/heads/develop/2.6.5.1'
         run: python diagnostics/windows_test_build_2651.py
+      - name: Windows ZRE 2.6.7 recovery and runtime smoke
+        if: github.ref == 'refs/heads/release-2.6.7'
+        shell: powershell
+        run: |
+          python -m unittest discover -s tests -p 'test_session_*267.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows session storage/recovery regression failed' }
+          python diagnostics/smoke_264.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime smoke failed' }
+          python -c 'import json; from pathlib import Path; m=json.loads(Path("version.json").read_text()); assert m["version"]=="2.6.7" and m["archive_ref"]=="release-2.6.7" and m["channel"]=="stable"'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows stable manifest validation failed' }
 
   release-263:
     if: github.ref == 'refs/heads/release-2.6.3'
@@ -255,3 +270,25 @@ jobs:
             exit 0
           fi
           gh release create v2.6.6.1 --target "$GITHUB_SHA" --title "ZRE Core 2.6.6.1" --notes-file diagnostics/QA-2.6.6.1.md --latest
+
+  release-267:
+    if: github.ref == 'refs/heads/release-2.6.7'
+    needs: [validate, practice-visual, windows-test-install]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish ZRE Core 2.6.7 for first real iRacing field test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c 'import json; m=json.load(open("version.json")); assert m["version"]=="2.6.7" and m["archive_ref"]=="release-2.6.7" and m["channel"]=="stable"'
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          test "$main_sha" = "$GITHUB_SHA"
+          if gh release view v2.6.7 >/dev/null 2>&1; then
+            tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v2.6.7" --jq '.object.sha')
+            test "$tag_sha" = "$GITHUB_SHA"
+            exit 0
+          fi
+          gh release create v2.6.7 --target "$GITHUB_SHA" --title "ZRE Core 2.6.7" --notes-file diagnostics/QA-2.6.7.md --latest

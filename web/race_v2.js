@@ -9,7 +9,10 @@
  const colors={YOU:'#7dcbfc',AHEAD:'#83e6a8',BEHIND:'#ffcb82',RIVAL:'#c7a0fd'};
  const labels={YOU:'TÚ',AHEAD:'ADELANTE',BEHIND:'DETRÁS',RIVAL:'RIVAL'};
  let latest=null,command=null,cache=new Map(),choices=[],pending=null,lastIdentity=null;
- let emphasis='auto';
+ let emphasis='auto',visibleCount=2,fontSize='normal';
+ try{const n=Number(localStorage.getItem('zre-race-visible'));if(Number.isInteger(n)&&n>=1&&n<=4)visibleCount=n;
+   const z=localStorage.getItem('zre-race-font');if(['normal','large','xlarge'].includes(z))fontSize=z;
+ }catch(_){};
  try{const stored=localStorage.getItem('zre-race-v2-emphasis');if(['auto','sprint','endurance'].includes(stored))emphasis=stored}catch(_){};
  const signature=rows=>JSON.stringify(rows||[]);
  const card=(key,value)=>{if(cache.get(key)===value)return false;cache.set(key,value);return true};
@@ -51,23 +54,30 @@
    send(String(row.carIdx));
    listCandidates();
  }
+ function abbreviate(name){
+   const full=String(name||'PILOTO SIN IDENTIFICAR').trim();
+   if(full.length<=21)return full;
+   const words=full.split(/\s+/);
+   return words.length>1?(words[0][0]+'. '+words.slice(-2).join(' ')).slice(0,23):full.slice(0,22)+'…';
+ }
  function buildStanding(row,rivalIdx){
    const button=document.createElement('button');button.type='button';button.className='rv2-standing-row';
    button.dataset.player=String(Boolean(row.isPlayer));
    button.dataset.rival=String(row.carIdx===rivalIdx);
-   button.dataset.stale=String(!row.isPlayer&&row.presence!=='LIVE');
+   button.dataset.stale=String(row.positionSource==='RECOVERED_SDK_SNAPSHOT'||(!row.isPlayer&&row.presence!=='LIVE'));
    button.dataset.carIdx=String(row.carIdx);
+   button.title=(row.driverName||'SIN IDENTIDAD')+' · #'+(row.carNumber||'—')+
+                ' · '+(row.positionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK':'POSICIÓN FALLBACK');
    if(row.isPlayer){button.disabled=true;button.setAttribute('aria-label','Coche propio · no seleccionable como rival');}
    else button.setAttribute('aria-label','Seleccionar rival #'+row.carNumber+' · '+(row.driverName||'sin nombre'));
    const cell=(tag,value)=>{const node=document.createElement(tag);node.textContent=value;return node};
    const position=row.classPosition!=null?'P'+row.classPosition:'P—';
-   const source=row.positionSource==='RESULTS_POSITIONS'?'OFICIAL':'FALLBACK';
    const driver=document.createElement('span');driver.className='rv2-driver';
-   const name=cell('b',row.driverName||'SIN IDENTIDAD CONFIRMADA');
-   const extra=cell('small',(row.carModel||'COCHE')+' · '+(row.presence==='STALE'?'ÚLTIMO REGISTRO':row.presence==='UNKNOWN'?'NO OBSERVADO · '+source:source));
-   driver.append(name,extra);
-   button.append(cell('strong',position),cell('strong','#'+(row.carNumber||'—')),driver,
-                 cell('span',time(row.bestLapSeconds)),cell('span',time(row.lastLapSeconds)));
+   driver.append(cell('b',abbreviate(row.driverName)),
+                 cell('small','#'+(row.carNumber||'—')+' · '+(row.presence==='STALE'?'ÚLTIMA OBS.':'SDK')));
+   const gap=good(row.physicalGapSeconds)?'≈'+Math.abs(row.physicalGapSeconds).toFixed(1)+'s':'—';
+   button.append(cell('strong',position),driver,cell('span',gap),
+                 cell('span',time(row.bestLapSeconds)),cell('span',time(row.recentPaceSeconds)));
    button.addEventListener('click',()=>choose(row));
    return button;
  }
@@ -78,9 +88,13 @@
    if(lastIdentity!==race.sessionIdentity){
      lastIdentity=race.sessionIdentity;pending=null;cache.clear();
    }
-   const center=own>=0?rows.slice(Math.max(0,own-4),Math.min(rows.length,own+5)):rows.slice(0,9);
-   const shown=scope==='all'?rows:center;
    const rivalIdx=(pending!=null&&pending!=='auto')?Number(pending):race.rival?.effectiveCarIdx;
+   const begin=own>=0?Math.max(0,own-visibleCount):0;
+   const end=own>=0?Math.min(rows.length,own+visibleCount+1):visibleCount*2+1;
+   const center=rows.slice(begin,end);
+   const strategic=rows.find(x=>x.carIdx===rivalIdx&&!x.isPlayer);
+   if(strategic&&!center.some(x=>x.carIdx===strategic.carIdx))center.push(strategic);
+   const shown=scope==='all'?rows:center;
    const mainSig=signature(shown.map(x=>[x,rivalIdx]));
    if(card('standings-near',mainSig)){
       const target=el('rv2-standing-rows');
@@ -94,19 +108,34 @@
      const target=el('rv2-standing-all');
      if(target){const position=target.scrollTop;target.replaceChildren(...rows.map(x=>buildStanding(x,rivalIdx)));target.scrollTop=position;}
    }
-   set('rv2-standing-summary',data.connected?(rows.length+' COCHES · '+(race.ownPositionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK OFICIAL':'FALLBACK IDENTIFICADO')):'ÚLTIMA CLASIFICACIÓN · SDK DESCONECTADO');
+   set('rv2-standing-summary',data.connected?(rows.length+' COCHES · '+(race.practicePreview?'PRÁCTICA · VISTA DE ENSAYO':race.ownPositionSource==='RESULTS_POSITIONS'?'POSICIÓN SDK OFICIAL':race.ownPositionSource==='RECOVERED_SDK_SNAPSHOT'?'REGISTRO HISTÓRICO · NO EN VIVO':'FALLBACK IDENTIFICADO')):'ÚLTIMA CLASIFICACIÓN · SDK DESCONECTADO');
+   set('rv2-standings-title',race.practicePreview?'STANDINGS · PRÁCTICA':'CLASS STANDINGS · CLASE');
    listCandidates();
  }
  function liveMetrics(data){
    const race=data.raceDashboard||{},phys=race.physical||{},fuel=race.fuel||{},you=(race.paceSeries||[]).find(s=>s.carIdx===race.ownCarIdx);
    set('rv2-position',race.ownClassPosition!=null?'P'+race.ownClassPosition:'—');
-   set('rv2-position-source',!data.connected?'ÚLTIMA CLASE · STALE':race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE'+(race.ownOverallPosition!=null?' · GENERAL P'+race.ownOverallPosition:''):'FALLBACK / SIN DATO');
+   set('rv2-position-source',!data.connected?'ÚLTIMA CLASE · STALE':race.ownPositionSource==='RESULTS_POSITIONS'?'OFICIAL · CLASE'+(race.ownOverallPosition!=null?' · GENERAL P'+race.ownOverallPosition:''):race.ownPositionSource==='RECOVERED_SDK_SNAPSHOT'?'HISTÓRICO · NO EN VIVO':'FALLBACK / SIN DATO');
    for(const side of ['ahead','behind']){
      const row=phys[side];
      set('rv2-gap-'+side,row?.gapLabel||'SIN DATO');
      set('rv2-car-'+side,row?'#'+(row.carNumber||'—')+' · '+(row.driverName||'SIN IDENTIDAD'):'SIN REFERENCIA FÍSICA');
    }
    set('rv2-last-lap',data.self?.lastLap||'—');
+   const lap=String(data.header?.lap||'').match(/\d+/);
+   set('rv2-lap',data.connected&&lap?lap[0]:'—');
+   set('rv2-autonomy',good(fuel.autonomyLaps)?'≈'+fuel.autonomyLaps.toFixed(1)+' V':'—');
+   const caution=data.sessionIntelligence?.caution;
+   const state=data.racePlanVNext?.currentPlan?.window?.state||'';
+   const alert=!data.connected?['SDK SIN SEÑAL','critical','NO ACTUAL']:
+     race.practicePreview?['ENSAYO','info','iRacing PRÁCTICA']:
+     caution?.active?['CAUTION','warning','BANDERA · SDK']:
+     state==='BOX THIS LAP'?['BOX AHORA','critical','RACE PLAN']:
+     state==='BOX NEXT LAP'?['BOX PRÓX.','warning','RACE PLAN']:
+     good(fuel.autonomyLaps)&&fuel.autonomyLaps<2?['FUEL BAJO','critical','AUTONOMÍA OBSERVADA']:
+     ['SIN ALERTAS','none','SDK / RACE PLAN'];
+   set('rv2-alert',alert[0]);set('rv2-alert-source',alert[2]);
+   const alertBox=el('rv2-alert')?.closest('.rv2-kpi-alert');if(alertBox)alertBox.dataset.severity=alert[1];
    set('rv2-my-pace',time(you?.recentAverageSeconds));
    set('rv2-my-count',!data.connected?'HISTÓRICO · SDK SIN SEÑAL':you?.representative?you.sampleCount+' V. COMPARABLES':'MUESTRAS INSUFICIENTES · '+(you?.sampleCount||0)+'/3');
    set('rv2-fuel',unit(fuel.currentLiters,' L',1));
@@ -117,10 +146,11 @@
    set('rv2-remaining',!data.connected?'SIN SEÑAL':good(remain)&&remain>=0?Math.floor(remain/3600)+':'+String(Math.floor((remain%3600)/60)).padStart(2,'0')+':'+String(Math.floor(remain%60)).padStart(2,'0'):(data.teamContext?.remainingTime||'—'));
  }
  function plan(data){
-   const v=data.racePlanVNext||{},plan=v.currentPlan||v.plan||{},state=v.raceState||{},fuel=v.fuelModel||{},window=plan.window||{},stops=plan.stops||[],next=stops[0]||{};
+   const preview=Boolean(data.raceDashboard?.practicePreview);
+   const v=preview?{}:data.racePlanVNext||{},plan=v.currentPlan||v.plan||{},state=v.raceState||{},fuel=v.fuelModel||{},window=plan.window||{},stops=plan.stops||[],next=stops[0]||{};
    const has=Boolean(plan.available),current=state.current_lap??state.completed_laps,goal=window.target??next.lap;
    const countdown=goal!=null&&current!=null?Math.max(0,Number(goal)-Number(current)):null;
-   const status=!has?'PLAN NO DISPONIBLE':state.on_pit_road?'EN BOXES':window.state||'PLAN ESTABLE';
+   const status=preview?'NO APLICA · PRÁCTICA':!has?'PLAN NO DISPONIBLE':state.on_pit_road?'EN BOXES':window.state||'PLAN ESTABLE';
    const root=el('rv2-plan-card');if(root)root.dataset.state=String(status).toLowerCase().replaceAll(' ','-');
    set('rv2-box-lap',!has?'—':goal!=null?'V'+goal:plan.minimum_stops===0?'META':'—');
    set('rv2-box-countdown',!has?'SIN PLAN':countdown==null?'—':countdown===0?'AHORA':countdown+' VUELTAS');
@@ -139,7 +169,7 @@
    set('rv2-tyres',state.require_tire_change===true?'REGLA ACTIVA · SIN DECISIÓN':'NO DEFINIDO');
    const future=(data.enduranceStrategy?.timeline||[]).find(x=>x.status==='future'&&x.driver);
    set('rv2-next-driver',next.driver||future?.driver||'SIN ASIGNAR');
-   set('rv2-plan-source','RACE PLAN VNEXT · '+(fuel.confidence||'SIN CONFIANZA')+' · '+(fuel.source||'SIN FUENTE'));
+   set('rv2-plan-source',preview?'ENSAYO VISUAL · SIN ESTRATEGIA OFICIAL':'RACE PLAN VNEXT · '+(fuel.confidence||'SIN CONFIANZA')+' · '+(fuel.source||'SIN FUENTE'));
  }
  function rival(data){
    const race=data.raceDashboard||{},selected=race.rival||{},row=selected.selectedRival,obs=selected.observation||{},director=data.raceDirector||{};
@@ -237,7 +267,7 @@
    g.replaceChildren(...nodes);
  }
  function fuel(data){
-    const f=data.raceDashboard?.fuel||{},vnext=data.racePlanVNext||{};
+    const f=data.raceDashboard?.fuel||{},vnext=data.raceDashboard?.practicePreview?{}:data.racePlanVNext||{};
     set('rv2-fuel-quality',f.source||'SIN DATO');
     set('rv2-fuel-observed',unit(f.observedLpl,' L/v',2));
     set('rv2-fuel-target',good(f.targetLpl)?unit(f.targetLpl,' L/v',2):'OBJETIVO NO DEFINIDO');
@@ -252,7 +282,7 @@
  }
  function render(data){
     latest=data;const race=data.raceDashboard;
-    if(!race){for(const id of ['rv2-position','rv2-gap-ahead','rv2-gap-behind','rv2-last-lap','rv2-my-pace','rv2-fuel','rv2-consumption','rv2-remaining'])set(id,'—');
+    if(!race){for(const id of ['rv2-position','rv2-gap-ahead','rv2-gap-behind','rv2-lap','rv2-autonomy','rv2-alert','rv2-last-lap','rv2-my-pace','rv2-fuel','rv2-consumption','rv2-remaining'])set(id,'—');
        el('rv2-standing-rows')?.replaceChildren();el('rv2-standing-all')?.replaceChildren();el('rv2-pace-series')?.replaceChildren();
        cache.clear();return;}
     liveMetrics(data);standings(data);plan(data);rival(data);pace(data);fuel(data);
@@ -261,6 +291,23 @@
     command=sendSetting;
     if(window.ResizeObserver&&el('rv2-pace-chart'))new ResizeObserver(()=>{cache.delete('chart');if(latest)pace(latest)}).observe(el('rv2-pace-chart'));
     document.body.dataset.raceEmphasis=emphasis;
+    document.body.dataset.raceFont=fontSize;
+    if(el('rv2-font-select')){
+      el('rv2-font-select').value=fontSize;
+      el('rv2-font-select').addEventListener('change',event=>{
+        fontSize=['normal','large','xlarge'].includes(event.target.value)?event.target.value:'normal';
+        document.body.dataset.raceFont=fontSize;
+        try{localStorage.setItem('zre-race-font',fontSize)}catch(_){}
+      });
+    }
+    if(el('rv2-visible-count')){
+      el('rv2-visible-count').value=String(visibleCount);
+      el('rv2-visible-count').addEventListener('change',event=>{
+        const n=Number(event.target.value);visibleCount=Number.isInteger(n)?Math.max(1,Math.min(4,n)):2;
+        try{localStorage.setItem('zre-race-visible',String(visibleCount))}catch(_){}
+        cache.delete('standings-near');if(latest)standings(latest);
+      });
+    }
     if(el('rv2-emphasis-select')){
       el('rv2-emphasis-select').value=emphasis;
       el('rv2-emphasis-select').addEventListener('change',event=>{

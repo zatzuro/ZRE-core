@@ -314,6 +314,15 @@ class DashboardSource:
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
         self.stint_active = False
+        self._stint_offtrack_since = None
+        self._sdk_link_state = None
+        self._clock_probe_baseline = None
+        self._clock_probe_samples = 0
+        self._recovery_key = None
+        self._recovery_results = {}
+        self._recovery_provenance = None
+        self._recovered_own_laps = []
+        self._recovered_car_idx = None
         self.race_director=RaceDirector();self.race_class_candidates=set();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar';self.sector_tracking_armed=False;self.sector_last_sample=None
 
@@ -409,11 +418,27 @@ class DashboardSource:
         if self.connect():
             try:
                 payload=self.live_payload(force_driver=force_driver,force_spotter=force_spotter)
+                if self._sdk_link_state is False:
+                    self.recorder.write({"type":"sdk_reconnected","sessionTime":self.last_session_time,
+                                         "source":"SDK_OBSERVED"})
+                elif self._sdk_link_state is None:
+                    self.recorder.write({"type":"sdk_connected","sessionTime":self.last_session_time,
+                                         "source":"SDK_OBSERVED"})
+                self._sdk_link_state=True
                 self.session_state.remember_payload(payload)
                 return payload
             except Exception as exc:
+                if self._sdk_link_state is not False:
+                    self.recorder.write({"type":"sdk_read_error","reason":type(exc).__name__,
+                                         "sessionTime":self.last_session_time,
+                                         "source":"SDK_OBSERVED"})
+                self._sdk_link_state=False
                 self.setup_engineer.set_owner(None)
                 return self.disconnected_payload(f"Leyendo sesión: {exc}")
+        if self._sdk_link_state is True:
+            self.recorder.write({"type":"sdk_disconnected","sessionTime":self.last_session_time,
+                                 "source":"SDK_OBSERVED"})
+        self._sdk_link_state=False
         self.setup_engineer.set_owner(None)
         return self.disconnected_payload("Esperando a iRacing SDK")
 
@@ -435,6 +460,153 @@ class DashboardSource:
         if force_driver:
             return False
         return auto_mode == 'spotter'
+
+    def confirm_clock_restart(self,session_time):
+        """Require three consistently backward SDK frames before session reset.
+
+        A single non-monotonic SDK packet must not destroy Coach/Standings.
+        SessionID/SessionNum/SessionType changes still reset immediately.
+        """
+        current=number(session_time)
+        previous=number(self.last_session_time)
+        if current is None or previous is None:
+            self._clock_probe_baseline=None
+            self._clock_probe_samples=0
+            return False
+        baseline=self._clock_probe_baseline
+        if baseline is None:
+            if current>=previous-1:
+                return False
+            self._clock_probe_baseline=previous
+            self._clock_probe_samples=1
+            self.recorder.write({"type":"sdk_clock_backward_probe",
+                "previousTime":previous,"observedTime":current,
+                "source":"SDK_OBSERVED"})
+            return False
+        if current>=baseline-1:
+            self._clock_probe_baseline=None
+            self._clock_probe_samples=0
+            return False
+        self._clock_probe_samples+=1
+        if self._clock_probe_samples<3:
+            return False
+        self.recorder.write({"type":"sdk_clock_restart_confirmed",
+            "previousTime":baseline,"observedTime":current,
+            "consecutiveSamples":self._clock_probe_samples,
+            "source":"SDK_OBSERVED"})
+        self._clock_probe_baseline=None
+        self._clock_probe_samples=0
+        return True
+
+    def restore_session_journal(self,weekend,session_num):
+        """Recover last observed laps/roster for a late join or process restart.
+
+        Cached ResultsPositions are marked RECOVERED, never official or LIVE.
+        Does no scans on subsequent SDK frames for the same official identity.
+        """
+        key=(weekend.get("SessionID"),weekend.get("SubSessionID"),
+             weekend.get("TrackID"),session_num)
+        if self._recovery_key==key:
+            return
+        self._recovery_key=key
+        self._recovery_results={}
+        self._recovery_provenance=None
+        self._recovered_own_laps=[]
+        self._recovered_car_idx=None
+        archive=getattr(getattr(self,"recorder",None),"archive",None)
+        if archive is None or not isinstance(getattr(archive,"root",None),Path):
+            return
+        try:
+            stored=archive.recover_session(weekend,session_num,
+                         current_session_id=self.recorder.session_id)
+        except (OSError,ValueError,TypeError) as exc:
+            logger.warning("SESSION RECOVERY unavailable: %s",type(exc).__name__)
+            return
+        if not isinstance(stored,dict) or not stored:
+            return
+        self._recovery_provenance={"fromSessionId":stored.get("fromSessionId"),
+            "lastObservedAt":stored.get("lastObservedAt"),"source":"LOCAL_SESSION_JOURNAL"}
+        roster=(stored.get("roster") or {}).get("driverInfo") or {}
+        remembered={int(row["CarIdx"]):row for row in roster.get("Drivers",[])
+                    if isinstance(row,dict) and isinstance(row.get("CarIdx"),int)
+                    and 0<=row["CarIdx"]<64}
+        grid=stored.get("grid") or {}
+        for result in grid.get("ResultsPositions") or []:
+            if not isinstance(result,dict):
+                continue
+            idx=result.get("CarIdx")
+            if isinstance(idx,int) and 0<=idx<64 and result.get("ClassPosition") is not None:
+                self._recovery_results[idx]={**result,
+                    "positionSource":"RECOVERED_SDK_SNAPSHOT"}
+        for idxstr,observed in (stored.get("competitors") or {}).items():
+            try:idx=int(idxstr)
+            except (TypeError,ValueError):continue
+            if idx<0 or idx>=64 or not isinstance(observed,dict):
+                continue
+            source_car=remembered.get(idx) or {}
+            car={"CarIdx":idx,
+                 "CarClassID":source_car.get("CarClassID",observed.get("classId")),
+                 "CarNumber":source_car.get("CarNumber",observed.get("number")),
+                 "UserName":source_car.get("UserName") or observed.get("driver"),
+                 "TeamName":source_car.get("TeamName") or observed.get("team"),
+                 "CarScreenName":source_car.get("CarScreenName") or observed.get("car")}
+            lap_history=observed.get("lapTimes") or []
+            clean=observed.get("cleanLapTimes") or []
+            latest=observed.get("lastLap")
+            completed=observed.get("lapsComplete")
+            self.competitor_presence_history[idx]={
+                "_car":car,"driver":observed.get("driver"),
+                "number":observed.get("number"),"classId":observed.get("classId"),
+                "lapTimes":lap_history[-24:],"cleanLapTimes":clean[-12:],
+                "pitHistory":(observed.get("pitHistory") or [])[-10:],
+                "lastLap":latest,"bestLap":observed.get("bestLap"),
+                "lastSeenSessionTime":observed.get("lastSeenSessionTime"),
+                "lap":observed.get("lap"),"lapsComplete":completed,
+                "presence":"STALE","source":"LOCAL_SESSION_JOURNAL",
+                "_state":{"completed":completed,"time":latest,"pending":None,
+                          "cycle":None,"pit":None,"incidents":None}}
+        self._recovered_own_laps=stored.get("ownLaps") or []
+        self._recovered_car_idx=stored.get("carIdx")
+        logger.info("SESSION RECOVERY from=%s rivals=%s laps=%s",
+            stored.get("fromSessionId"),len(self.competitor_presence_history),
+            len(self._recovered_own_laps))
+
+    def restore_local_laps_once(self,pilot_idx,completed_laps,results):
+        """Bootstrap display history, but never fabricate a validated SDK lap."""
+        if not self._recovered_own_laps or self.last_lap_number is not None:
+            return
+        if self._recovered_car_idx is not None and self._recovered_car_idx!=pilot_idx:
+            self._recovered_own_laps=[]
+            return
+        restored=[]
+        for event in self._recovered_own_laps:
+            if not isinstance(event,dict):
+                continue
+            lap=event.get("lap");duration=number(event.get("officialTime"))
+            if not isinstance(lap,int) or lap<=0 or duration is None or duration<=0:
+                continue
+            if isinstance(completed_laps,int) and lap>completed_laps:
+                continue
+            restored.append({"lap":lap,"time":duration,
+                "sectors":event.get("sectors") or [],"priorBest":None,
+                "fuelUse":event.get("fuelUse"),"valid":bool(event.get("valid")),
+                "caution":bool(event.get("caution")),
+                "sessionTime":event.get("sessionTime"),
+                "driverName":event.get("driverName"),
+                "source":"ZRE_RECORDED_RECOVERED"})
+        self._recovered_own_laps=[]
+        if not restored:
+            return
+        self.lap_history=sorted({e["lap"]:e for e in restored}.values(),
+                                key=lambda x:x["lap"])[-10:]
+        last=self.lap_history[-1]
+        self.last_lap_number=completed_laps if isinstance(completed_laps,int) else last["lap"]
+        self.last_recorded_lap_time=last["time"]
+        self.last_observed_lap_time=last["time"]
+        valid=[x["time"] for x in self.lap_history if x["valid"]]
+        if valid:
+            self.personal_session_best=min(valid)
+        logger.info("LOCAL LAP RECOVERY count=%s last=%s",len(self.lap_history),last["lap"])
 
     def live_payload(self,force_driver=False,force_spotter=False):
         self.ir.freeze_var_buffer_latest()
@@ -484,20 +656,41 @@ class DashboardSource:
                 self.confirmed_driver_name=context.current_driver
             identity=SessionIdentity.from_sdk(weekend,session_num,context.car_idx if context.car_idx is not None else player_idx)
             session_time=self.get("SessionTime")
-            if self.session_state.observe_identity(identity,ignore_car_idx=True) or (self._last_session_type is not None and self._last_session_type!=session.get("SessionType")) or (number(session_time) is not None and number(self.last_session_time) is not None and session_time<self.last_session_time-1):
+            clock_restart=self.confirm_clock_restart(session_time)
+            official_changed=(self.session_state.observe_identity(identity,ignore_car_idx=True)
+                or (self._last_session_type is not None and
+                    self._last_session_type!=session.get("SessionType")))
+            if official_changed or clock_restart:
                 logger.info("SESSION CHANGED")
                 self.finalize_setup_stint_before_reset("session-change")
                 self.quali.close_session("official-session-change")
                 self.recorder.finish_session("session-change")
                 self.reset_session_tracking()
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
-                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
+                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"trackId":weekend.get("TrackID"),"sessionNum":session_num,"carIdx":context.car_idx})
                 self.last_strategy_log_signature=None
-            self.session_key=identity;self.last_session_time=session_time;self._last_session_type=session.get("SessionType")
-            self.quali.observe(identity,session.get("SessionType"),self.get("Lap"),self.get("LapDistPct"),session_time,self.get("IsOnTrack"),self.get("OnPitRoad"))
+            self.restore_session_journal(weekend,session_num)
+            # SDK results always win. Previously captured results are only
+            # displayed as STALE history when the current ResultsPositions
+            # packet is missing/incomplete (common after a reconnect).
+            for recovered_idx,recovered_result in self._recovery_results.items():
+                results.setdefault(recovered_idx,recovered_result)
+            self.session_key=identity
+            # Keep the last trusted monotonic reference while testing a
+            # suspected clock jump; do not accept a one-frame erroneous clock.
+            if self._clock_probe_baseline is None or official_changed or clock_restart:
+                self.last_session_time=session_time
+            self._last_session_type=session.get("SessionType")
+            # Quali history belongs to the official iRacing session, not to a
+            # potentially changing auto-detected team CarIdx. Preserve runs
+            # during ambiguous local/team ownership resolution and driver swaps.
+            quali_identity=(identity.session_id,identity.subsession_id,identity.track_id,identity.session_num)
+            self.quali.observe(quali_identity,session.get("SessionType") or session.get("SessionName"),
+                               self.get("Lap"),self.get("LapDistPct"),session_time,
+                               self.get("IsOnTrack"),self.get("OnPitRoad"))
             if self.recorder.session_id is None:
                 self.recorder.start_session(identity,{"track":weekend.get("TrackDisplayName"),"sessionType":session.get("SessionType"),
-                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"sessionNum":session_num,"carIdx":context.car_idx})
+                    "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"trackId":weekend.get("TrackID"),"sessionNum":session_num,"carIdx":context.car_idx})
             if context.local_driving and context.car_idx is not None:
                 if not self.strategy_settings.get('tankCapacityLiters'):
                     measured_capacity=number(driver_info.get('DriverCarFuelMaxLtr'))
@@ -601,6 +794,7 @@ class DashboardSource:
             session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
             self.coach_session_mode="qualifying" if self.quali.mode else session_coach_mode
             self.update_sector_tracking(lap_number,self.get("LapDistPct",player_pct),last_lap)
+            self.restore_local_laps_once(pilot_idx,completed_laps,results)
             if completed_laps is not None:
                 self.update_lap_tracking(completed_laps, player_pct, fuel, last_lap, session_best, result)
             self.update_race_engineer_audio(self.coach_session_mode,pilot_idx,category_rows,live_last,car_completed,results)
@@ -629,7 +823,18 @@ class DashboardSource:
             explicit_on_track = self.get("IsOnTrack")
             on_track = bool(explicit_on_track) if explicit_on_track is not None else player_pct is not None
             in_garage = not on_track and not on_pit_road
-            driving_stint = bool(session_coach_mode!="qualifying" and on_track and not on_pit_road)
+            requested_stint=bool(session_coach_mode!="qualifying" and on_track and not on_pit_road)
+            # A single false SDK IsOnTrack frame must NOT close/reopen a stint.
+            # Real pit entries and official session transitions are immediate.
+            clock=number(session_time)
+            clock=clock if clock is not None else time.monotonic()
+            if self.stint_active and not requested_stint and session_coach_mode!="qualifying" and not on_pit_road:
+                if self._stint_offtrack_since is None or clock<self._stint_offtrack_since:
+                    self._stint_offtrack_since=clock
+                driving_stint=(clock-self._stint_offtrack_since)<2.0
+            else:
+                self._stint_offtrack_since=None
+                driving_stint=requested_stint
             if self.stint_active and not driving_stint:
                 engineering=self.coach.engineering_snapshot()
                 frozen = self.coach.freeze_stint_summary()
@@ -646,7 +851,11 @@ class DashboardSource:
                 setup_tires=capture_tires(self.get)
                 setup_controls=driver_controls(self.get)
                 self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls)
-                logger.info("COACH STINT START setup=%s source=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"))
+                logger.info("COACH STINT START setup=%s source=%s session=%s lap=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"),identity,lap_number)
+                self.recorder.write({"type":"stint_start","sessionTime":session_time,
+                    "lap":lap_number,"sessionIdentity":str(identity),
+                    "setupFingerprint":setup_snapshot.get("fingerprint"),
+                    "source":"SDK_OBSERVED"})
             if driving_stint and self.setup_engineer.current is not None:
                 self.setup_engineer.observe_controls(driver_controls(self.get),session_time=session_time,lap=lap_number)
             self.stint_active = driving_stint
@@ -747,13 +956,15 @@ class DashboardSource:
                 {"cleanPace":clean_pace,"cleanLaps":clean_laps,"planAvailable":bool(plan.get("available")),
                  "fuelSource":"REAL LOCAL" if context.local_driving and fuel is not None else "SIN DATO",
                  "caution":intel["caution"],"pitsOpen":intel["session"]["observed"].get("pitsOpen"),"trafficClear":traffic_clear}) if session_coach_mode=="race_engineer" else {"available":False,"source":"ZRE_INFERRED"}
-            self.handle_race_plan_audio(payload)
+            if session_coach_mode=="race_engineer":self.handle_race_plan_audio(payload)
             self.flush_race_engineer_audio()
             pit_flags=self.get("CarIdxOnPitRoad",[]) or [];lap_array=self.get("CarIdxLap",[]) or [];pit_by_idx={idx:bool(pit_flags[idx]) for idx in range(len(pit_flags))};lap_by_idx={idx:lap_array[idx] for idx in range(len(lap_array))}
             payload["raceDirector"]=self.race_director.payload(category_rows,pilot_idx,pit_by_idx,lap_by_idx)
             self.race_class_candidates={row.get("idx") for row in category_rows
                                         if row.get("idx") is not None and row.get("idx")!=pilot_idx}
-            if session_coach_mode=="race_engineer":
+            if session_coach_mode in ("race_engineer","practice"):
+                # Practice Race preview reuses the same observed SDK roster and
+                # timing, but is explicitly NOT an official Race result or plan.
                 payload["raceDashboard"]=race_view(
                     session_identity=identity,own_idx=pilot_idx,class_rows=category_rows,
                     results=results,cars=class_cars,best_laps=self.get("CarIdxBestLapTime",[]) or [],
@@ -761,6 +972,8 @@ class DashboardSource:
                     own_history=self.lap_history,director=payload["raceDirector"],fuel=fuel,
                     fuel_history=self.fuel_per_lap,race_plan=payload["racePlanVNext"],
                     session_time=session_time)
+                payload["raceDashboard"]["practicePreview"]=session_coach_mode=="practice"
+                payload["raceDashboard"]["recoveredFromJournal"]=self._recovery_provenance
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
             behind=max((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']<0),key=lambda r:r['gapSeconds'],default=None)
@@ -793,6 +1006,7 @@ class DashboardSource:
                 average_lap=average_lap,stint_laps=payload["teamContext"]["stintLaps"],
                 current_driver=context.current_driver or player_driver.get("UserName"),last_valid=self.kpi_last_valid)
             self.recorder.observe(payload,session_time)
+            self.recorder.observe_sdk(self.get,session_time=session_time)
             return payload
         finally:
             self.ir.unfreeze_var_buffer_latest()
@@ -1080,6 +1294,7 @@ class DashboardSource:
             completed_laps=completed,current_lap=lap,fuel_value=fuel_used,fuel_source=fuel_source,
             average_lap=pace,stint_laps=payload["teamContext"]["stintLaps"],current_driver=driver,last_valid={})
         self.recorder.observe(payload,session_time)
+        self.recorder.observe_sdk(self.get,session_time=session_time,own_car=False)
         self.handle_race_plan_audio(payload)
         self.flush_race_engineer_audio()
         return payload
@@ -1123,7 +1338,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_lap_caution=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None
+        self.personal_lap_clean=False; self.personal_lap_caution=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None;self._stint_offtrack_since=None;self._clock_probe_baseline=None;self._clock_probe_samples=0
 
     def _quali_sdk_delta(self,key):
         raw=number(self.get(key))
@@ -1361,7 +1576,11 @@ class DashboardSource:
                       sdk_fast is not None and abs(sdk_fast-completed)<.001),
             sectors=sectors,sector_source="ZRE_RECONSTRUCTED_FROM_SDK_SPLITS" if sectors else "UNAVAILABLE",
             in_pit=bool(self.get("OnPitRoad",False)))
-        self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),"officialTime":round(completed,4),"fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,"optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"source":"SDK_OBSERVED"})
+        self.recorder.write({"type":"lap","lap":pending["lap"],"valid":bool(pending.get("valid")),"coachAccepted":bool(coach_ok),
+            "officialTime":round(completed,4),"sectors":sectors,"sessionTime":number(self.get("SessionTime")),
+            "caution":bool(pending.get("caution")),"driverName":self.local_driver_name,
+            "fuelUse":round(usage,3) if usage else None,"best":self.coach.best_lap,
+            "optimal":self.coach.optimal,"diagnostics":self.coach.last_diagnostics,"source":"SDK_OBSERVED"})
         self.race_plan_runtime.record_local_lap(
             pending["lap"],usage,bool(pending.get("valid")),completed,
             on_pit=bool(self.get("OnPitRoad",False)),caution=bool(pending.get("caution")) or is_caution_flag(self.get("SessionFlags")))
@@ -1578,6 +1797,69 @@ def installed_version():
     try:return str(json.loads((ROOT/"version.json").read_text(encoding="utf-8"))["version"])
     except Exception:return APP_VERSION
 
+async def archive_request_json(request):
+    """Limit archive mutations to same-origin local JSON POSTs."""
+    if request.content_type != "application/json":
+        raise web.HTTPUnsupportedMediaType()
+    origin=request.headers.get("Origin")
+    if origin and origin.rstrip("/") not in (f"http://{request.host}",f"https://{request.host}"):
+        raise web.HTTPForbidden(reason="Origen distinto del dashboard local")
+    if request.content_length is not None and request.content_length>4096:
+        raise web.HTTPRequestEntityTooLarge(max_size=4096,actual_size=request.content_length)
+    try:
+        body=await request.json()
+        if not isinstance(body,dict):
+            raise ValueError("Cuerpo JSON inválido")
+        return body
+    except (ValueError,TypeError):
+        raise web.HTTPBadRequest(reason="Solicitud JSON inválida")
+
+
+async def archive_status(request):
+    source=request.app["source"]
+    result=await asyncio.to_thread(source.recorder.status)
+    return web.json_response(result,headers={"Cache-Control":"no-store"})
+
+
+async def archive_settings(request):
+    body=await archive_request_json(request)
+    try:
+        days=await asyncio.to_thread(request.app["source"].recorder.set_retention,body.get("days"))
+    except (ValueError,TypeError,OverflowError):
+        raise web.HTTPBadRequest(reason="Retención válida: 1 a 365 días")
+    return web.json_response({"retentionDays":days})
+
+
+async def archive_protect(request):
+    body=await archive_request_json(request)
+    if type(body.get("protected")) is not bool:
+        raise web.HTTPBadRequest(reason="Se requiere protected booleano")
+    try:
+        value=await asyncio.to_thread(request.app["source"].recorder.protect,
+                                      body.get("sessionId"),body["protected"])
+    except (ValueError,TypeError):
+        raise web.HTTPBadRequest(reason="Sesión desconocida o inválida")
+    return web.json_response({"protected":value})
+
+
+async def archive_cleanup(request):
+    body=await archive_request_json(request)
+    if body.get("confirm") != "DELETE_FINISHED_TEMPORARY":
+        raise web.HTTPBadRequest(reason="Confirmación explícita requerida")
+    result=await asyncio.to_thread(request.app["source"].recorder.clear_completed,True)
+    return web.json_response(result)
+
+
+async def archive_export(request):
+    try:
+        path=await asyncio.to_thread(request.app["source"].recorder.export_session,
+                                     request.query.get("sessionId"),ROOT/"reports")
+    except (ValueError,TypeError):
+        raise web.HTTPNotFound(reason="Sesión no disponible")
+    return web.FileResponse(path,headers={"Cache-Control":"no-store",
+                                        "Content-Disposition":f'attachment; filename="{path.name}"'})
+
+
 async def close_session_journal(app):
     source=app["source"]
     source.finalize_setup_stint_before_reset("shutdown")
@@ -1667,7 +1949,7 @@ def main():
     app.on_cleanup.append(close_session_journal)
     if start_background_updater is not None:
         start_background_updater();print("ZRE Update: vigilancia automatica activa cada 2 minutos; nunca reinicia una carrera.")
-    app.router.add_get("/",index);app.router.add_get("/version",version_status);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
+    app.router.add_get("/",index);app.router.add_get("/version",version_status);app.router.add_get("/api/session-archive",archive_status);app.router.add_post("/api/session-archive/settings",archive_settings);app.router.add_post("/api/session-archive/protect",archive_protect);app.router.add_post("/api/session-archive/cleanup",archive_cleanup);app.router.add_get("/api/session-archive/export",archive_export);app.router.add_static("/static/",WEB_ROOT);app.router.add_get("/ws",websocket)
     print(f"Dashboard ready at http://localhost:{args.port} ({'demo' if args.demo else 'iRacing SDK'})")
     web.run_app(app,host="127.0.0.1",port=args.port,print=None)
 

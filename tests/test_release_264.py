@@ -135,11 +135,12 @@ class Journal264Tests(unittest.TestCase):
         self.assertEqual(json.loads((folder/'summary.json').read_text())['finishReason'],'session-change')
     def test_retention_protects_active(self):
         self.logger.start_session('active');self.logger.flush();active=self.logger.session_dir
-        old=self.logger.root/'old';old.mkdir();(old/'summary.json').write_text('{}')
+        old=self.logger.root/'old';old.mkdir();(old/'summary.json').write_text(json.dumps({'finishedAt':__import__('datetime').datetime.fromtimestamp(time.time()-8*86400,__import__('datetime').timezone.utc).isoformat()}))
         ancient=time.time()-8*86400
         os.utime(old/'summary.json',(ancient,ancient));os.utime(active/'summary.json',(ancient,ancient))
         self.logger.cleanup_old_sessions(force=True);self.assertFalse(old.exists());self.assertTrue(active.exists())
     def test_retention_failure_does_not_propagate(self):
+        self.logger.root.mkdir(parents=True,exist_ok=True)
         with patch.object(Path,'iterdir',side_effect=OSError('disk')):self.logger.cleanup_old_sessions(force=True)
         self.assertEqual(self.logger.errors,1)
     def test_conditions_throttled_no_frames(self):
@@ -159,7 +160,11 @@ class Journal264Tests(unittest.TestCase):
     def test_rotation_is_bounded(self):
         self.logger.max_bytes=100;self.logger.start_session('r');folder=self.logger.session_dir
         for i in range(30):self.logger.write({'type':'event','value':'x'*100})
-        self.logger.finish_session();self.logger.flush();self.assertEqual(len(list(folder.glob('timeline*'))),2)
+        self.logger.finish_session();self.logger.flush()
+        # 2.6.7 keeps every rotated segment instead of overwriting old telemetry.
+        files=list(folder.glob('timeline*'));self.assertGreater(len(files),2)
+        captured=[json.loads(line) for file in files for line in file.read_text().splitlines()]
+        self.assertEqual(len(captured),30)
 
 class Session264Tests(unittest.TestCase):
     def test_practice_quali_race_isolation_and_finished_report(self):
