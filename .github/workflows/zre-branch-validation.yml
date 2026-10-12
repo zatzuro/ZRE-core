@@ -133,7 +133,18 @@ jobs:
             if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
           }
       - name: Actual Windows installer and same launcher across two restarts
+        if: github.ref == 'refs/heads/develop/2.6.5.1'
         run: python diagnostics/windows_test_build_2651.py
+      - name: Windows ZRE 2.6.7 recovery and runtime smoke
+        if: github.ref == 'refs/heads/release-2.6.7'
+        shell: powershell
+        run: |
+          python -m unittest discover -s tests -p 'test_session_*267.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows session storage/recovery regression failed' }
+          python diagnostics/smoke_264.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime smoke failed' }
+          python -c 'import json; from pathlib import Path; m=json.loads(Path("version.json").read_text()); assert m["version"]=="2.6.7" and m["archive_ref"]=="release-2.6.7" and m["channel"]=="stable"'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows stable manifest validation failed' }
 
   release-263:
     if: github.ref == 'refs/heads/release-2.6.3'
@@ -262,7 +273,7 @@ jobs:
 
   release-267:
     if: github.ref == 'refs/heads/release-2.6.7'
-    needs: [validate, practice-visual]
+    needs: [validate, practice-visual, windows-test-install]
     runs-on: ubuntu-latest
     permissions:
       contents: write
