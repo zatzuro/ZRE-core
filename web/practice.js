@@ -89,21 +89,81 @@
     }
     group.replaceChildren(...spots);
   }
+  // Comparable laps define the operating mean; ALL observed timed laps remain
+  // visible. Never use min/max dynamic scale for the default ±1 second view.
+  let paceScale=(()=>{try{return localStorage.getItem('zre-pr-pace-scale')==='all'?'all':'focus'}catch(_){return'focus'}})();
+  let lastRows=null;
   function renderPace(rows){
-    const validRows=Array.isArray(rows)?rows.filter(r=>valid(r.seconds)&&r.seconds>0):[];
-    const signature=JSON.stringify(validRows);if(lastPace===signature)return;lastPace=signature;
-    text('pr-pace-count',validRows.length+' vueltas válidas');
-    const line=el('pr-pace-line'),dots=el('pr-pace-dots');if(!line||!dots)return;
-    if(!validRows.length){line.setAttribute('points','');dots.replaceChildren();text('pr-pace-status','SIN VUELTAS VÁLIDAS');return;}
-    const values=validRows.map(r=>r.seconds),min=Math.min(...values),max=Math.max(...values),range=Math.max(.15,max-min);
-    const points=validRows.map((row,i)=>({
-      x:12+(validRows.length===1?188:i*376/(validRows.length-1)),
-      y:12+70*(row.seconds-min)/range,row
-    }));
-    line.setAttribute('points',points.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' '));
-    dots.replaceChildren(...points.map(p=>{const node=svg('circle');node.setAttribute('cx',p.x);node.setAttribute('cy',p.y);node.setAttribute('r','2.4');const title=svg('title');title.textContent='V'+p.row.lap+' · '+p.row.seconds.toFixed(3)+' s';node.append(title);return node;}));
-    const last=values[values.length-1],prev=values.length>=2?values[values.length-2]:null;
-    text('pr-pace-status',prev==null?'REFERENCIA EN FORMACIÓN':last<prev?'MEJORA '+(prev-last).toFixed(3)+' s':last>prev?'MÁS LENTO +'+(last-prev).toFixed(3)+' s':'RITMO ESTABLE');
+    const list=(Array.isArray(rows)?rows:[])
+      .filter(r=>valid(r.seconds)&&r.seconds>0&&Number.isInteger(Number(r.lap)))
+      .slice().sort((a,b)=>a.lap-b.lap);
+    lastRows=list;
+    const scale=el('pr-pace-scale');
+    if(scale&&scale.value!==paceScale)scale.value=paceScale;
+    const signature=JSON.stringify([list,paceScale]);if(lastPace===signature)return;lastPace=signature;
+    const clean=list.filter(r=>r.comparable===true);
+    text('pr-pace-count',list.length+' VUELTAS · '+clean.length+' COMPARABLES');
+    const line=el('pr-pace-line'),dots=el('pr-pace-dots'),canvas=el('pr-pace-svg');
+    if(!line||!dots||!canvas)return;
+    let guides=el('pr-pace-guides'),segments=el('pr-pace-segments');
+    if(!guides){guides=svg('g');guides.id='pr-pace-guides';canvas.insertBefore(guides,line)}
+    if(!segments){segments=svg('g');segments.id='pr-pace-segments';canvas.insertBefore(segments,dots)}
+    line.setAttribute('points','');dots.replaceChildren();guides.replaceChildren();segments.replaceChildren();
+    if(!list.length||!clean.length){text('pr-pace-status',list.length?'SIN VUELTAS COMPARABLES':'SIN VUELTAS');return}
+    const mean=clean.reduce((total,r)=>total+r.seconds,0)/clean.length;
+    const speeds=list.map(x=>x.seconds),range=paceScale==='all'?
+      [Math.min(...speeds,mean-0.10),Math.max(...speeds,mean+0.10)]:[mean-1,mean+1];
+    const spread=Math.max(.2,range[1]-range[0]);
+    const minLap=list[0].lap,maxLap=list[list.length-1].lap;
+    const coord=r=>({
+      x:32+360*(maxLap===minLap?.5:(r.lap-minLap)/(maxLap-minLap)),
+      rawY:13+66*(r.seconds-range[0])/spread,
+      y:Math.max(13,Math.min(79,13+66*(r.seconds-range[0])/spread)),
+      outside:r.seconds<range[0]?'FAST':r.seconds>range[1]?'SLOW':null,
+      row:r
+    });
+    // Fast laps are at the top (lower time). Three axes stay visible.
+    const guide=(value,name,y)=>{
+      const g=svg('line');g.setAttribute('x1','32');g.setAttribute('y1',String(y));
+      g.setAttribute('x2','392');g.setAttribute('y2',String(y));g.setAttribute('class','pr-pace-guide');guides.append(g);
+      const label=svg('text');label.setAttribute('x','1');label.setAttribute('y',String(y+2));
+      label.setAttribute('class','pr-pace-axis');label.textContent=(name?name+' ':'')+value.toFixed(1);
+      guides.append(label);
+    };
+    guide(range[0],'',13);guide(mean,'Ø',13+66*(mean-range[0])/spread);guide(range[1],'',79);
+    let chain=[];
+    const flush=()=>{
+      if(chain.length>1){const node=svg('polyline');node.classList.add('pr-pace-connect');
+        node.setAttribute('points',chain.map(p=>p.x.toFixed(2)+','+p.y.toFixed(2)).join(' '));
+        segments.append(node)}
+      chain=[];
+    };
+    for(const p of list.map(coord)){
+      if(p.row.comparable===true&&!p.outside){chain.push(p)}
+      else{flush()}
+      const node=svg(p.outside?'path':'circle');
+      node.setAttribute('class',p.row.comparable?'comparable':'not-comparable');
+      if(p.outside){
+        node.setAttribute('d',p.outside==='FAST'?
+          'M'+(p.x-3)+' 19 L'+p.x+' 13 L'+(p.x+3)+' 19 Z':
+          'M'+(p.x-3)+' 73 L'+p.x+' 79 L'+(p.x+3)+' 73 Z');
+        node.classList.add('clipped');
+      }else{
+        node.setAttribute('cx',p.x);node.setAttribute('cy',p.y);
+        node.setAttribute('r',p.row.comparable?'2.6':'2.2');
+      }
+      const title=svg('title');const flags=[!p.row.valid?'INVÁLIDA':null,p.row.caution?'CAUTION':null,p.row.onPitRoad?'PIT':null,p.outside?'FUERA DE ESCALA':null].filter(Boolean);
+      title.textContent='V'+p.row.lap+' · '+p.row.seconds.toFixed(3)+' s · '+(p.row.comparable?'COMPARABLE':flags.join(' / ')||'NO COMPARABLE')+' · media '+mean.toFixed(3)+' s';node.append(title);dots.append(node);
+    }
+    flush();
+    const last=list[list.length-1],diff=last.seconds-mean;
+    text('pr-pace-status','Ø '+mean.toFixed(3)+' s · '+(paceScale==='focus'?'FOCO ±1.000 s':'TODAS')+
+       ' · ÚLT. V'+last.lap+' '+(diff>0?'+':'')+diff.toFixed(3)+' s');
+    canvas.dataset.averageSeconds=mean.toFixed(3);
+    canvas.dataset.yMin=range[0].toFixed(3);
+    canvas.dataset.yMax=range[1].toFixed(3);
+    canvas.dataset.laps=String(list.length);
+    canvas.dataset.comparable=String(clean.length);
   }
   function render(data){
     const analytics=data.practiceAnalytics||{},coach=data.coach||{},self=data.self||{};
@@ -133,6 +193,11 @@
     };
     try{document.body.classList.toggle('zre-header-collapsed',localStorage.getItem('zre-header-collapsed-v1')==='1')}catch(_){}
     sync();
+    el('pr-pace-scale')?.addEventListener('change',event=>{
+      paceScale=event.target.value==='all'?'all':'focus';
+      try{localStorage.setItem('zre-pr-pace-scale',paceScale)}catch(_){}
+      lastPace='';renderPace(lastRows||[]);
+    });
     button?.addEventListener('click',()=>{
       const now=document.body.classList.toggle('zre-header-collapsed');
       try{localStorage.setItem('zre-header-collapsed-v1',now?'1':'0')}catch(_){}
