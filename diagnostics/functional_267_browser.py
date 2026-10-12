@@ -54,6 +54,27 @@ with tempfile.TemporaryFile(mode="w+") as log:
    pr=packet(practice(12),"Practice","P-101")
    feed(pr)
    assert page.locator("#practice-workspace").is_visible()
+   # Acceptance: actual 32- and 70-point graphs in Chromium. Mean excludes
+   # flagged invalid/pit laps; ±1.000s axis must be mathematically exact.
+   for count in (32,70):
+    laps=[{"lap":i,"seconds":round(85.2+(i%3-1)*.20,3),
+           "valid":True,"comparable":True,"caution":False,
+           "onPitRoad":False,"source":"SDK_OBSERVED"} for i in range(1,count+1)]
+    laps[5].update(seconds=91.9,valid=False,comparable=False,onPitRoad=True)
+    laps[17].update(seconds=83.0,valid=False,comparable=False,caution=True)
+    pr["practiceAnalytics"]["laps"]=laps
+    feed(pr)
+    page.locator("#pr-pace-scale").select_option("focus")
+    expected=sum(x["seconds"] for x in laps if x["comparable"])/(count-2)
+    actual=page.locator("#pr-pace-svg").evaluate("""node=>({
+      average:Number(node.dataset.averageSeconds),
+      min:Number(node.dataset.yMin),max:Number(node.dataset.yMax),
+      laps:Number(node.dataset.laps),points:node.querySelectorAll('#pr-pace-dots>*').length})""")
+    assert actual["laps"]==count and actual["points"]==count,actual
+    assert abs(actual["average"]-expected)<=.001,actual
+    assert abs(actual["min"]-(expected-1))<=.001,actual
+    assert abs(actual["max"]-(expected+1))<=.001,actual
+    page.screenshot(path=str(OUT/f"practice-full-{count}-laps.png"))
    page.locator("#screen-mode-select").select_option("quali")
    assert not page.evaluate("window.__messages.some(m=>m.action==='quali_mode'&&m.value==='simulate')")
    page.locator("#quali-mode-select").select_option("simulate")
