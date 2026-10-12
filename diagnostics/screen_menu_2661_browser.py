@@ -77,12 +77,16 @@ window.WebSocket=class {
             assert page.locator("#screen-mode-select").input_value() == "auto"
             assert not page.locator('#screen-mode-select option[value="practice"]').is_disabled()
             assert not page.locator('#screen-mode-select option[value="quali"]').is_disabled()
-            assert page.locator('#screen-mode-select option[value="race"]').is_disabled()
+            assert not page.locator('#screen-mode-select option[value="race"]').is_disabled()
+            for option in ["practice","quali","race","pit","summary","spotter"]:
+                assert not page.locator(f'#screen-mode-select option[value="{option}"]').is_disabled()
 
             # Enter full Quali while the *real* SDK remains Practice.
             choose("quali")
-            assert actions("simulate") == 1
+            assert actions("simulate") == 0  # opening a view is never an SDK/simulator action
             assert page.locator("#quali-view").is_visible()
+            page.locator("#quali-mode-select").select_option("simulate")
+            assert actions("simulate") == 1  # explicit action only
             assert page.locator("#live-view").is_hidden()
             qu = packet(quali_fixture(14, False), "Practice", "QA-PRACTICE-1",
                         qualification={**quali_fixture(14, False)["qualifying"],
@@ -127,9 +131,10 @@ window.WebSocket=class {
 
             # Carrera real has race-only live dashboards; practice is consultation.
             rc = packet(race_fixture(18), "Race", "QA-RACE-3")
+            choose("auto")
             feed(rc)
             assert page.locator("#race-v2-view").is_visible()
-            assert page.locator('#screen-mode-select option[value="quali"]').is_disabled()
+            assert not page.locator('#screen-mode-select option[value="quali"]').is_disabled()
             assert not page.locator('#screen-mode-select option[value="race"]').is_disabled()
             choose("practice")
             assert page.locator("#practice-workspace").is_visible()
@@ -137,10 +142,20 @@ window.WebSocket=class {
             choose("race")
             assert page.locator("#race-v2-view").is_visible()
             page.locator("#role-select").select_option("spotter")
+            assert page.locator("#race-v2-view").is_visible()  # manually chosen visual view persists
+            assert page.locator("#screen-mode-control").is_visible()
+            choose("spotter")
             assert page.locator("#spotter-view").is_visible()
-            assert page.locator("#screen-mode-control").is_hidden()
+            choose("race")
+            assert page.locator("#race-v2-view").is_visible()
+            choose("auto")
+            assert page.locator("#spotter-view").is_visible()  # AUTO follows role
             page.locator("#role-select").select_option("auto")
             assert page.locator("#race-v2-view").is_visible()
+            choose("spotter")
+            assert page.locator("#spotter-view").is_visible()
+            assert page.locator("#spotter-fuel-submit").is_disabled()  # Pilot preview is safe
+            choose("auto")
 
             # Layout: menu must fit horizontal surfaces without blocking controls.
             for width, height in [(1366, 768), (1920, 1080), (2560, 1440)]:
@@ -151,17 +166,24 @@ window.WebSocket=class {
                     assert page.locator("#screen-mode-control").is_visible()
                     assert page.locator("#header-collapse-toggle").is_visible()
                     geometry = page.evaluate("""() => {
-                      const menu = document.getElementById('screen-mode-control').getBoundingClientRect();
-                      const toggle = document.getElementById('header-collapse-toggle').getBoundingClientRect();
-                      return {menuRight: menu.right, toggleLeft: toggle.left,
-                        width: document.documentElement.scrollWidth, viewport: innerWidth}
+                      const ids=['screen-mode-control','archive-open','header-collapse-toggle'];
+                      const boxes=ids.map(id=>document.getElementById(id).getBoundingClientRect());
+                      const overlaps=(a,b)=>a.right>b.left+2&&b.right>a.left+2&&a.bottom>b.top+2&&b.bottom>a.top+2;
+                      return {collisions:boxes.some((a,i)=>boxes.some((b,j)=>j>i&&overlaps(a,b))),
+                        width:document.documentElement.scrollWidth,viewport:innerWidth}
                     }""")
-                    assert geometry["menuRight"] <= geometry["toggleLeft"] + 3, geometry
+                    assert not geometry["collisions"], geometry
                     assert geometry["width"] <= geometry["viewport"] + 3, geometry
+                    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(0, 0, 0)"
                     page.screenshot(path=str(OUT / f"screen-{width}-{scale}.png"))
+            page.locator("#archive-open").click()
+            assert page.locator("#zre-archive-dialog").is_visible()
+            assert page.locator("#archive-refresh").is_visible()
+            page.locator("#zre-archive-dialog .zre-archive-dialog-head button").click()
+            assert not page.locator("#zre-archive-dialog").is_visible()
             assert not errors, errors
-            print("PASS screen menu 2.6.6.1: Practice → simulated Quali → Practice → same Quali run,"
-                  " AUTO, official Quali, Race, SPOTTER, 3 viewports at 100/110%")
+            print("PASS screen navigation 2.6.7.1: all visual modes unrestricted, explicit Quali command,"
+                  " safe Spotter preview, persisted manual choices, archive dialog and black theme")
             browser.close()
     finally:
         proc.terminate()
