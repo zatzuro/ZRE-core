@@ -118,7 +118,7 @@ with tempfile.TemporaryFile(mode="w+") as log:
    assert "ENSAYO" in page.locator("#rv2-alert").inner_text()
    assert "PRÓXIMA VUELTA" in page.locator("#rv2-plan-status").inner_text()
    assert page.locator("#rv2-consumption").inner_text().strip()!="—"
-   assert page.locator("#rv2-box-countdown").inner_text().strip()=="1 VUELTAS"
+   assert page.locator("#rv2-box-countdown").inner_text().strip()=="1 VUELTA"
    sim["practiceRacePlan"]["currentPlan"]["window"]["state"]="BOX THIS LAP"
    sim["practiceRacePlan"]["currentPlan"]["window"]["target"]=10
    feed(sim)
