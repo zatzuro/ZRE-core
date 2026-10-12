@@ -22,7 +22,7 @@ class SessionRecorder:
         self.archive=SessionArchive(self.root);self.retention_days=self.archive.retention_days;self.session_id=None;self.session_dir=None;self.timeline_path=None
         self.summary={};self.pending=queue.Queue(maxsize=512);self.thread=None;self.lock=threading.Lock()
         self.dropped_events=0;self.errors=0;self._contexts={};self._last_cleanup=0;self._signatures={};self._audits={};self._conditions_at=None
-        self._last_maintenance_request=0.0;self._last_telemetry_clock=None;self._last_roster_clock=None;self._last_driverinfo_clock=None;self._last_controls_signature=None
+        self._last_maintenance_request=0.0;self._last_telemetry_clock=None;self._last_roster_clock=None;self._last_driverinfo_clock=None;self._last_controls_signature=None;self._last_competitor_laps={}
         self._enqueue(('maintenance',self.root,None))
 
     def _enqueue(self,command):
@@ -43,7 +43,7 @@ class SessionRecorder:
         if not self._enqueue(('start',folder,data)):return None
         self.session_id=folder.name;self.session_dir=folder;self.timeline_path=folder/'timeline.jsonl'
         self._signatures={};self._audits={};self._conditions_at=None
-        self._last_telemetry_clock=None;self._last_roster_clock=None;self._last_driverinfo_clock=None;self._last_controls_signature=None
+        self._last_telemetry_clock=None;self._last_roster_clock=None;self._last_driverinfo_clock=None;self._last_controls_signature=None;self._last_competitor_laps={}
         return self.session_id
 
     def write(self,record):
@@ -87,6 +87,24 @@ class SessionRecorder:
         competitors=(intel.get('competitors') or {}).get('observed') or []
         for row in competitors:
             idx=row['carIdx'];presence=row.get('presence')
+            # Durable per-car lap history, including cars that leave the world.
+            # An SDK roster alone cannot reconstruct older lap samples.
+            last_sample=(row.get('lapTimes') or [])[-1:]
+            completed=row.get('lapsComplete')
+            historical_sig=(completed,last_sample[-1].get('time') if last_sample else None,
+                            row.get('bestLap'),presence)
+            if self._last_competitor_laps.get(idx)!=historical_sig:
+                self._last_competitor_laps[idx]=historical_sig
+                self.write({'type':'competitor_history','sessionTime':session_time,
+                    'carIdx':idx,'number':row.get('number'),'driver':row.get('driver'),
+                    'team':row.get('team'),'car':row.get('car'),'classId':row.get('classId'),
+                    'presence':presence,'lastSeenSessionTime':row.get('lastSeenSessionTime'),
+                    'bestLap':row.get('bestLap'),'lastLap':row.get('lastLap'),
+                    'lap':row.get('lap'),'lapsComplete':completed,
+                    'lapTimes':(row.get('lapTimes') or [])[-24:],
+                    'cleanLapTimes':(row.get('cleanLapTimes') or [])[-12:],
+                    'pitHistory':(row.get('pitHistory') or [])[-10:],
+                    'source':'SDK_OBSERVED'})
             if self._changed(('presence',idx),presence):self.write({'type':'rival_presence','carIdx':idx,'presence':presence,'lastSeenSessionTime':row.get('lastSeenSessionTime'),'lastLap':row.get('lastLap'),'source':'SDK_OBSERVED','sessionTime':session_time})
             for pit in row.get('pitHistory') or []:
                 signature=(pit.get('source'),pit.get('status'),pit.get('exitLap'),pit.get('abnormalLapExcess'),str(pit.get('pitRoadDurationObserved')))
@@ -216,7 +234,11 @@ class SessionRecorder:
 
     def _checkpoint(self,folder,context):
         context['droppedEvents']=self.dropped_events;context['loggingErrors']=self.errors
-        self._write_json(folder/'summary.json',context)
+        # Compact crash-recovery checkpoint is separate from the human summary.
+        recovery=context.get('recovery')
+        if recovery:
+            self._write_json(folder/'recovery.json',recovery)
+        self._write_json(folder/'summary.json',{k:v for k,v in context.items() if k!='recovery'})
         lines=[f"# ZRE Session {folder.name}",'',f"- Circuito: {context.get('metadata',{}).get('track','—')}",
             f"- Tipo: {context.get('metadata',{}).get('sessionType','—')}",f"- Eventos: {context['events']}",
             f"- Vueltas: {context['laps']}",f"- Predicciones: {context['predictions']}",f"- Resultados: {context['outcomes']}",
@@ -224,7 +246,7 @@ class SessionRecorder:
         for result in context.get('predictionResults',[]):
             lines.append(f"- Rival {result['carIdx']}: ventana {result['prediction']['fromLap']}–{result['prediction']['toLap']}, resultado {result['actualPitLap']}, acierto {result['hit']}, error {result['errorLaps']}")
         (folder/'summary.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
-        self.summary=dict(context)
+        self.summary={k:v for k,v in context.items() if k!='recovery'}
 
     def _run(self):
         while True:
@@ -240,7 +262,10 @@ class SessionRecorder:
                 elif kind=='start':
                     folder.mkdir(parents=True,exist_ok=True)
                     self._write_json(folder/'session.json',data);(folder/'timeline.jsonl').touch()
-                    self._contexts[folder]={**data,'events':0,'laps':0,'predictions':0,'outcomes':0,'predictionResults':[]}
+                    self._contexts[folder]={**data,'events':0,'laps':0,'predictions':0,
+                          'outcomes':0,'predictionResults':[],
+                          'recovery':{'lastObservedAt':None,'grid':{},'roster':{},
+                                      'competitors':{},'ownLaps':[]}}
                     self._checkpoint(folder,self._contexts[folder]);self.cleanup_old_sessions()
                 elif kind=='event' and folder in self._contexts:
                     path=folder/'timeline.jsonl'
@@ -253,6 +278,19 @@ class SessionRecorder:
                         path.replace(folder / f"timeline.{index:04d}.jsonl")
                     with path.open('a',encoding='utf-8') as handle:handle.write(json.dumps(data,ensure_ascii=False,separators=(',',':'),allow_nan=False)+'\n')
                     ctx=self._contexts[folder];ctx['events']+=1
+                    cache=ctx['recovery'];kind_data=data.get('type')
+                    if kind_data in ('sdk_grid','sdk_roster'):
+                        cache['grid' if kind_data=='sdk_grid' else 'roster']=data.get('fields') if kind_data=='sdk_grid' else {
+                            'driverInfo':data.get('driverInfo'),'weekendInfo':data.get('weekendInfo')}
+                        cache['lastObservedAt']=data.get('sessionTime')
+                    elif kind_data=='competitor_history' and isinstance(data.get('carIdx'),int):
+                        cache['competitors'][str(data['carIdx'])]=data
+                        cache['lastObservedAt']=data.get('sessionTime')
+                    elif kind_data=='lap':
+                        own=cache['ownLaps'];lap=data.get('lap')
+                        if lap is not None and not any(e.get('lap')==lap for e in own):
+                            own.append(data);del own[:-120]
+                        cache['lastObservedAt']=data.get('sessionTime') or cache['lastObservedAt']
                     if data.get('type') in ('lap','own_lap_snapshot'):ctx['laps']+=int(data.get('type')=='own_lap_snapshot')
                     if data.get('type')=='strategy_prediction':ctx['predictions']+=1
                     if data.get('type')=='prediction_outcome':
