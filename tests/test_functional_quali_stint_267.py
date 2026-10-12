@@ -88,6 +88,33 @@ class BridgeFunctionalTests(unittest.TestCase):
         self.assertNotIn("CarIdx",str(identity))
         self.assertEqual(len(self.source.quali.runs),1)
 
+    def test_isolated_sdk_session_clock_regression_does_not_restart_coach(self):
+        self.tick(10)
+        first=self.source.recorder.write.call_count
+        self.tick(1)
+        self.assertEqual(self.source.last_session_time,10)
+        self.tick(11)
+        self.assertEqual(self.source.last_session_time,11)
+        events=[c.args[0] for c in self.source.recorder.write.call_args_list
+                if c.args and isinstance(c.args[0],dict) and c.args[0].get("type")=="stint_start"]
+        self.assertEqual(len(events),1)
+        self.assertTrue(self.source.stint_active)
+
+    def test_confirmed_sdk_clock_restart_only_after_three_frames(self):
+        self.tick(10)
+        for sample in (2,2.1):
+            self.tick(sample)
+            self.assertEqual(self.source.last_session_time,10)
+        self.tick(2.2)
+        self.assertEqual(self.source.last_session_time,2.2)
+        events=[c.args[0] for c in self.source.recorder.write.call_args_list
+                if c.args and isinstance(c.args[0],dict) and c.args[0].get("type")=="stint_start"]
+        self.assertEqual(len(events),2)
+        self.tick(2.3)
+        events=[c.args[0] for c in self.source.recorder.write.call_args_list
+                if c.args and isinstance(c.args[0],dict) and c.args[0].get("type")=="stint_start"]
+        self.assertEqual(len(events),2)
+
     def test_transient_is_on_track_false_does_not_reopen_stint(self):
         self.tick(10)
         first=[e for c in self.source.recorder.write.call_args_list for e in c.args if isinstance(e,dict) and e.get("type")=="stint_start"]
