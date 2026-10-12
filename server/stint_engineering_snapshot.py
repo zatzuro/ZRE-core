@@ -86,7 +86,7 @@ def _metric_number(value,unit=None):
     text=value.lower()
     if unit=="kPa" and re.search(r"\bpsi\b",text):
         return round(amount*6.894757293,2)
-    if unit=="C" and re.search(r"\bf\b|°f",text):
+    if unit=="C" and re.search(r"\d\s*°?f\b",text):
         return round((amount-32)*5/9,2)
     return amount if math.isfinite(amount) else None
 
