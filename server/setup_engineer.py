@@ -392,6 +392,12 @@ class SetupEngineer:
             "stintDurationSeconds": round(duration, 1) if duration is not None else None,
         }
 
+        provisional_delta=compare_tires(base.get("tiresStart") or {},tires_end or {})
+        changed_provisional=any(
+            isinstance(value,(int,float)) and abs(value)>1e-4
+            for wheel in provisional_delta.values() for metric in
+            (wheel.get("wearRemainingDelta") or {},wheel.get("carcassTempCDelta") or {})
+            for value in metric.values())
         repeated=build_repeated_behavior(engineering);feedback=base.get("driverFeedback") or {}
         record = {
             "createdAt": datetime.now().isoformat(timespec="seconds"),
@@ -404,6 +410,7 @@ class SetupEngineer:
             "tires": {"start":base.get("tiresStart") or {},
                       "end":tires_end or {},
                       "delta":{},
+                      "provisionalDelta":provisional_delta if changed_provisional else {},
                       "garageAtStart":base.get("garageTiresStart") or {},
                       "inspection":{"status":"PENDING",
                           "reason":"ESPERANDO INSPECCIÓN GARAGE ACTUALIZADA",
