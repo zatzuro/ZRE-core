@@ -58,6 +58,7 @@ jobs:
           node tests/frontend_race_v2_266.cjs
           node tests/frontend_screen_menu_2661.cjs
           node tests/frontend_functional_267.cjs
+          node tests/frontend_practice_2671.cjs
 
       - name: Server and WebSocket demo smoke
         if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || startsWith(github.head_ref, 'develop/2.6.6') || startsWith(github.head_ref, 'develop/2.6.7') || (github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || github.ref == 'refs/heads/release-2.6.7')
