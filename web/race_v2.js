@@ -160,7 +160,7 @@
       !has?'PLAN NO DISPONIBLE':state.on_pit_road?'EN BOXES':window.state||'PLAN ESTABLE';
    const root=el('rv2-plan-card');if(root)root.dataset.state=String(status).toLowerCase().replaceAll(' ','-');
    set('rv2-box-lap',!has?'—':goal!=null?'V'+goal:plan.minimum_stops===0?'META':'—');
-   set('rv2-box-countdown',!has?'SIN PLAN':countdown==null?'—':countdown===0?'AHORA':countdown+' VUELTAS');
+   set('rv2-box-countdown',!has?'SIN PLAN':countdown==null?'—':countdown===0?'AHORA':countdown+' VUELTA'+(countdown===1?'':'S'));
    set('rv2-plan-status',status);
    for(const [id,key] of [['rv2-earliest','earliest_safe'],['rv2-target','target'],['rv2-fuel-limit','fuel_limit']])
       set(id,has&&window[key]!=null?'V'+window[key]:'—');
