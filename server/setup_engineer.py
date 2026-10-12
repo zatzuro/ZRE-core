@@ -13,13 +13,13 @@ try:
     from server.setup_ownership import same_confirmed_owner
     from server.setup_report import write_setup_report
     from server.stint_store import StintStore, slug
-    from server.stint_engineering_snapshot import compare_tires, snapshot_availability
+    from server.stint_engineering_snapshot import compare_tires, snapshot_availability, garage_signature
 except ModuleNotFoundError:
     from setup_snapshot import compare_setups, snapshot_from_html
     from setup_ownership import same_confirmed_owner
     from setup_report import write_setup_report
     from stint_store import StintStore, slug
-    from stint_engineering_snapshot import compare_tires, snapshot_availability
+    from stint_engineering_snapshot import compare_tires, snapshot_availability, garage_signature
 
 
 def measured(value):
@@ -224,6 +224,7 @@ class SetupEngineer:
         self.current = None
         self.last_saved = None
         self.last_report_path = None
+        self.pending_tire_record = None
         self.imported_setup = None
         self.setup_source_preference = "auto"
         self.status = "Esperando stint"
@@ -232,6 +233,8 @@ class SetupEngineer:
         recovered = self.store.latest_stint()
         if recovered:
             self.last_saved = recovered
+            if ((recovered.get("tires") or {}).get("inspection") or {}).get("status")=="PENDING":
+                self.pending_tire_record=recovered
             try:
                 # Historical records stay readable but are never auto-exported
                 # without reliable ownership metadata and fresh authorization.
@@ -308,10 +311,13 @@ class SetupEngineer:
             return html
         return sdk
 
-    def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None, tires_start=None, controls_start=None):
+    def start_stint(self, session, setup_snapshot, conditions=None, fuel_start=None, session_time=None, tires_start=None, controls_start=None, garage_tires_start=None):
         if not self.owner.get("authorized") or self.owner.get("scope") != "own":
             return self._deny()  # CarSetup SDK is always local, never a spectator's observed car.
         session = {**dict(session or {}), "setupOwner": dict(self.owner)}
+        # Never associate a late garage reading to an already replaced set.
+        # Old saved record remains PENDING for human inspection.
+        self.pending_tire_record=None
         self.current = {
             "startedAt": datetime.now().isoformat(timespec="seconds"),
             "session": dict(session or {}),
@@ -320,6 +326,7 @@ class SetupEngineer:
             "fuelStart": fuel_start,
             "startSessionTime": session_time,
             "tiresStart": tires_start or {},
+            "garageTiresStart": garage_tires_start or {},
             "controlsStart": dict(controls_start or {}),
             "controlsLast": dict(controls_start or {}),
             "controlChanges": [],
@@ -394,7 +401,18 @@ class SetupEngineer:
             "setup": setup,
             "stintPerformance": performance,
             "corners": build_corner_analysis(engineering),
-            "tires": {"start":base.get("tiresStart") or {},"end":tires_end or {},"delta":compare_tires(base.get("tiresStart") or {},tires_end or {})},
+            "tires": {"start":base.get("tiresStart") or {},
+                      "end":tires_end or {},
+                      "delta":{},
+                      "garageAtStart":base.get("garageTiresStart") or {},
+                      "inspection":{"status":"PENDING",
+                          "reason":"ESPERANDO INSPECCIÓN GARAGE ACTUALIZADA",
+                          "finishedSessionTime":session_time,
+                          "sessionId":session.get("sessionID"),
+                          "subSessionId":session.get("subSessionID"),
+                          "trackId":session.get("trackID"),
+                          "source":"SDK_TRANSITION_PROVISIONAL"},
+                      "comparability":"NO COMPARABLE: falta lectura final vigente del mismo juego"},
             "driverControls": {"start":base.get("controlsStart") or {},"end":base.get("controlsLast") or {},"changes":base.get("controlChanges") or []},
             "balancePatterns": build_balance_patterns(repeated,feedback),
             "repeatedBehavior": repeated,
@@ -427,6 +445,7 @@ class SetupEngineer:
         saved = self.store._read_json(path, record)
         self.current = None
         self.last_saved = saved
+        self.pending_tire_record = saved
         self.last_report_path = None
         report=self.export_report(saved)
         if report:
@@ -434,6 +453,59 @@ class SetupEngineer:
         else:
             self.status=f"Stint {saved.get('stintNumber')} guardado · reporte no disponible"
         return saved
+
+    def reconcile_tires(self, garage_snapshot, session_identity, *, in_pits=False):
+        """Idempotently amend exactly the original stint after a fresh garage update.
+
+        The last available inspection is not assumed fresh just because all
+        28 fields are present. No attribution to a new stint or another car.
+        """
+        record=self.pending_tire_record
+        if not isinstance(record,dict) or self.current is not None or not in_pits:
+            return None
+        if not self._can_write(record):return None
+        session=record.get("session") or {}
+        if not isinstance(session_identity,dict) or any(
+            session.get(a)!=session_identity.get(b)
+            for a,b in (("sessionID","SessionID"),("subSessionID","SubSessionID"),
+                        ("trackID","TrackID"))):
+            return None
+        tires=record.get("tires") or {}
+        inspection=tires.get("inspection") or {}
+        if inspection.get("status")!="PENDING":return None
+        last_end=inspection.get("finishedSessionTime")
+        now=(garage_snapshot or {}).get("sessionTimeObserved")
+        if isinstance(last_end,(int,float)) and isinstance(now,(int,float)) and now<last_end:
+            return None
+        if (garage_snapshot or {}).get("availableFields",0)<24:
+            return None
+        baseline=tires.get("garageAtStart") or {}
+        old=garage_signature(baseline)
+        fresh=garage_signature(garage_snapshot)
+        if old==fresh or not any(d for d in fresh if d[1] is not None or d[2] or d[3]):
+            return None
+        # Do not manufacture wear deltas across differing SDK source types,
+        # or assume iRacing has not replaced the tire set before inspection.
+        amended=dict(record);measures=dict(tires)
+        measures["end"]=garage_snapshot
+        measures["inspection"]={"status":"CONFIRMED",
+            "source":"CARSETUP_GARAGE_CHANGED_AFTER_STINT",
+            "sessionTimeObserved":now,"finishedSessionTime":last_end,
+            "basis":"GARAGE_VALUES_CHANGED_AFTER_END / SAME_LOCAL_CAR",
+            "comparison":"INCOMPARABLE_TIRE_SET_NOT_IDENTIFIED"}
+        measures["delta"]={}
+        measures["comparability"]="NO COMPARABLE: identidad física del juego no verificada"
+        amended["tires"]=measures
+        quality=dict(amended.get("dataQuality") or {})
+        quality["tireEnd"]={"availableFields":garage_snapshot.get("availableFields"),
+            "status":"CONFIRMED","source":"CARSETUP_GARAGE"}
+        amended["dataQuality"]=quality
+        path=self.store.save_stint(amended) # retains stintNumber, no duplicate
+        self.last_saved=self.store._read_json(path,amended)
+        self.pending_tire_record=None
+        self.export_report(self.last_saved)
+        self.status="Stint "+str(self.last_saved.get("stintNumber"))+" · neumáticos garage confirmados"
+        return self.last_saved
 
     def update_feedback(self, stint, entry=None, mid=None, exit=None, comment=None):
         if not isinstance(stint, dict) or not self._can_write(stint):
