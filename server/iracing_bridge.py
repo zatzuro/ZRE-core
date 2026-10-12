@@ -316,6 +316,8 @@ class DashboardSource:
         self.stint_active = False
         self._stint_offtrack_since = None
         self._sdk_link_state = None
+        self._clock_probe_baseline = None
+        self._clock_probe_samples = 0
         self._recovery_key = None
         self._recovery_results = {}
         self._recovery_provenance = None
@@ -458,6 +460,43 @@ class DashboardSource:
         if force_driver:
             return False
         return auto_mode == 'spotter'
+
+    def confirm_clock_restart(self,session_time):
+        """Require three consistently backward SDK frames before session reset.
+
+        A single non-monotonic SDK packet must not destroy Coach/Standings.
+        SessionID/SessionNum/SessionType changes still reset immediately.
+        """
+        current=number(session_time)
+        previous=number(self.last_session_time)
+        if current is None or previous is None:
+            self._clock_probe_baseline=None
+            self._clock_probe_samples=0
+            return False
+        baseline=self._clock_probe_baseline
+        if baseline is None:
+            if current>=previous-1:
+                return False
+            self._clock_probe_baseline=previous
+            self._clock_probe_samples=1
+            self.recorder.write({"type":"sdk_clock_backward_probe",
+                "previousTime":previous,"observedTime":current,
+                "source":"SDK_OBSERVED"})
+            return False
+        if current>=baseline-1:
+            self._clock_probe_baseline=None
+            self._clock_probe_samples=0
+            return False
+        self._clock_probe_samples+=1
+        if self._clock_probe_samples<3:
+            return False
+        self.recorder.write({"type":"sdk_clock_restart_confirmed",
+            "previousTime":baseline,"observedTime":current,
+            "consecutiveSamples":self._clock_probe_samples,
+            "source":"SDK_OBSERVED"})
+        self._clock_probe_baseline=None
+        self._clock_probe_samples=0
+        return True
 
     def restore_session_journal(self,weekend,session_num):
         """Recover last observed laps/roster for a late join or process restart.
@@ -617,7 +656,11 @@ class DashboardSource:
                 self.confirmed_driver_name=context.current_driver
             identity=SessionIdentity.from_sdk(weekend,session_num,context.car_idx if context.car_idx is not None else player_idx)
             session_time=self.get("SessionTime")
-            if self.session_state.observe_identity(identity,ignore_car_idx=True) or (self._last_session_type is not None and self._last_session_type!=session.get("SessionType")) or (number(session_time) is not None and number(self.last_session_time) is not None and session_time<self.last_session_time-1):
+            clock_restart=self.confirm_clock_restart(session_time)
+            official_changed=(self.session_state.observe_identity(identity,ignore_car_idx=True)
+                or (self._last_session_type is not None and
+                    self._last_session_type!=session.get("SessionType")))
+            if official_changed or clock_restart:
                 logger.info("SESSION CHANGED")
                 self.finalize_setup_stint_before_reset("session-change")
                 self.quali.close_session("official-session-change")
@@ -632,7 +675,12 @@ class DashboardSource:
             # packet is missing/incomplete (common after a reconnect).
             for recovered_idx,recovered_result in self._recovery_results.items():
                 results.setdefault(recovered_idx,recovered_result)
-            self.session_key=identity;self.last_session_time=session_time;self._last_session_type=session.get("SessionType")
+            self.session_key=identity
+            # Keep the last trusted monotonic reference while testing a
+            # suspected clock jump; do not accept a one-frame erroneous clock.
+            if self._clock_probe_baseline is None or official_changed or clock_restart:
+                self.last_session_time=session_time
+            self._last_session_type=session.get("SessionType")
             # Quali history belongs to the official iRacing session, not to a
             # potentially changing auto-detected team CarIdx. Preserve runs
             # during ambiguous local/team ownership resolution and driver swaps.
@@ -1290,7 +1338,7 @@ class DashboardSource:
         self.fuel_per_lap=[]; self.last_player_pct=None; self.lap_started_at=None; self.sector_marks=[]
         self.best_sectors=[None,None,None]; self.last_lap_summary=None; self.last_recorded_lap_time=None
         self.pending_lap=None; self.confirmed_session_best=None; self.personal_session_best=None
-        self.personal_lap_clean=False; self.personal_lap_caution=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None;self._stint_offtrack_since=None
+        self.personal_lap_clean=False; self.personal_lap_caution=False; self.personal_incidents=None; self.coach=LapCoach(); self.coach_session_mode="practice"; self.race_engineer_neighbors={}; self.race_engineer_car_laps={}; self.observed_team_history={}; self.last_observed_lap_time=None; self.race_engineer_audio=[]; self.stint_active=False; self.race_plan_runtime.detach(); self.race_plan_audio_announced=set(); self.race_plan_audio_state=None; self.race_plan_audio_target=None; self.setup_engineer.current=None; self.setup_engineer.imported_setup=None; self.setup_engineer.setup_source_preference='auto'; self.setup_engineer.status='Esperando stint'; self.race_director=RaceDirector();self.race_class_candidates=set(); self.strategy_completed_stints=[]; self.strategy_stint_start_lap=None; self.strategy_stops_completed=0; self.strategy_last_on_pit=False; self.strategy_target_total_stops=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.team_car_idx=None;self.team_car_number=None;self.team_id=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.active_stint_driver=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.sector_tracking_armed=False;self.sector_last_sample=None;self._stint_offtrack_since=None;self._clock_probe_baseline=None;self._clock_probe_samples=0
 
     def _quali_sdk_delta(self,key):
         raw=number(self.get(key))
