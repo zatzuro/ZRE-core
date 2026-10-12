@@ -161,26 +161,78 @@ def render_setup_report(stint, previous=None, setup_changes=None):
 
     lines += _section_map("STINT PERFORMANCE", performance)
 
-    lines += ["## TIRE SNAPSHOT", ""]
+    lines += ["## TIRE SNAPSHOT · MEDICIÓN Y FRESCURA", ""]
     tires=stint.get("tires") or {}
+    inspection=tires.get("inspection") or {}
+    status=inspection.get("status") or "LEGACY · SIN VERIFICACIÓN TEMPORAL"
+    lines.append(f"- **Inspección final:** {status}")
+    lines.append(f"- **Fuente:** {_value(inspection.get('source'))}")
+    lines.append(f"- **Última lectura SDK:** {_value(inspection.get('sessionTimeObserved'))} s (SessionTime)")
+    if inspection.get("reason"):
+        lines.append(f"- **Pendiente:** {inspection['reason']}")
+    lines.append(f"- **Comparabilidad:** {tires.get('comparability') or inspection.get('comparison') or 'NO VERIFICADA'}")
+    lines.append("- **Aviso:** completar campos no certifica su frescura; presión fría != última presión caliente.")
+    lines.append("")
     for phase in ("start","end"):
         snapshot=tires.get(phase) or {}
-        lines.append(f"### {phase.upper()}")
-        lines.append("- **Dynamic pressure:** UNAVAILABLE_LIVE_SDK")
+        pending=phase=="end" and status!="CONFIRMED"
+        lines.append(f"### {phase.upper()} · "+("PROVISIONAL / NO CONFIRMADO" if pending else
+                     ("GARAGE INSPECCIONADO" if phase=="end" else "REFERENCIA AL INICIO")))
+        lines.append("- **Presión dinámica:** NO DISPONIBLE EN SDK")
+        if snapshot.get("source"):
+            lines.append(f"- **Fuente específica:** {snapshot['source']}")
+        if phase=="end" and status=="CONFIRMED" and snapshot.get("updateCount") is not None:
+            lines.append(f"- **CarSetup.UpdateCount:** {snapshot['updateCount']}")
         wheels=snapshot.get("wheels") or {}
         if not wheels:
-            lines.append("- No live tire snapshot available.")
-        for wheel,data in wheels.items():
-            temp=data.get("carcassTempC") or {};wear=data.get("wearRemainingPct") or {}
-            lines.append(f"- **{wheel}:** cold { _value(data.get('coldPressureKPa')) } kPa · carcass L/M/R { _value(temp.get('left')) }/{ _value(temp.get('middle')) }/{ _value(temp.get('right')) } C · wear remaining L/M/R { _value(wear.get('left')) }/{ _value(wear.get('middle')) }/{ _value(wear.get('right')) }")
+            lines.append("- Sin medición disponible.")
+        for wheel in ("LF","RF","LR","RR"):
+            data=wheels.get(wheel) or {}
+            if not data:
+                continue
+            temp=data.get("lastTempsC") or {}
+            wear=data.get("treadRemainingPct") or {}
+            if temp or wear or data.get("lastHotPressureKPa") is not None:
+                lines.append(f"- **{wheel} · GARAGE** ({data.get('physicalOrder') or 'posición identificada'}): "
+                             f"fría {_value(data.get('coldPressureKPa'))} kPa · "
+                             f"última caliente {_value(data.get('lastHotPressureKPa'))} kPa · "
+                             f"temp exterior/medio/interior {_value(temp.get('outside'))}/"
+                             f"{_value(temp.get('middle'))}/{_value(temp.get('inside'))} °C · "
+                             f"goma restante exterior/medio/interior {_value(wear.get('outside'))}/"
+                             f"{_value(wear.get('middle'))}/{_value(wear.get('inside'))} %")
+            else:
+                raw=data.get("carcassTempC") or {}
+                remaining=data.get("wearRemainingPct") or {}
+                lines.append(f"- **{wheel} · TELEMETRÍA SDK** (no inspección vigente): "
+                             f"fría {_value(data.get('coldPressureKPa'))} kPa · "
+                             f"carcasa L/M/R {_value(raw.get('left'))}/{_value(raw.get('middle'))}/"
+                             f"{_value(raw.get('right'))} °C · goma restante L/M/R "
+                             f"{_value(remaining.get('left'))}/{_value(remaining.get('middle'))}/"
+                             f"{_value(remaining.get('right'))} [unidad SDK, no homologada a garage]")
         lines.append("")
-    delta=tires.get("delta") or {}
-    if delta:
-        lines.append("### START → END DELTA")
-        for wheel,data in delta.items():
-            wear=data.get("wearRemainingDelta") or {};temp=data.get("carcassTempCDelta") or {}
-            lines.append(f"- **{wheel}:** carcass Δ L/M/R { _value(temp.get('left')) }/{ _value(temp.get('middle')) }/{ _value(temp.get('right')) } C · wear remaining Δ L/M/R { _value(wear.get('left')) }/{ _value(wear.get('middle')) }/{ _value(wear.get('right')) }")
-        lines.append("")
+    deltas=tires.get("delta") or {}
+    if status!="CONFIRMED":
+        lines.append("### DELTA INICIO → FINAL")
+        lines.append("NO DISPONIBLE: falta inspección final confirmada. "
+                     "No se interpreta ausencia de desgaste ni se publica Δ=0.")
+    elif not deltas:
+        lines.append("### DELTA INICIO → FINAL")
+        lines.append("NO COMPARABLE: no existe evidencia suficiente de que las "
+                     "mediciones se refieran al mismo juego de neumáticos.")
+    else:
+        lines.append("### DELTA INICIO → FINAL · COMPARABLE")
+        for wheel,values in deltas.items():
+            lines.append(f"- **{wheel}:** {_value(values)}")
+    if status=="CONFIRMED":
+        confirmed=(tires.get("end") or {}).get("wheels") or {}
+        for label,wheels in (("DELANTEROS",("LF","RF")),("TRASEROS",("LR","RR"))):
+            minima=[value for wheel in wheels for value in
+                    (((confirmed.get(wheel) or {}).get("treadRemainingPct") or {}).values())
+                    if isinstance(value,(int,float))]
+            if minima:
+                lines.append(f"- **Mínima goma observada {label}:** {min(minima):.1f} % "
+                             "(observación; sin diagnóstico causal)")
+    lines.append("")
 
     lines += ["## CORNER / ZONE ANALYSIS", ""]
     if corners:
