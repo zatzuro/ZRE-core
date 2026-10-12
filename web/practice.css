@@ -73,3 +73,15 @@ body.practice-session .live-view>.live-telemetry,body.practice-session .live-vie
 #screen-mode-control[hidden],#quali-mode-control[hidden],#quali-new-run[hidden],#rv2-emphasis-control[hidden]{display:none!important}
 @media(max-width:1500px){#screen-mode-context{max-width:220px}}
 @media(max-width:1050px){#screen-mode-control{flex-wrap:wrap;row-gap:2px}#screen-mode-context{flex-basis:100%;max-width:250px;font-size:9px}}
+
+/* 2.6.7.1 lap chart: true average ±1s, clipped outliers, 70+ laps. */
+.pr-pace-mode-label{display:flex;align-items:center;gap:4px;font-size:9px;font-weight:700;color:#e6f0f7}
+#pr-pace-scale{min-width:90px;max-width:140px;background:#101419;color:#fff;border:1px solid #6d7b84;border-radius:4px;padding:2px 3px;font-size:10px}
+#pr-pace-svg{overflow:visible}#pr-pace-line{display:none}
+.pr-pace-guide{stroke:#6c7378;stroke-width:.38;stroke-dasharray:3 3}
+.pr-pace-axis{fill:#dadfe2;font-size:5.6px;text-anchor:start;paint-order:stroke;stroke:#0c0e11;stroke-width:1.2px}
+.pr-pace-connect{fill:none;stroke:#60dcad;stroke-width:1.4;stroke-linecap:round}
+#pr-pace-dots circle.comparable{fill:#64e5bc}
+#pr-pace-dots circle.not-comparable{fill:#dbab6a;stroke:#111;stroke-width:.4;opacity:.92}
+#pr-pace-dots path.clipped{fill:#ffb85a;stroke:#111;stroke-width:.4}
+#pr-pace-dots path.clipped.comparable{fill:#60dcae}
