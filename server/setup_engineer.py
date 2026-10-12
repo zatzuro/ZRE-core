@@ -491,6 +491,19 @@ class SetupEngineer:
         fresh=garage_signature(garage_snapshot)
         if old==fresh or not any(d for d in fresh if d[1] is not None or d[2] or d[3]):
             return None
+        # A tread percentage increase indicates a replaced tire (or a changed
+        # source/set), never the post-stint wear of the same wheel.
+        # Reject mixed partial replacements instead of certifying the wrong set.
+        original=(baseline.get("wheels") or {})
+        updated=(garage_snapshot.get("wheels") or {})
+        for wheel in ("LF","RF","LR","RR"):
+            initial=(original.get(wheel) or {}).get("treadRemainingPct") or {}
+            latest=(updated.get(wheel) or {}).get("treadRemainingPct") or {}
+            if any(isinstance(initial.get(segment),(int,float)) and
+                   isinstance(latest.get(segment),(int,float)) and
+                   latest[segment]>initial[segment]+1.5
+                   for segment in ("outside","middle","inside")):
+                return None
         # Do not manufacture wear deltas across differing SDK source types,
         # or assume iRacing has not replaced the tire set before inspection.
         amended=dict(record);measures=dict(tires)
