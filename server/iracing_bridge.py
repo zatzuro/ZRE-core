@@ -1178,7 +1178,8 @@ class DashboardSource:
         horizon=number(self.strategy_settings.get("manualRaceSeconds"))
         tank=number(self.strategy_settings.get("tankCapacityLiters"))
         if tank is None:
-            tank=number(self.get("DriverCarFuelMaxLtr"))
+            driver_info=self.get("DriverInfo") or {}
+            tank=number(driver_info.get("DriverCarFuelMaxLtr")) if isinstance(driver_info,dict) else None
         chosen_pace=number(self.strategy_settings.get("averageLapSeconds")) or number(pace)
         if tank is None or tank<=0 or chosen_pace is None or chosen_pace<=0 or not horizon:
             return base
