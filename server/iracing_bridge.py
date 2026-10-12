@@ -475,7 +475,7 @@ class DashboardSource:
         self._recovered_own_laps=[]
         self._recovered_car_idx=None
         archive=getattr(getattr(self,"recorder",None),"archive",None)
-        if archive is None:
+        if archive is None or not isinstance(getattr(archive,"root",None),Path):
             return
         try:
             stored=archive.recover_session(weekend,session_num,
@@ -483,7 +483,7 @@ class DashboardSource:
         except (OSError,ValueError,TypeError) as exc:
             logger.warning("SESSION RECOVERY unavailable: %s",type(exc).__name__)
             return
-        if not stored:
+        if not isinstance(stored,dict) or not stored:
             return
         self._recovery_provenance={"fromSessionId":stored.get("fromSessionId"),
             "lastObservedAt":stored.get("lastObservedAt"),"source":"LOCAL_SESSION_JOURNAL"}
