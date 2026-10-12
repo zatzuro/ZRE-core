@@ -143,8 +143,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows session storage/recovery regression failed' }
           python diagnostics/smoke_264.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows runtime smoke failed' }
-          python -c 'import json; from pathlib import Path; m=json.loads(Path("version.json").read_text()); assert m["version"]=="2.6.7" and m["archive_ref"]=="release-2.6.7" and m["channel"]=="stable"'
-          if ($LASTEXITCODE -ne 0) { throw 'Windows stable manifest validation failed' }
+          $manifest = Get-Content -LiteralPath 'version.json' -Raw | ConvertFrom-Json
+          if ($manifest.version -ne '2.6.7' -or
+              $manifest.archive_ref -ne 'release-2.6.7' -or
+              $manifest.channel -ne 'stable') {
+            throw 'Windows stable manifest validation failed'
+          }
 
   release-263:
     if: github.ref == 'refs/heads/release-2.6.3'
