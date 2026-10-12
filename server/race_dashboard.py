@@ -89,7 +89,9 @@ def race_view(*, session_identity, own_idx, class_rows, results, cars, best_laps
         pos = row.get("classPos")
         position_source = row.get("positionSource") or "RESULTS_POSITIONS"
         raw_position = result.get("ClassPosition")
-        if raw_position is not None and isinstance(raw_position, int) and raw_position >= 0:
+        if result.get("positionSource")=="RECOVERED_SDK_SNAPSHOT":
+            position_source = "RECOVERED_SDK_SNAPSHOT"
+        elif raw_position is not None and isinstance(raw_position, int) and raw_position >= 0:
             position_source = "RESULTS_POSITIONS"
         elif pos is not None:
             position_source = "CARIDX_CLASS_POSITION_FALLBACK"
