@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="zre-build" content="2.6.7">
+  <title>ZRE Core · iRacing Team Engineer</title>
+  <link rel="stylesheet" href="./static/style.css?v=2.6.7">
+  <link rel="stylesheet" href="./static/practice.css?v=2.6.7">
+  <link rel="stylesheet" href="./static/quali.css?v=2.6.7">
+  <link rel="stylesheet" href="./static/race_v2.css?v=2.6.7">
+  <link rel="stylesheet" href="./static/kpi_library.css?v=2.6.7">
+  <link rel="stylesheet" href="./static/black_theme.css?v=2.6.7.1">
+<link rel="stylesheet" href="./static/visual_lab.css"></head>
+<body data-view="live" data-visual-lab="true"><div id="lab-simulation-banner" role="status">ZRE VISUAL LAB · DATOS SIMULADOS · SIN CONEXIÓN SDK</div>
+<main class="dashboard">
+  <header class="session-header">
+    <div class="brand-block"><div class="brand"><span class="mark"></span>iRACING DRIVER DASH</div><span class="build">v2.6.7</span><span id="runtime-build-status" class="build">Runtime pendiente de verificación</span></div>
+    <div class="session-info"><strong id="car">CONECTANDO</strong><span id="track">iRacing Dashboard</span></div>
+    <div class="driver-header"><span>PILOTO</span><strong id="header-driver">—</strong></div>
+    <div class="driver-header compact"><span>POS</span><strong id="header-position">P—</strong></div>
+    <div class="driver-header compact"><span>VUELTA</span><strong id="header-lap">—</strong></div>
+    <label id="driver-view-control">VISTA<select id="driver-view-select"><option value="auto">AUTO</option><option value="live">PISTA</option><option value="pit">PIT</option><option value="summary">RESUMEN</option></select></label><button id="team-debug-toggle" type="button" aria-pressed="false">DEBUG EQUIPO</button><button id="capture-sdk" type="button">CAPTURAR SDK</button><span id="capture-status" role="status" aria-live="polite">Listo para capturar</span><label class="role-control">MODO<select id="role-select"><option value="auto">AUTO</option><option value="driver">PILOTO</option><option value="spotter">SPOTTER</option></select></label>
+    <label id="demo-role-control" class="role-control" hidden>SIMULAR<select id="demo-role-select"><option value="driver">PILOTO</option><option value="spotter">SPOTTER</option></select></label>
+    <div id="coach-controls" class="coach-controls" hidden>
+      <label>REFERENCIA<select id="reference-select"><option value="optimal">ÓPTIMA SESIÓN</option><option value="external" disabled>EXTERNA · PRÓXIMAMENTE</option></select></label>
+      <label>AUDIO<select id="audio-select" disabled><option value="auto" selected>AUTO · SEGÚN SESIÓN</option></select></label><button id="audio-test" class="audio-test" type="button">PROBAR VOZ</button>
+    </div>
+    <div class="state-stack"><span id="view-badge" class="view-badge">PISTA</span><div class="session-state"><span id="status-dot"></span><strong id="state">INICIANDO</strong></div></div>
+  </header>
+
+  <nav id="screen-nav" class="screen-nav" aria-label="Navegación y herramientas de pantalla">
+    <div id="screen-mode-control" class="screen-mode-control">
+      <label for="screen-mode-select">PANTALLA</label>
+      <select id="screen-mode-select" aria-label="Pantalla visual de ZRE">
+        <option value="auto">AUTO · SESIÓN</option>
+        <option value="practice">PRÁCTICA</option>
+        <option value="quali">QUALI</option>
+        <option value="race">CARRERA</option>
+        <option value="pit">GARAGE</option>
+        <option value="summary">RESUMEN</option>
+        <option value="spotter">SPOTTER</option>
+      </select>
+      <span id="screen-mode-context" role="status" aria-live="polite">ESPERANDO SESIÓN iRacing</span>
+    </div>
+    <label id="quali-mode-control" hidden>SESIÓN ZRE<select id="quali-mode-select"><option value="training">ENTRENAMIENTO</option><option value="simulate">QUALI SIMULADA</option></select></label>
+    <button id="quali-new-run" type="button" hidden>NUEVA TANDA</button>
+    <label class="rv2-control-mini rv2-font-control" for="rv2-font-select">LETRA
+      <select id="rv2-font-select" aria-label="Tamaño de fuente en Carrera"><option value="normal">NORMAL</option><option value="large">GRANDE</option><option value="xlarge">EXTRA</option></select></label>
+    <label id="rv2-emphasis-control" hidden>ÉNFASIS CARRERA<select id="rv2-emphasis-select" aria-label="Énfasis visual sin cambiar la sesión"><option value="auto">AUTO</option><option value="sprint">SPRINT</option><option value="endurance">ENDURANCE</option></select></label>
+    <button id="archive-open" type="button" title="Gestionar historial de sesiones y protección de registros">REGISTROS</button>
+    <button id="header-collapse-toggle" type="button" aria-expanded="true" title="Plegar o desplegar controles">PLEGAR CONTROLES</button>
+    
+  </nav>
+
+  <aside id="lap-flash" class="lap-flash" hidden>
+    <span>ÚLTIMA VUELTA · VTA <b id="flash-lap">—</b></span><strong id="flash-time">—</strong>
+    <div><span>MI MEJOR ANTERIOR</span><b id="flash-best">—</b></div><div><span>DELTA</span><b id="flash-delta">—</b></div>
+    <section id="flash-map-card" class="flash-map-card" hidden><div class="flash-map-title"><span>DÓNDE PIERDES TIEMPO</span><b id="flash-map-location">—</b></div><svg id="flash-track-map" viewBox="0 0 100 100"><polyline id="flash-track-line" points=""/><g id="flash-track-markers"></g></svg></section>
+    <p id="flash-coach" class="flash-coach" hidden></p>
+  </aside>
+
+  <section id="live-view" class="screen live-view">
+      <section id="practice-workspace" class="practice-workspace" aria-label="Dashboard de entrenamiento" hidden>
+        <section class="practice-stat-row" aria-label="Rendimiento">
+          <div><small>MEJOR REAL</small><strong id="pr-best">—</strong></div>
+          <div><small>ÚLTIMA VÁLIDA</small><strong id="pr-last">—</strong></div>
+          <div><small>ÓPTIMA</small><strong id="pr-optimal">—</strong></div>
+          <div><small>Δ VS MEJOR REAL</small><strong id="pr-delta">—</strong></div>
+          <div><small>PROMEDIO VÁLIDO</small><strong id="pr-average">—</strong></div>
+          <div><small>CONSISTENCIA · σ</small><strong id="pr-consistency">—</strong></div>
+        </section>
+        <section class="practice-focus-row">
+          <article class="practice-map-panel">
+            <header><b>MAPA DEL CIRCUITO</b><span id="pr-map-status">SIN TRAZADO VALIDADO</span></header>
+            <div class="practice-map-stage">
+              <svg id="pr-track-map" viewBox="0 0 100 100" role="img" aria-label="Trazado real capturado por ZRE">
+                <polyline id="pr-track-line" points=""></polyline><g id="pr-track-zones"></g>
+              </svg>
+              <p id="pr-map-empty">El trazado se construye al completar vueltas con telemetría de posición.</p>
+            </div>
+            <footer><span><i class="pr-key pr-key-loss"></i> Pérdida validada</span><span><i class="pr-key pr-key-info"></i> Curva sin análisis</span></footer>
+          </article>
+          <article class="practice-coach-panel">
+            <header><b>COACH · TODAS LAS CURVAS</b><span id="pr-coach-status">CONSTRUYENDO REFERENCIA</span></header>
+            <div id="pr-corners" class="pr-corners" aria-live="polite"></div>
+            <p id="pr-corner-hint">Selecciona cualquier curva para leer su recomendación íntegra.</p>
+          </article>
+        </section>
+        <section class="practice-bottom-row">
+          <article class="pr-fuel-panel">
+            <header><b>EFICIENCIA · COMBUSTIBLE</b><span id="pr-fuel-source">SIN DATO</span></header>
+            <div class="pr-fuel-values">
+              <div><small>ACTUAL</small><strong id="pr-fuel">—</strong></div>
+              <div><small>PROM. VÁLIDO</small><strong id="pr-fuel-avg">—</strong></div>
+              <div><small>ÚLTIMA VÁLIDA</small><strong id="pr-fuel-last">—</strong></div>
+              <div><small>AUTONOMÍA EST.</small><strong id="pr-fuel-range">—</strong></div>
+            </div>
+            <p>MÍN <b id="pr-fuel-min">—</b> · MÁX <b id="pr-fuel-max">—</b> · Solo vueltas válidas</p>
+          </article>
+          <article class="pr-pace-panel">
+            <header><b>EVOLUCIÓN DE RITMO</b><label class="pr-pace-mode-label">ESCALA <select id="pr-pace-scale" aria-label="Escala de gráfica"><option value="focus">FOCO ±1 s</option><option value="all">AJUSTAR TODAS</option></select></label><span id="pr-pace-status">SIN VUELTAS</span></header>
+            <svg id="pr-pace-svg" viewBox="0 0 400 94" role="img" aria-label="Tiempos de todas las vueltas registradas, promedio y marcadores fuera de escala"><polyline id="pr-pace-line" points=""></polyline><g id="pr-pace-dots"></g></svg>
+            <div class="pr-pace-caption"><span id="pr-pace-count">0 vueltas</span><span id="pr-pace-fuel">Consumo por vuelta: —</span></div>
+          </article>
+        </section>
+      </section>
+    <section class="telemetry-grid live-telemetry">
+      <article class="data-card lap-card"><h2>REFERENCIA PERSONAL</h2><div><span>ÚLTIMA</span><strong id="last-lap">—</strong></div><div><span>MEJOR REAL</span><strong id="best-lap">—</strong></div><div><span>ÓPTIMA</span><strong id="optimal-lap">—</strong></div></article>
+      <article class="data-card"><h2>NEUMÁTICOS</h2><div><span>FL</span><strong id="wear-fl">—</strong></div><div><span>FR</span><strong id="wear-fr">—</strong></div><div><span>RL</span><strong id="wear-rl">—</strong></div><div><span>RR</span><strong id="wear-rr">—</strong></div></article>
+      <article class="data-card fuel-card"><h2>COMBUSTIBLE</h2><div class="fuel-current-metric"><span>ACTUAL</span><strong id="fuel">—</strong><small id="fuel-source" class="metric-meta">—</small></div><div><span>PROMEDIO / VTA</span><strong id="last-use">—</strong></div><div><span>MEJOR</span><strong id="best-use">—</strong></div><div><span>PEOR</span><strong id="worst-use">—</strong></div></article>
+      <article class="data-card pit"><h2>PARADA</h2><div><span>ESTADO</span><strong id="pit">—</strong></div><div><span>DENTRO DE</span><strong id="pit-window">—</strong></div><div><span>VUELTA EST.</span><strong id="next-stop">—</strong></div></article>
+    </section>
+    <section id="race-tools-grid" class="race-tools-grid">
+      <article class="focus-card live-rival-card">
+        <div class="card-title rival-title"><h2>RIVAL ESTRATÉGICO</h2><select id="rival-select"><option value="auto">AUTO</option></select></div>
+        <div class="rival-main"><span id="rival-mode">AUTO</span><strong id="rival-name">—</strong><b id="rival-status">Esperando rivales de clase</b></div>
+        <div class="rival-kpis"><div><span>POSICIÓN</span><strong id="rival-position">—</strong></div><div><span>GAP</span><strong id="rival-gap">—</strong></div><div><span>ÚLTIMA</span><strong id="rival-last">—</strong></div><div><span>VUELTA</span><strong id="rival-lap">—</strong></div></div>
+      </article>
+      <article id="endurance-strategy-card" class="focus-card endurance-strategy-card pilot-race-plan-card" data-state="idle">
+        <div class="card-title strategy-title"><h2>RACE PLAN</h2><span id="strategy-verdict">ESPERANDO DATOS</span></div>
+        <div class="pilot-race-plan-main">
+          <div class="pilot-plan-box"><span>BOX</span><strong id="pilot-plan-box">—</strong><b id="pilot-plan-countdown">—</b></div>
+          <div><span>VENTANA</span><strong id="pilot-plan-window">—</strong><small id="pilot-plan-range">—</small></div>
+          <div><span>FUEL</span><strong id="pilot-plan-fuel">—</strong><small id="pilot-plan-fuel-source">—</small></div>
+          <div><span>TYRES</span><strong id="pilot-plan-tyres">—</strong><small id="pilot-plan-tyres-note">SIN DECISIÓN</small></div>
+        </div>
+        <div id="pilot-plan-alert" class="pilot-plan-alert">ESPERANDO RACE PLAN</div>
+        <div class="pilot-plan-legacy" hidden><strong id="strategy-current-stint">—</strong><strong id="strategy-driver">—</strong><strong id="strategy-box-lap">—</strong><strong id="strategy-autonomy">—</strong><strong id="strategy-stops">—</strong><strong id="strategy-avoidable">—</strong><strong id="strategy-extension">—</strong><strong id="strategy-target">—</strong><span id="strategy-base">BASE —</span><span id="strategy-extended">EXT. —</span><b id="strategy-remaining-time">—</b><div id="strategy-timeline"></div></div>
+        <details class="strategy-config pilot-strategy-config"><summary>AJUSTAR</summary><div class="strategy-config-grid"><label>BASE<input id="strategy-base-input" type="number" min="1" value="37"></label><label>EXT.<input id="strategy-extended-input" type="number" min="1" value="38"></label><label>PÉRDIDA BOX (s)<input id="strategy-pit-loss-input" type="number" min="0" value="30"></label><label>DURACIÓN (h)<input id="strategy-race-hours-input" type="number" min=".1" step=".5" value="10"></label><label>RITMO (s, 0=AUTO)<input id="strategy-lap-input" type="number" min="0" step=".001" value="0"></label><label>CONSUMO (VACÍO=AUTO)<input id="strategy-consumption-input" type="number" min="0" step=".01"></label><label>TANQUE L (VACÍO=AUTO)<input id="strategy-tank-input" type="number" min="0" step=".1"></label><label class="drivers-input">PILOTOS<input id="strategy-drivers-input" type="text" value="Santiago, David, Herney"></label></div><p>Compatibilidad con la estrategia anterior. Race Plan vNext calcula minimumStops automáticamente.</p></details>
+      </article>
+    </section>
+    <section class="boards-grid practice-boards">
+      <article class="timing-card loss-map-card"><div class="card-title"><h2>MAPA · RECOMENDACIONES GENERALES</h2><span id="live-map-location">CONSTRUYENDO STINT</span></div><div class="live-map-wrap"><svg id="live-track-map" viewBox="0 0 100 100"><polyline id="live-track-line" points=""/><g id="live-track-markers"></g></svg><p id="live-map-empty">Completa vueltas válidas para construir el mapa y localizar dónde estás perdiendo tiempo.</p></div></article>
+      <article id="practice-curve-coach" class="timing-card curve-coach-card"><div class="card-title"><h2>COACH · CURVA POR CURVA</h2><span id="curve-coach-status">CONSTRUYENDO REFERENCIA</span></div><div id="curve-coach-rows" class="curve-coach-rows"><p class="curve-coach-empty">Completa vueltas válidas. ZRE irá construyendo recomendaciones concretas para cada curva.</p></div></article>
+      <article class="timing-card switchable-timing"><div class="card-title timing-switch-title"><h2 id="timing-title">RELATIVO</h2><select id="timing-mode"><option value="relative">RELATIVO</option><option value="standing">CLASIFICACIÓN</option></select></div><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ MEJOR</span></div><div id="timing-rows"></div></article>
+      <article class="pace-card practice-history"><div class="card-title"><h2>HISTORIAL DE VUELTAS</h2><span>ÚLTIMAS 10</span></div><div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANT.</span><span>CONSUMO</span></div><div id="pace-rows"></div></article>
+    </section>
+  </section>
+
+  <section id="quali-view" class="screen quali-view" hidden aria-label="Dashboard de clasificación">
+    <div class="q-head"><strong>ZRE · QUALI</strong><b id="q-kind">—</b><span id="q-run-id">SIN TANDA</span><span id="q-lap-state">ESPERANDO DATOS</span><span id="q-session-source">—</span></div>
+    <section class="q-kpis">
+      <div class="q-hero"><small>DELTA EN VIVO · MEJOR PERSONAL SDK</small><strong id="q-delta">—</strong><em id="q-delta-source">SIN REFERENCIA VÁLIDA</em></div>
+      <div><small id="q-best-source">MEJOR REAL · SDK</small><strong id="q-best">—</strong></div>
+      <div><small>VUELTA ACTUAL · SDK</small><strong id="q-current">—</strong></div>
+      <div><small>ÚLTIMA VUELTA</small><strong id="q-last">—</strong></div>
+      <div><small>ÓPTIMA · ZRE</small><strong id="q-optimal">—</strong></div>
+      <div><small>POTENCIAL · ZRE</small><strong id="q-potential">—</strong></div>
+      <div><small>POSICIÓN QUALI</small><strong id="q-position">—</strong></div>
+      <div><small>TIEMPO RESTANTE</small><strong id="q-time-left">—</strong></div>
+    </section>
+    <section class="q-center">
+      <article class="q-panel q-map-panel">
+        <header><strong>MAPA · 3 OPORTUNIDADES</strong><small id="q-map-status">TRAZADO EN CONSTRUCCIÓN</small></header>
+        <div class="q-map-body">
+          <svg id="q-map-svg" viewBox="0 0 100 100" role="img" aria-label="Trazado observado por telemetría"><polyline id="q-map-line" points=""></polyline><g id="q-map-markers"></g></svg>
+          <p id="q-map-empty">Esperando geometría válida del circuito.</p>
+        </div>
+        <div id="q-priorities" class="q-priorities"><p>Completa vueltas válidas para identificar oportunidades.</p></div>
+      </article>
+      <article class="q-panel q-sector-panel">
+        <header><strong>SECTORES Y REFERENCIA</strong><small id="q-sector-source">SIN SECTORES</small></header>
+        <div class="q-sector-head"><span>SECTOR</span><span>PROPIO</span><span>REFERENCIA</span><span>DELTA</span></div>
+        <div id="q-sector-rows" class="q-sector-rows"></div>
+        <div class="q-focus"><small>FOCO · CLASIFICACIÓN</small><strong id="q-focus-zone">VUELTA LIMPIA</strong><p id="q-focus-advice">Conduce con precisión; analiza los cambios en Garage.</p></div>
+      </article>
+      <article class="q-panel q-traffic-panel">
+        <header><strong>TRÁFICO Y CONDICIONES</strong><small id="q-traffic-source">SDK / ZRE</small></header>
+        <div class="q-traffic-grid">
+          <div><small>DELANTE</small><strong id="q-ahead">—</strong><span id="q-gap-ahead">NO DISPONIBLE</span></div>
+          <div><small>DETRÁS</small><strong id="q-behind">—</strong><span id="q-gap-behind">NO DISPONIBLE</span></div>
+          <div><small>BANDERA</small><strong id="q-flag">—</strong></div>
+          <div><small>PISTA</small><strong id="q-track-temp">—</strong></div>
+        </div>
+        <p id="q-traffic-warning" class="q-traffic-warning">El tráfico es una observación, no una promesa de pista libre.</p>
+      </article>
+    </section>
+    <section class="q-bottom">
+      <article class="q-panel q-car-panel">
+        <header><strong>NEUMÁTICOS · COMBUSTIBLE</strong><small>ÚLTIMA LECTURA DISPONIBLE</small></header>
+        <div class="q-car-metrics">
+          <div><small>FL</small><strong id="q-tyre-fl">—</strong></div><div><small>FR</small><strong id="q-tyre-fr">—</strong></div>
+          <div><small>RL</small><strong id="q-tyre-rl">—</strong></div><div><small>RR</small><strong id="q-tyre-rr">—</strong></div>
+          <div><small>FUEL REAL</small><strong id="q-fuel">—</strong></div><div><small>CONSUMO</small><strong id="q-consumption">—</strong></div>
+          <div><small>AUTONOMÍA EST.</small><strong id="q-range">—</strong></div>
+        </div>
+      </article>
+      <article class="q-panel q-attempt-panel">
+        <header><strong>INTENTOS Y TANDA</strong><small id="q-attempt-status">SIN INTENTOS</small></header>
+        <div class="q-attempt-stats"><div><small>INTENTOS</small><strong id="q-attempt-count">0</strong></div><div><small>VALIDADOS</small><strong id="q-attempt-valid">0</strong></div><div><small>PENDIENTES</small><strong id="q-attempt-pending">0</strong></div><div><small>MEJOR TANDA</small><strong id="q-run-best">—</strong></div></div>
+        <div id="q-attempt-timeline" class="q-attempt-timeline">Sin vueltas completas desde el inicio de la tanda.</div>
+      </article>
+    </section>
+    <section id="q-garage" class="q-garage" hidden>
+      <article class="q-panel"><header><strong>GARAGE · ANÁLISIS COMPLETO</strong><small id="q-garage-run">—</small></header>
+        <div class="q-garage-selectors"><label>INTENTO A<select id="q-compare-a"></select></label><label>INTENTO B<select id="q-compare-b"></select></label><button id="q-setup-engineer" type="button">SETUP ENGINEER</button></div>
+        <p id="q-comparison">Selecciona dos intentos válidos y comparables.</p><div id="q-comparison-sectors"></div>
+      </article>
+      <article class="q-panel"><header><strong>COACH · TODAS LAS CURVAS</strong><small>DATOS OBSERVADOS / INFERIDOS</small></header><div id="q-garage-curves"></div></article>
+    </section>
+  </section>
+  <section id="race-v2-view" class="screen race-v2-view" hidden aria-label="ZRE Carrera V2">
+    <div class="rv2-kpis" aria-label="Indicadores críticos durante carrera">
+      <div class="rv2-kpi"><small>POSICIÓN · CLASE</small><strong id="rv2-position">—</strong><em id="rv2-position-source">SIN DATO SDK</em></div>
+      <div class="rv2-kpi"><small>GAP DELANTE</small><strong id="rv2-gap-ahead">—</strong><em id="rv2-car-ahead">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>GAP DETRÁS</small><strong id="rv2-gap-behind">—</strong><em id="rv2-car-behind">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>VUELTA ACTUAL</small><strong id="rv2-lap">—</strong><em>SDK · EN CURSO</em></div>
+      <div class="rv2-kpi"><small>COMBUSTIBLE</small><strong id="rv2-fuel">—</strong><em id="rv2-fuel-source">SIN DATO</em></div>
+      <div class="rv2-kpi"><small>AUTONOMÍA</small><strong id="rv2-autonomy">—</strong><em>VUELTAS OBSERVADAS</em></div>
+      <div class="rv2-kpi rv2-kpi-alert" data-severity="none"><small>ALERTA OPERATIVA</small><strong id="rv2-alert">SIN ALERTAS</strong><em id="rv2-alert-source">SDK / RACE PLAN</em></div>
+      <div class="rv2-kpi"><small>TIEMPO RESTANTE</small><strong id="rv2-remaining">—</strong><em>iRacing SDK</em></div>
+    </div>
+    <section class="rv2-main">
+      <article class="rv2-panel rv2-standings-panel">
+        <header><strong id="rv2-standings-title">CLASS STANDINGS</strong><div>
+        <label class="rv2-control-mini" for="rv2-visible-count">± PILOTOS
+          <select id="rv2-visible-count" aria-label="Cantidad de pilotos delante y detrás"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select>
+        </label>
+        <select id="rv2-standing-scope" aria-label="Vista de clasificación"><option value="near">CERCA DE MÍ</option><option value="all">TODOS</option></select>
+        <button type="button" id="rv2-standings-expand" title="Consultar clasificación completa">AMPLIAR ↗</button></div></header>
+        <div class="rv2-standing-head"><span>POS.</span><span>PILOTO · #</span><span>GAP</span><span>MEJOR</span><span>RITMO</span></div>
+        <div id="rv2-standing-rows" class="rv2-standing-rows" role="list" aria-label="Orden oficial de clase"></div>
+        <footer><span id="rv2-standing-summary">ESPERANDO CLASIFICACIÓN</span><span>SELECCIONA UN RIVAL</span></footer>
+      </article>
+      <article class="rv2-panel rv2-plan-panel" id="rv2-plan-card" data-state="no-plan">
+        <header><strong>RACE PLAN VNEXT</strong><button type="button" id="rv2-plan-expand">DETALLE ↗</button></header>
+        <div class="rv2-plan-emphasis"><small>PRÓXIMA PARADA</small><strong id="rv2-box-lap">—</strong><span id="rv2-box-countdown">—</span></div>
+        <div class="rv2-plan-status" id="rv2-plan-status">PLAN NO DISPONIBLE</div>
+        <div class="rv2-window-grid"><div><small>EARLIEST SAFE</small><b id="rv2-earliest">—</b></div><div><small>TARGET</small><b id="rv2-target">—</b></div><div><small>FUEL LIMIT</small><b id="rv2-fuel-limit">—</b></div></div>
+        <div class="rv2-window-track" id="rv2-window-track" hidden><i id="rv2-window-range"></i><em id="rv2-window-marker" hidden></em></div>
+        <div class="rv2-plan-details"><div><small>FUEL A AÑADIR</small><b id="rv2-add-fuel">—</b></div><div><small>PARADAS RESTANTES</small><b id="rv2-stops-left">—</b></div><div><small>AUTONOMÍA</small><b id="rv2-plan-autonomy">—</b></div><div><small>NEUMÁTICOS</small><b id="rv2-tyres">—</b></div><div><small>PRÓXIMO PILOTO</small><b id="rv2-next-driver">—</b></div></div>
+        <footer id="rv2-plan-source">FUENTE: RACE PLAN VNEXT</footer>
+      </article>
+      <article class="rv2-panel rv2-rival-panel">
+        <header><strong>RIVAL ESTRATÉGICO</strong><button type="button" id="rv2-rival-auto">AUTO</button></header>
+        <label class="rv2-rival-search-label">BUSCAR # · PILOTO · POSICIÓN<input id="rv2-rival-search" type="search" placeholder="Ej. #42, Pérez o P7" autocomplete="off"></label>
+        <select id="rv2-rival-select" aria-label="Seleccionar rival estratégico"><option value="auto">AUTO</option></select>
+        <div class="rv2-rival-highlight"><b id="rv2-rival-name">—</b><small id="rv2-rival-mode">AUTO</small></div>
+        <div class="rv2-rival-grid">
+          <div><small>POS. CLASE</small><strong id="rv2-rival-pos">—</strong></div><div><small>ESTADO</small><strong id="rv2-rival-presence">—</strong></div>
+          <div><small>MEJOR</small><strong id="rv2-rival-best">—</strong></div><div><small>ÚLTIMA</small><strong id="rv2-rival-last">—</strong></div>
+          <div><small>RITMO</small><strong id="rv2-rival-pace">—</strong></div><div><small>GAP FÍSICO</small><strong id="rv2-rival-gap">—</strong></div>
+        </div>
+        <footer><span id="rv2-rival-age">SIN OBSERVACIÓN ACTUAL</span><span id="rv2-rival-car">—</span></footer>
+      </article>
+    </section>
+    <section class="rv2-bottom">
+      <article class="rv2-panel rv2-chart-panel">
+        <header><strong>COMPARADOR DE RITMOS</strong><div class="rv2-secondary-stats">
+        <span>ÚLT. <b id="rv2-last-lap">—</b></span>
+        <span>MI RITMO <b id="rv2-my-pace">—</b></span>
+        <span>CONSUMO <b id="rv2-consumption">—</b></span>
+        <small id="rv2-my-count">SIN MUESTRAS</small><small id="rv2-use-source">SIN MUESTRAS</small>
+      </div></header>
+        <div id="rv2-pace-legend" class="rv2-pace-legend" aria-label="Referencias y promedios">SIN SERIES</div>
+        <div class="rv2-chart-content"><svg id="rv2-pace-chart" viewBox="0 0 900 210" role="img" aria-label="Tiempos por vuelta para los cuatro roles"><g id="rv2-pace-grid"></g><g id="rv2-pace-series"></g></svg></div>
+        <footer><span>ÍNDICE RELATIVO (−7…ACTUAL) · VUELTAS NO NECESARIAMENTE SIMULTÁNEAS</span><span id="rv2-pace-difference">Δ RITMO VS RIVAL: —</span></footer>
+      </article>
+      <article class="rv2-panel rv2-fuel-panel">
+        <header><strong>COMBUSTIBLE Y EFICIENCIA</strong><span id="rv2-fuel-quality">SIN FUENTE</span></header>
+        <div class="rv2-fuel-grid"><div><small>OBSERVADO</small><strong id="rv2-fuel-observed">—</strong></div><div><small>OBJETIVO</small><strong id="rv2-fuel-target">—</strong></div><div><small>DESVIACIÓN</small><strong id="rv2-fuel-deviation">—</strong></div><div><small>AUTONOMÍA</small><strong id="rv2-fuel-autonomy">—</strong></div></div>
+        <div class="rv2-fuel-context" id="rv2-fuel-context">La suficiencia del combustible depende de Race Plan, no del ahorro aislado.</div>
+        <footer id="rv2-race-emphasis">FORMATO: NO CONFIRMADO · VISTA GENERAL</footer>
+      </article>
+    </section>
+  </section>
+  <dialog id="rv2-standings-dialog" class="rv2-standings-dialog"><form method="dialog"><header><strong>CLASIFICACIÓN COMPLETA DE CLASE</strong><button type="submit" aria-label="Cerrar clasificación">CERRAR ×</button></header></form><div class="rv2-standing-head"><span>POS.</span><span>PILOTO · #</span><span>GAP</span><span>MEJOR</span><span>RITMO</span></div><div id="rv2-standing-all" class="rv2-standing-all"></div></dialog>
+  <section id="spotter-view" class="screen spotter-screen" hidden>
+    <div class="spotter-kpis"><div><small># COCHE · PILOTO</small><strong id="spotter-car">—</strong><small id="spotter-driver">AUTO · no confirmado</small></div><div><small>POS CLASE</small><strong id="spotter-position">—</strong></div><div><small>VUELTA</small><strong id="spotter-lap">—</strong></div><div><small>TIEMPO RESTANTE</small><strong id="spotter-time">—</strong></div><div><small>FUEL</small><strong id="spotter-fuel">—</strong></div><div><small>AUTONOMÍA</small><strong id="spotter-autonomy">—</strong></div><div><small>PRÓXIMA PARADA</small><strong id="spotter-next-stop">—</strong></div><div><small>PARADAS RESTANTES</small><strong id="spotter-stops">—</strong></div></div>
+    <div class="spotter-choice"><label>COCHE DEL EQUIPO<select id="team-car-select"><option value="auto">AUTO</option></select></label><label>PILOTO MANUAL<input id="team-driver-input" type="text" placeholder="Solo si no se detecta" maxlength="60"></label><span id="spotter-identity-warning">Selecciona el coche si ZRE no lo identifica.</span></div>
+    <div class="spotter-panels"><article class="focus-card"><h2>RELATIVE EN PISTA <small id="spotter-relative-count">· — coches con posición disponible</small></h2><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ</span></div><div id="spotter-relative-rows"></div></article><article class="focus-card"><h2>CLASS STANDINGS</h2><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ</span></div><div id="spotter-standing-rows"></div><details><summary>VER TODOS</summary><div id="spotter-standing-all"></div></details></article></div>
+    <div class="spotter-panels"><article class="focus-card"><div class="card-title"><h2>RIVAL ESTRATÉGICO</h2><strong id="spotter-rival-mode">AUTO</strong></div><div class="rival-picker"><button id="spotter-rival-auto" type="button" aria-pressed="true">AUTO</button><input id="spotter-rival-filter" type="search" placeholder="Buscar #, piloto o posición"><select id="spotter-rival-select"><option value="auto">AUTO · rival estratégico</option></select></div><div class="spotter-kpis"><div><small>RIVAL</small><strong id="spotter-rival-name">—</strong></div><div><small>POSICIÓN</small><strong id="spotter-rival-pos">—</strong></div><div><small>GAP</small><strong id="spotter-rival-gap">—</strong></div><div><small>ÚLTIMA</small><strong id="spotter-rival-last">—</strong></div><div><small>VUELTA</small><strong id="spotter-rival-lap">—</strong></div><div><small>ESTADO</small><strong id="spotter-rival-pit">—</strong></div></div></article>
+    <article id="spotter-race-plan-card" class="focus-card spotter-race-plan-card" data-state="idle">
+      <div class="card-title race-plan-title"><h2>RACE PLAN</h2><div><span id="spotter-plan-state">SIN DATOS SUFICIENTES</span><button id="spotter-race-plan-expand" type="button" aria-label="Expandir Race Plan">↗</button></div></div>
+      <div class="race-plan-compact-main">
+        <div class="race-plan-next"><small>PRÓXIMA PARADA</small><strong id="spotter-plan-box">—</strong><b id="spotter-plan-countdown">—</b></div>
+        <div class="race-plan-window">
+          <small>VENTANA DE PARADA</small>
+          <div class="race-plan-window-values"><span>EARLIEST <b id="spotter-plan-earliest">—</b></span><span>TARGET <b id="spotter-plan-target">—</b></span><span>FUEL LIMIT <b id="spotter-plan-fuel-limit">—</b></span></div>
+          <div class="race-plan-window-bar"><i></i><em id="spotter-plan-window-marker"></em></div>
+        </div>
+      </div>
+      <div class="race-plan-compact-metrics">
+        <div><span>PLAN ACTUAL</span><strong id="spotter-plan-stops">—</strong></div>
+        <div><span>Δ INICIAL</span><strong id="spotter-plan-delta">—</strong></div>
+        <div><span>FUEL</span><strong id="spotter-plan-fuel-add">—</strong></div>
+        <div><span>FINAL EST.</span><strong id="spotter-plan-finish">—</strong></div>
+      </div>
+      <div id="spotter-vnext-stints" class="race-plan-stint-map"><span>Esperando proyección…</span></div>
+      <p id="spotter-plan-summary">Esperando datos…</p>
+      <div class="race-plan-legacy-metrics" hidden><strong id="spotter-plan-current-stint">—</strong><strong id="spotter-plan-stints">—</strong><strong id="spotter-plan-autonomy">—</strong><strong id="spotter-plan-last-stint">—</strong><strong id="spotter-plan-avoidable">—</strong></div>
+    </article></div>
+    <article class="focus-card"><h2>HISTORIAL DE PARADAS</h2><div id="spotter-stop-history">SIN PARADAS</div></article>
+    <article class="focus-card spotter-controls"><h2>CONTROL DE PARADA / STINT</h2><p>iRacing aporta vueltas, posición y estado de pista. Aquí corriges manualmente lo que el SDK no entrega al spotter: repostaje, piloto y nueva referencia de stint.</p><p id="spotter-control-status">Sin eventos manuales</p><button type="button" data-spotter-action="stop">REGISTRAR PARADA</button><label>COMBUSTIBLE<select id="spotter-fuel-action"><option value="no_fuel">SIN REPOSTAR</option><option value="fill">LLENAR TANQUE</option><option value="add_fuel">+ LITROS</option></select></label><input id="spotter-added-liters" type="number" min="0.1" max="300" step="0.1" placeholder="Litros añadidos"><button type="button" id="spotter-fuel-submit">REGISTRAR COMBUSTIBLE</button><label>PILOTO<select id="spotter-driver-select"></select></label><button type="button" data-spotter-action="driver">CAMBIO DE PILOTO</button><button type="button" data-spotter-action="new_stint">INICIAR NUEVO STINT</button><p>Para LLENAR, configura TANQUE L en Estrategia desde PISTA cuando estés en PILOTO; también puedes usar la configuración de estrategia aquí:</p><label>TANQUE L · MANUAL<input id="spotter-tank-input" type="number" min="1" step="0.1" placeholder="Capacidad en litros"></label><label>CONSUMO L/V · MANUAL<input id="spotter-consumption-input" type="number" min="0.01" step="0.01" placeholder="Consumo medio"></label></article>
+  </section>
+
+  <dialog id="race-plan-dialog" class="race-plan-dialog">
+    <form method="dialog">
+      <div class="race-plan-dialog-heading"><div><span>STRATEGY ENGINE</span><h2>ZRE RACE PLAN</h2></div><button type="submit" aria-label="Cerrar">×</button></div>
+      <div class="race-plan-dialog-kpis">
+        <div><span>PLAN INICIAL</span><strong id="race-plan-popup-initial">—</strong></div>
+        <div><span>PLAN ACTUAL</span><strong id="race-plan-popup-current">—</strong></div>
+        <div><span>FINAL ESTIMADO</span><strong id="race-plan-popup-finish">—</strong></div>
+        <div><span>CONFIANZA FUEL</span><strong id="race-plan-popup-confidence">—</strong></div>
+      </div>
+      <section class="race-plan-dialog-section"><h3>PRÓXIMA PARADA</h3><div class="race-plan-dialog-grid"><div>EARLIEST SAFE <strong id="race-plan-popup-earliest">—</strong></div><div>TARGET <strong id="race-plan-popup-target">—</strong></div><div>FUEL LIMIT <strong id="race-plan-popup-limit">—</strong></div><div>FUEL A AÑADIR <strong id="race-plan-popup-fuel">—</strong></div></div></section>
+      <section class="race-plan-dialog-section"><h3>MAPA DE STINTS</h3><div id="race-plan-popup-stints" class="race-plan-stint-map expanded"><span>Esperando proyección…</span></div></section>
+      <section class="race-plan-dialog-section"><h3>DATOS / CONFIANZA</h3><div class="race-plan-dialog-grid"><div>OBSERVADO <strong id="race-plan-popup-observed">—</strong></div><div>ESTRATEGIA <strong id="race-plan-popup-strategy">—</strong></div><div>MARGEN <strong id="race-plan-popup-margin">—</strong></div><div>FUENTE MARGEN <strong id="race-plan-popup-margin-source">—</strong></div><div>AUTO FUEL <strong id="race-plan-popup-autofuel">—</strong></div><div>PITSV FUEL <strong id="race-plan-popup-pitsv">—</strong></div></div></section>
+      <section class="race-plan-dialog-section race-plan-simulator"><h3>SIMULAR PARADA</h3><div><label>VUELTA A SIMULAR<input id="race-plan-sim-lap" type="number" min="1" step="1" placeholder="Ahora"></label><button id="race-plan-sim-now" type="button">SIMULAR PARADA AHORA</button></div><p id="race-plan-sim-result">No modifica el plan.</p></section>
+      <details class="race-plan-dialog-section race-plan-manual"><summary>AJUSTES MANUALES DE PARADAS EXISTENTES</summary><p>Se conserva el editor anterior para overrides manuales. Race Plan vNext no depende de estos ajustes para calcular minimumStops.</p><div id="spotter-stop-plan">Esperando proyección…</div></details>
+      <div class="race-plan-dialog-actions"><button type="submit">CERRAR</button></div>
+    </form>
+  </dialog>
+
+  <section id="pit-view" class="screen pit-view" hidden>
+    <section class="pit-top-grid">
+      <article class="focus-card coach-card"><div class="card-title"><h2>DRIVER COACH</h2><div class="card-actions"><span id="coach-reference">ÓPTIMA SESIÓN</span><button id="setup-engineer-open" type="button">SETUP ENG</button></div></div><div class="coach-kpis"><div><span>MEJOR REAL</span><strong id="pit-best-lap">—</strong></div><div><span>ÓPTIMA</span><strong id="pit-optimal-lap">—</strong></div><div><span>POTENCIAL</span><strong id="pit-potential">—</strong></div></div><div class="coach-priority primary"><span id="coach-primary-zone">REFERENCIA</span><strong id="coach-primary-title">Construyendo referencia</strong><p id="coach-primary-advice">El análisis aparecerá aquí cuando existan suficientes vueltas comparables.</p></div><div class="coach-priority"><span id="coach-secondary-zone">PATRÓN</span><strong id="coach-secondary-title">—</strong><p id="coach-secondary-advice">—</p></div></article>
+      <article class="focus-card strategy-card"><div class="card-title"><h2>PIT ASSISTANT</h2><span id="pit-state-badge">GARAGE</span></div><div class="strategy-main"><span>COMBUSTIBLE ACTUAL</span><strong id="pit-fuel">—</strong></div><div class="strategy-grid"><div><span>CONSUMO</span><strong id="pit-consumption">—</strong></div><div><span>PRÓXIMA PARADA</span><strong id="pit-next-stop">—</strong></div><div><span>AÑADIR</span><strong id="pit-add-fuel">—</strong></div><div><span>VUELTAS REST.</span><strong id="pit-laps-remaining">—</strong></div></div></article>
+      <article class="focus-card director-card"><div class="card-title"><h2>RACE DIRECTOR</h2><span id="director-confidence">SIN DATOS</span></div><span class="eyebrow">RIVAL ESTRATÉGICO</span><strong id="director-rival" class="director-rival">—</strong><p id="director-status" class="director-status">Esperando contexto de carrera.</p><div class="director-grid"><div><span>GAP PRE-PIT</span><strong id="director-gap-before">—</strong></div><div><span>GAP NETO EST.</span><strong id="director-net-gap">—</strong></div></div></article>
+    </section>
+    <section class="pit-bottom-grid"><article class="timing-card"><div class="card-title"><h2>CLASIFICACIÓN</h2><span>SE MANTIENE EN GARAGE</span></div><div class="table-head"><span>POS/NUM</span><span>COCHE</span><span>PILOTO</span><span>DIF.</span><span>ÚLT.</span><span>Δ MEJOR</span></div><div id="pit-standing-rows"></div></article><article class="pace-card"><div class="card-title"><h2>HISTORIAL DE VUELTAS</h2><span>SESIÓN ACTUAL</span></div><div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANT.</span><span>CONSUMO</span></div><div id="pit-pace-rows"></div></article></section>
+  </section>
+
+  <dialog id="setup-engineer-dialog" class="setup-engineer-dialog">
+    <form method="dialog">
+      <div class="setup-engineer-heading"><div><span>STINT FEEDBACK</span><h2>ZRE SETUP ENGINEER</h2></div><button type="submit" aria-label="Cerrar">×</button></div>
+      <p id="setup-engineer-status">Esperando stint</p>
+      <p id="setup-engineer-meta">Sin stint guardado.</p>
+      <div class="setup-import-row">
+        <label>FUENTE DEL SETUP<select id="setup-source-select"><option value="auto">AUTO · SDK prioritario</option><option value="html">HTML IMPORTADO</option></select></label>
+        <label>IMPORTAR HTML<input id="setup-html-file" type="file" accept=".html,.htm,text/html"></label>
+        <span id="setup-html-status">Sin HTML importado</span>
+      </div>
+      <div class="setup-feedback-grid">
+        <label>ENTRY<select id="setup-feedback-entry"><option value="">—</option><option>SUELTO</option><option>NEUTRO</option><option>SUBVIRA</option></select></label>
+        <label>MID<select id="setup-feedback-mid"><option value="">—</option><option>SUELTO</option><option>NEUTRO</option><option>SUBVIRA</option></select></label>
+        <label>EXIT<select id="setup-feedback-exit"><option value="">—</option><option>SUELTO</option><option>NEUTRO</option><option>SUBVIRA</option></select></label>
+      </div>
+      <label class="setup-comment">COMENTARIO<textarea id="setup-feedback-comment" maxlength="1000" placeholder="Ej.: Entre T2 y T3 se enrosca y se va de atrás."></textarea></label>
+      <div class="setup-engineer-actions"><button id="setup-feedback-save" type="button">GUARDAR FEEDBACK</button><button id="setup-report-export" type="button">EXPORT AI SETUP REPORT</button><button type="submit">CERRAR</button></div>
+    </form>
+  </dialog>
+
+  <section id="summary-view" class="screen summary-view" hidden>
+    <section class="summary-kpis"><article><span>MEJOR VUELTA</span><strong id="summary-best">—</strong></article><article><span>ÓPTIMA</span><strong id="summary-optimal">—</strong></article><article><span>POTENCIAL</span><strong id="summary-potential">—</strong></article><article><span>VUELTAS</span><strong id="summary-laps">—</strong></article></section>
+    <section class="summary-grid"><article class="focus-card summary-focus"><div class="card-title"><h2>PRINCIPALES OPORTUNIDADES</h2><span>SESIÓN</span></div><div id="summary-priorities" class="summary-priorities"><p>El resumen detallado aparecerá al finalizar una sesión analizada.</p></div></article><article class="pace-card"><div class="card-title"><h2>HISTORIAL DE VUELTAS</h2><span>SESIÓN ACTUAL</span></div><div class="pace-head"><span>VTA</span><span>TIEMPO</span><span>Δ ANT.</span><span>CONSUMO</span></div><div id="summary-pace-rows"></div></article></section>
+  </section>
+
+  <section id="kpi-component-bank" aria-hidden="true"></section>
+
+  <section id="admin-view" class="screen admin-view" hidden>
+    <div class="admin-hero">
+      <div><span class="eyebrow">ZRE SCREEN BUILDER</span><h1>ADMINISTRACIÓN DE PANTALLAS</h1><p>Organiza los componentes reales de ZRE sin editar código.</p></div>
+      <div class="admin-create"><label>NUEVA PANTALLA<input id="admin-new-screen-name" maxlength="40" placeholder="Ej. ENDURANCE"></label><button id="admin-create-screen" type="button">CREAR PANTALLA</button></div>
+    </div>
+    <div class="admin-toolbar">
+      <label>PANTALLA<select id="admin-screen-select"></select></label>
+      <label class="grow">NOMBRE<input id="admin-screen-name" maxlength="40"></label>
+      <button id="admin-save-screen" type="button">GUARDAR CAMBIOS</button>
+      <button id="admin-reset-screen" type="button">RESTAURAR PREDETERMINADO</button>
+      <button id="admin-delete-screen" class="danger" type="button">ELIMINAR</button>
+      <span id="admin-status" role="status" aria-live="polite">Listo.</span>
+    </div>
+    <div class="admin-builder">
+      <section class="admin-panel admin-layout-panel">
+        <div class="admin-panel-title"><div><h2>PARRILLA DE DISEÑO</h2><p>Arrastra, suelta y redimensiona los componentes. La parrilla solo aparece en edición.</p></div><span>12 COLUMNAS</span></div>
+        <div id="admin-layout-grid" class="admin-layout-grid" aria-label="Parrilla visual de edición"></div>
+        <div class="admin-secondary-list"><h3>COMPONENTES DE LA PANTALLA</h3><div id="admin-component-list"></div></div>
+      </section>
+      <aside class="admin-sidebar">
+        <section class="admin-panel admin-screen-settings">
+          <h2>AJUSTES DE PANTALLA</h2>
+          <label>NOMBRE<input id="admin-screen-name-panel" maxlength="40"></label>
+          <div class="admin-screen-actions"><button id="admin-save-screen-panel" type="button">GUARDAR</button><button id="admin-reset-screen-panel" type="button">RESTAURAR</button></div>
+          <p>Estos ajustes pertenecen a la pantalla completa, no al componente seleccionado.</p>
+        </section>
+        <section class="admin-panel admin-component-settings">
+          <h2>AJUSTES DEL COMPONENTE</h2>
+          <div id="admin-component-settings"><p class="admin-empty">Selecciona un componente de la parrilla.</p></div>
+        </section>
+        <section class="admin-panel"><h2>CATÁLOGO DE COMPONENTES</h2><div id="admin-component-catalog"></div></section>
+      </aside>
+    </div>
+    <section class="admin-panel archive-admin" aria-label="Registros de sesiones y privacidad">
+      <header><div><h2>HISTORIAL AUTOMÁTICO · SESIONES</h2><p>Datos temporales locales del SDK. Retención desde la finalización real; las sesiones sin cierre no se eliminan automáticamente.</p></div>
+        <div class="archive-quick"><strong id="archive-size">—</strong><small>ESPACIO</small><strong id="archive-count">—</strong><small>REGISTROS</small></div>
+      </header>
+      <div class="archive-toolbar"><span>REGISTRO MÁS ANTIGUO <b id="archive-oldest">—</b></span>
+        <label>RETENCIÓN <input id="archive-retention-days" type="number" min="1" max="365" value="7"> DÍAS</label>
+        <button id="archive-retention-save" type="button">GUARDAR RETENCIÓN</button>
+        <button id="archive-refresh" type="button">ACTUALIZAR</button>
+        <button id="archive-clean" class="danger" type="button">LIMPIAR FINALIZADAS SIN PROTEGER</button>
+      </div>
+      <p id="archive-warnings" role="status">ESPERANDO ESTADO DEL REGISTRO</p>
+      <div class="archive-table-wrap"><table class="archive-table"><thead><tr><th>SESIÓN / PISTA</th><th>FECHA</th><th>ESTADO</th><th>ESPACIO</th><th>ACCIONES</th></tr></thead>
+        <tbody id="archive-sessions"></tbody></table></div>
+      <p id="archive-message" role="status" aria-live="polite">Los archivos de setups, preferencias y reportes nunca se borran desde esta limpieza.</p>
+    </section>
+  </section>
+
+  <section id="custom-view" class="screen custom-screen" hidden>
+    <div class="custom-screen-head"><div><span class="eyebrow">PANTALLA PERSONALIZADA</span><h1 id="custom-screen-title">—</h1></div></div>
+    <div id="custom-screen-grid"></div>
+  </section>
+
+  <dialog id="pr-corner-dialog" class="pr-corner-dialog"><form method="dialog"><button aria-label="Cerrar detalle" type="submit">CERRAR ×</button><h2 id="pr-detail-zone">—</h2><b id="pr-detail-title">—</b><p id="pr-detail-advice">—</p><small id="pr-detail-confidence">—</small></form></dialog>
+  <aside id="debug-panel" class="debug-panel" hidden><div><strong>COACH DEBUG</strong><span>?debug=1</span></div><pre id="debug-content">Esperando telemetría…</pre></aside>
+  <footer class="dashboard-footer"><span>ZRE Core · Team Engineer · v2.6.7</span><p id="notice" class="notice">Conectando al puente local…</p></footer>
+</main>
+<script src="./static/practice.js?v=2.6.7"></script>
+ <script src="./static/quali.js?v=2.6.7"></script>
+ <script src="./static/race_v2.js?v=2.6.7"></script>
+<script src="./static/kpi_library.js?v=2.6.7"></script>
+
+<script>window.ZRELabManifest={"sha": "23f68d8d242fc4c7cf24c87ff63266ce72900bf3", "branch": "develop/visual-lab-web", "version": "2.6.7"};</script>
+<script src="./static/visual_lab.js"></script>
+<script src="./static/app.js?v=2.6.7"></script>
+</body>
+</html>

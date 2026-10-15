@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>ZRE VISUAL LAB · Simulación visual</title>
+<link rel="stylesheet" href="./lab_shell.css"></head>
+<body><header id="lab-toolbar" class="lab-toolbar">
+<div class="lab-title"><b>ZRE VISUAL LAB</b><span>DATOS SIMULADOS · SIN iRACING</span><small id="lab-version">Leyendo versión…</small></div>
+<div class="lab-controls"><label>PANTALLA<select id="lab-screen">
+<option value="auto">AUTO</option><option value="practice">PRÁCTICA</option><option value="quali">QUALI</option><option value="race">CARRERA</option><option value="pit">GARAGE</option><option value="summary">RESUMEN</option><option value="spotter">SPOTTER</option></select></label>
+<label>ESCENARIO<select id="lab-scenario"></select></label>
+<label>RESOLUCIÓN<select id="lab-resolution"><option value="fluid">NAVEGADOR</option><option value="1366x768">1366 × 768</option><option value="1920x1080">1920 × 1080</option><option value="2560x1440">2560 × 1440</option></select></label>
+<label>TEXTO<select id="lab-font"><option value="normal">NORMAL</option><option value="large">GRANDE</option><option value="xlarge">EXTRA GRANDE</option></select></label>
+<button id="lab-reset" type="button">REINICIAR</button><button id="lab-play" type="button">PAUSAR</button>
+<button id="lab-lap" type="button">+1 VUELTA</button><button id="lab-overflow" type="button" aria-pressed="false">DIAGNÓSTICO</button><button id="lab-hide" type="button">OCULTAR BARRA</button>
+</div></header>
+<button id="lab-show" type="button" hidden>MOSTRAR LAB · DATOS SIMULADOS</button>
+<main class="lab-frame-shell"><div id="lab-viewport" class="lab-viewport">
+<iframe id="lab-frame" src="./dashboard.html" title="Frontend real ZRE con telemetría sintética" sandbox="allow-scripts allow-same-origin allow-forms allow-modals" referrerpolicy="no-referrer"></iframe>
+</div></main>
+<div id="lab-status" role="status" aria-live="polite">Iniciando previsualización…</div>
+<script src="./lab_shell.js"></script></body></html>

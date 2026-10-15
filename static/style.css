@@ -1,0 +1,298 @@
+:root{--bg:#080a0d;--panel:#11161c;--panel2:#151b22;--line:#2a323c;--text:#f4f6f8;--muted:#87919d;--accent:#ff4028;--cyan:#55d9ff;--green:#68e0a0;--amber:#f6c85f}
+*{box-sizing:border-box}html,body{height:100%;overflow:hidden}body{margin:0;background:radial-gradient(circle at 72% 0,#1a2330 0,#080a0d 42%);color:var(--text);font-family:"Segoe UI",Roboto,Arial,sans-serif;font-size:14px}[hidden]{display:none!important}
+.dashboard{width:100%;max-width:1920px;height:100dvh;margin:auto;padding:16px 20px 10px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:10px}.session-header{border-bottom:1px solid var(--line);display:flex;align-items:center;gap:20px;padding:0 0 10px;min-height:70px}.brand-block{display:flex;flex-direction:column;gap:4px;min-width:170px}.brand{font-weight:800;letter-spacing:1.1px;display:flex;align-items:center;gap:9px;white-space:nowrap;font-size:13px}.mark{width:12px;height:12px;background:var(--accent);transform:skew(-18deg);box-shadow:0 0 22px #ff402844}.build{color:var(--muted);font-size:9px;letter-spacing:.8px;padding-left:21px}.session-info{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}.session-info strong{font-size:28px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session-info span,.driver-header span,.session-state span{color:var(--muted);font-size:11px;letter-spacing:.5px}.driver-header{border-left:1px solid var(--line);padding-left:14px;display:flex;flex-direction:column;gap:4px;min-width:96px}.driver-header.compact{min-width:82px}.driver-header strong{font-size:18px;white-space:nowrap;max-width:210px;overflow:hidden;text-overflow:ellipsis}.coach-controls{display:flex;gap:8px;border-left:1px solid var(--line);padding-left:14px}.coach-controls label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:9px;letter-spacing:.7px}.coach-controls select{border:1px solid var(--line);background:#0d1117;color:var(--text);padding:5px 7px;border-radius:4px;font-size:11px}.state-stack{display:flex;flex-direction:column;align-items:flex-end;gap:5px;min-width:118px}.view-badge{color:var(--cyan);font-size:10px;font-weight:800;letter-spacing:.8px;border:1px solid #55d9ff33;background:#55d9ff0d;padding:4px 7px;border-radius:3px}body[data-view="pit"] .view-badge{color:var(--amber);border-color:#f6c85f44;background:#f6c85f0e}body[data-view="summary"] .view-badge{color:var(--green);border-color:#68e0a044;background:#68e0a00e}.session-state{display:flex;align-items:center;gap:7px;white-space:nowrap}.session-state strong{font-size:11px;letter-spacing:.5px}.session-state #status-dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px #55d9ff66}.session-state.offline #status-dot{background:var(--accent);box-shadow:0 0 12px #ff402866}.screen{min-height:0}
+.card-title{min-height:36px;padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}.card-title h2{font-size:12px;font-weight:700;letter-spacing:.8px;margin:0;color:#d4d9df}.card-title>span{color:var(--muted);font-size:9px;letter-spacing:.6px;font-weight:700}.timing-card,.pace-card,.data-card,.focus-card{background:linear-gradient(180deg,rgba(19,24,31,.98),rgba(15,19,25,.98));border:1px solid var(--line);box-shadow:0 10px 34px #0003;min-height:0;overflow:hidden}
+.live-view{display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px}.live-telemetry{order:0}.boards-grid{order:1;display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,1.16fr) minmax(300px,.78fr);gap:10px;min-height:0;align-items:stretch}.table-head,.row{display:grid;grid-template-columns:72px minmax(0,1fr) 82px 94px 78px;column-gap:7px;align-items:center;padding-left:10px;padding-right:10px}.table-head{padding-top:7px;padding-bottom:7px;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.2px;border-bottom:1px solid var(--line)}.row{height:clamp(54px,7.2vh,78px);padding-top:4px;padding-bottom:4px;border-bottom:1px solid #232a33;font-variant-numeric:tabular-nums;line-height:1.1}.row:last-child{border-bottom:0}.row.player{background:linear-gradient(90deg,#ff40282a,#ff402808 68%,transparent);box-shadow:inset 3px 0 var(--accent)}.pos-number{display:flex;flex-direction:column;align-items:flex-start;gap:2px;font-variant-numeric:tabular-nums}.pos-number strong{font-size:18px;line-height:1;color:#e8edf2}.pos-number span{color:var(--muted);font-size:11px;font-weight:800}.car-driver{display:flex;flex-direction:column;gap:4px;min-width:0}.car-line{display:flex;align-items:center;gap:8px;min-width:0;height:20px}.brand-logo{width:38px;height:18px;flex:0 0 38px;display:flex;align-items:center;justify-content:center}.brand-logo img{display:block;max-width:36px;max-height:17px;width:auto;height:auto;object-fit:contain}.brand-fallback{font-size:9px;font-weight:900;letter-spacing:.4px;color:#e8edf2;border:1px solid #56606c;border-radius:3px;padding:2px 4px}.car-model{min-width:0;color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.driver{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gap{font-size:17px;font-variant-numeric:tabular-nums}.player .gap{color:var(--accent)}.time{font-size:16px;color:#d9dde2;font-variant-numeric:tabular-nums}.timing-switch-title select{border:1px solid var(--line);background:#0d1117;color:var(--text);padding:5px 8px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:.4px}
+.pace-head,.pace-row{display:grid;grid-template-columns:46px 1fr 1fr 1fr;column-gap:7px;align-items:center}.pace-head{padding:7px 12px;color:var(--muted);font-size:10px;font-weight:700;border-bottom:1px solid var(--line)}.pace-row{height:clamp(37px,4.8vh,48px);padding:3px 12px;border-bottom:1px solid #232a33;font-size:19px;font-variant-numeric:tabular-nums}.pace-row span:nth-child(3){color:var(--cyan);font-weight:700}.pace-row span:nth-child(4){color:#dfe5eb;font-size:.82em}
+.telemetry-grid{display:grid;grid-template-columns:1.15fr .95fr .9fr 1.05fr;gap:10px}.data-card{padding:10px 12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.data-card h2{grid-column:1/-1;font-size:10px;font-weight:700;letter-spacing:.8px;color:#aeb5bd;margin:0;padding-bottom:5px;border-bottom:1px solid #232a33}.data-card div{display:flex;flex-direction:column;gap:3px;min-width:0;overflow:hidden}.data-card span,.eyebrow{font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--muted)}.data-card strong{font-size:21px;line-height:1.15;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis}.metric-meta{display:block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:8px;font-weight:800;letter-spacing:.35px;line-height:1.1}.fuel-current-metric strong{overflow:visible;text-overflow:clip}.lap-card{grid-template-columns:repeat(3,minmax(0,1fr))}.lap-card strong{color:#e7ebef}.pit{grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr)}.pit strong{color:var(--cyan);font-size:18px}
+.loss-map-card{display:grid;grid-template-rows:auto minmax(0,1fr)}.live-map-wrap{position:relative;min-height:0;display:grid;place-items:center;padding:12px;background:radial-gradient(circle at center,#17202a 0,#0d1117 70%)}#live-track-map{width:100%;height:100%;min-height:280px;max-height:100%;overflow:visible}#live-track-line{fill:none;stroke:#e9edf2;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round;opacity:.92;vector-effect:non-scaling-stroke}#live-map-empty{position:absolute;inset:auto 24px 24px;margin:0;text-align:center;color:var(--muted);font-size:12px;line-height:1.35}.loss-map-card .card-title>span{color:var(--accent);max-width:62%;text-align:right}
+.pit-view{display:grid;grid-template-rows:minmax(0,.98fr) minmax(0,1fr);gap:10px}.pit-top-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.78fr) minmax(320px,.78fr);gap:10px;min-height:0}.focus-card{padding:0}.coach-card{display:grid;grid-template-rows:auto auto 1fr 1fr}.coach-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line)}.coach-kpis>div{background:var(--panel2);padding:14px 15px;display:flex;flex-direction:column;gap:4px}.coach-kpis span,.strategy-main span,.strategy-grid span,.director-grid span{color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.6px}.coach-kpis strong{font-size:26px;font-variant-numeric:tabular-nums}.coach-kpis>div:last-child strong{color:var(--green)}.coach-priority{padding:16px 18px;border-bottom:1px solid #232a33;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto 1fr;column-gap:14px;align-content:center}.coach-priority>span{grid-row:1/3;align-self:center;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.8px;min-width:78px}.coach-priority strong{font-size:19px}.coach-priority p{margin:5px 0 0;color:#c6ccd3;font-size:14px;line-height:1.35}.coach-priority.primary{box-shadow:inset 3px 0 var(--accent);background:linear-gradient(90deg,#ff402817,transparent 72%)}.strategy-card{display:grid;grid-template-rows:auto auto 1fr}.strategy-main{margin:18px 18px 8px;padding:18px;border:1px solid #55d9ff33;background:#55d9ff0b;display:flex;flex-direction:column;gap:5px}.strategy-main strong{font-size:42px;color:var(--cyan);font-variant-numeric:tabular-nums}.strategy-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);margin-top:8px}.strategy-grid>div{background:var(--panel2);padding:14px;display:flex;flex-direction:column;gap:6px;min-width:0}.strategy-grid strong{font-size:18px;font-variant-numeric:tabular-nums;white-space:normal}.director-card{padding-bottom:0;display:grid;grid-template-rows:auto auto auto 1fr auto}.director-card>.eyebrow{padding:18px 18px 4px}.director-rival{padding:0 18px;font-size:25px;line-height:1.15}.director-status{margin:10px 18px;color:#c6ccd3;font-size:14px;line-height:1.35}.director-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}.director-grid>div{background:var(--panel2);padding:14px;display:flex;flex-direction:column;gap:5px}.director-grid strong{font-size:19px}.pit-bottom-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,.75fr);gap:10px;min-height:0}.pit-bottom-grid .row{height:clamp(42px,5.3vh,58px)}.pit-bottom-grid .pace-row{height:clamp(32px,4.1vh,42px);font-size:17px}
+.summary-view{display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px}.summary-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.summary-kpis article{background:linear-gradient(180deg,rgba(19,24,31,.98),rgba(15,19,25,.98));border:1px solid var(--line);padding:15px 17px;display:flex;flex-direction:column;gap:5px}.summary-kpis span{color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.6px}.summary-kpis strong{font-size:32px;font-variant-numeric:tabular-nums}.summary-kpis article:nth-child(3) strong{color:var(--green)}.summary-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:10px;min-height:0}.summary-priorities{display:grid;gap:1px;background:var(--line)}.summary-priority{background:var(--panel2);padding:18px;display:grid;grid-template-columns:100px 1fr}.summary-priority span{grid-row:1/3;color:var(--muted);font-size:10px;font-weight:800}.summary-priority strong{font-size:21px}.summary-priority p{margin:6px 0 0;color:#c6ccd3;font-size:15px}
+.lap-flash{position:fixed;inset:0;width:100vw;height:100dvh;z-index:100;background:radial-gradient(circle at center,#e83a22 0,#a9160b 58%,#390705 100%);box-shadow:inset 0 0 180px #0009;padding:8vh 12vw;display:grid;grid-template-columns:1fr 1fr;align-content:center;justify-items:center;gap:clamp(22px,4vh,46px) 8vw;text-align:center}.lap-flash>span{grid-column:1/-1;font-size:clamp(28px,2.4vw,46px);font-weight:600;letter-spacing:3px}.lap-flash>strong{grid-column:1/-1;font-size:clamp(110px,13vw,250px);font-weight:800;line-height:.85;letter-spacing:-.05em;text-shadow:0 10px 45px #0006}.lap-flash div{display:flex;flex-direction:column;align-items:center;gap:10px;min-width:280px;padding-top:2vh;border-top:2px solid #ffffff66}.lap-flash div span{font-size:clamp(18px,1.4vw,28px);letter-spacing:1.5px}.lap-flash div b{font-size:clamp(38px,3.6vw,70px)}.lap-flash .negative{color:#d8fffa}.flash-coach{grid-column:1/-1;max-width:1050px;margin:0;padding:12px 22px;border:1px solid #ffffff55;background:#00000022;font-size:clamp(18px,1.4vw,28px);font-weight:600}.flash-map-card{grid-column:1/-1;width:min(980px,78vw);height:min(250px,25vh);display:grid;grid-template-columns:220px 1fr;align-items:center;gap:20px;padding:10px 20px;border:1px solid #ffffff55;background:#09090955}.flash-map-title{display:flex!important;flex-direction:column;align-items:flex-start!important;gap:7px!important;min-width:0!important;padding:0!important;border:0!important;text-align:left}.flash-map-title span{font-size:12px!important;font-weight:800;letter-spacing:1.4px;color:#ffd9d4}.flash-map-title b{font-size:18px!important;line-height:1.2}#flash-track-map{width:100%;height:100%;max-height:225px;overflow:visible}#flash-track-line{fill:none;stroke:#fff;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;opacity:.9;vector-effect:non-scaling-stroke}.loss-marker circle:first-child{fill:#ff402833;stroke:#fff;stroke-width:.45;animation:lossPulse 1s ease-in-out infinite alternate}.loss-marker circle:nth-child(2){fill:#fff}.loss-marker-2{opacity:.7}.loss-marker text{fill:#fff;font-size:4px;font-weight:900;paint-order:stroke;stroke:#7d0d07;stroke-width:1px;stroke-linejoin:round}@keyframes lossPulse{from{r:3.8}to{r:5.4}}
+.dashboard-footer{display:flex;justify-content:space-between;align-items:center;gap:16px;color:var(--muted);font-size:10px;line-height:16px}.notice{text-align:right;margin:0}.debug-panel{position:fixed;right:18px;bottom:38px;z-index:90;width:390px;max-height:46vh;overflow:auto;border:1px solid #f6c85f66;background:#080a0df2;box-shadow:0 10px 35px #000a;padding:10px 12px;font-size:11px}.debug-panel>div{display:flex;justify-content:space-between;color:var(--amber);margin-bottom:8px}.debug-panel pre{margin:0;white-space:pre-wrap;color:#dce2e8;font:11px/1.35 Consolas,monospace}.audio-test{align-self:end;height:34px;padding:0 12px;border:1px solid #3f4652;border-radius:6px;background:#181c22;color:#f2f4f7;font-weight:800;font-size:11px;letter-spacing:.04em;cursor:pointer}.audio-test:hover{background:#242a33}
+@media(min-width:1500px) and (min-height:900px){.row{height:clamp(58px,7.5vh,80px)}.driver{font-size:18px}.time,.gap{font-size:17px}.live-telemetry .data-card{padding-top:8px;padding-bottom:8px}.boards-grid .row{height:clamp(58px,6.5vh,70px)}}
+@media(max-height:760px){.dashboard{padding-top:10px}.session-header{min-height:58px}.session-info strong{font-size:22px}.row{height:clamp(42px,6.6vh,58px)}.pace-row{height:clamp(30px,4.2vh,38px);font-size:15px}.data-card strong{font-size:17px}.coach-kpis>div,.strategy-grid>div,.director-grid>div{padding:9px 11px}.coach-priority{padding:10px 14px}.flash-map-card{height:170px}.lap-flash{gap:12px;padding:4vh 9vw}.lap-flash>strong{font-size:clamp(80px,10vw,160px)}#live-track-map{min-height:190px}.live-telemetry .data-card{padding-top:6px;padding-bottom:6px}.boards-grid .row{height:clamp(38px,5.7vh,50px)}}
+@media(max-width:1100px){html,body{overflow:auto}.dashboard{height:auto;min-height:100dvh;display:block;padding:12px}.driver-header,.coach-controls{display:none!important}.session-header{gap:10px}.session-info strong{font-size:19px}.boards-grid,.telemetry-grid,.pit-top-grid,.pit-bottom-grid,.summary-grid,.summary-kpis{grid-template-columns:1fr;margin-top:10px}.screen{display:block}.timing-card,.pace-card,.data-card,.focus-card{margin-bottom:10px}.lap-flash{padding:8vh 7vw;grid-template-columns:1fr;gap:22px}.lap-flash>strong,.lap-flash>span,.flash-coach{grid-column:1}}
+
+
+/* v2.2.1 — bottom-anchored engineering boards and split car/driver columns */
+.live-view{display:flex;flex-direction:column;min-height:0;height:100%}
+.live-telemetry{flex:0 0 auto}
+.boards-grid{margin-top:auto;width:100%;grid-template-columns:minmax(0,.95fr) minmax(0,1.45fr) minmax(300px,.78fr);align-items:stretch}
+.telemetry-grid{grid-template-columns:.95fr .90fr 1.15fr 1.05fr}
+.table-head,.row{grid-template-columns:72px 150px minmax(120px,1fr) 82px 94px 78px;column-gap:7px}
+.car-cell{display:flex;align-items:center;gap:8px;min-width:0}
+.car-cell .brand-logo{flex:0 0 38px}
+.car-cell .car-model{font-size:10px;color:#c3cad2}
+.row>.driver{min-width:0}
+.loss-map-card .card-title>span{max-width:58%}
+@media(min-width:1500px) and (min-height:900px){.boards-grid .row{height:58px}.boards-grid .pace-row{height:43px}}
+@media(max-height:760px){.boards-grid .row{height:40px}.boards-grid .pace-row{height:31px}.table-head,.row{grid-template-columns:62px 125px minmax(100px,1fr) 72px 82px 70px}}
+
+/* v2.3.0 live race tools */
+.timing-spacer{visibility:hidden;pointer-events:none}
+.race-tools-grid{display:grid;grid-template-columns:minmax(330px,.72fr) minmax(0,1.55fr);gap:10px;flex:0 0 210px;min-height:0;margin-top:10px}
+.live-rival-card,.endurance-strategy-card{min-height:0;position:relative}.rival-title select{max-width:240px;border:1px solid var(--line);background:#0d1117;color:var(--text);padding:5px 8px;border-radius:4px;font-size:10px;font-weight:800}
+.live-rival-card{display:grid;grid-template-rows:auto 1fr auto}.rival-main{padding:13px 14px 9px;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;gap:3px 10px;align-content:center;min-width:0}.rival-main>span{grid-row:1/3;align-self:center;color:var(--cyan);border:1px solid #55d9ff44;background:#55d9ff0d;padding:5px 7px;border-radius:3px;font-size:9px;font-weight:900}.rival-main strong{font-size:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rival-main b{font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rival-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line)}.rival-kpis>div{background:var(--panel2);padding:9px 10px;display:flex;flex-direction:column;gap:3px;min-width:0}.rival-kpis span,.strategy-live-kpis span{font-size:8px;font-weight:800;color:var(--muted)}.rival-kpis strong{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.endurance-strategy-card{display:grid;grid-template-rows:auto auto minmax(0,1fr)}.strategy-title>span{font-weight:900}.endurance-strategy-card[data-state="green"] .strategy-title>span{color:var(--green)}.endurance-strategy-card[data-state="yellow"] .strategy-title>span{color:var(--amber)}.endurance-strategy-card[data-state="red"] .strategy-title>span{color:var(--accent)}
+.strategy-live-kpis{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}.strategy-live-kpis>div{background:var(--panel2);padding:8px 9px;display:flex;flex-direction:column;gap:4px;min-width:0}.strategy-live-kpis strong{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.strategy-live-kpis>div:nth-child(6) strong{color:var(--green)}.endurance-strategy-card[data-state="red"] .strategy-live-kpis>div:nth-child(6) strong{color:var(--accent)}.endurance-strategy-card[data-state="yellow"] .strategy-live-kpis>div:nth-child(7) strong{color:var(--amber)}
+.strategy-bottom{display:grid;grid-template-columns:170px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;min-height:0}.strategy-compare{display:flex;flex-direction:column;gap:2px;font-size:9px;color:var(--muted)}.strategy-compare b{color:#dfe5eb;font-size:11px}.strategy-timeline{display:flex;align-items:stretch;gap:4px;min-width:0;overflow:hidden;height:48px}
+.stint-chip{appearance:none;border:1px solid #343d48;background:#111820;color:#dfe5eb;border-radius:4px;padding:4px 6px;min-width:54px;display:flex;flex-direction:column;justify-content:center;gap:1px;cursor:pointer;font:inherit;text-align:left}.stint-chip.done{opacity:.55}.stint-chip.current{border-color:var(--cyan);background:#55d9ff0e;box-shadow:inset 0 -2px var(--cyan)}.stint-chip.double{box-shadow:inset 0 2px var(--amber)}.stint-chip strong{font-size:10px}.stint-chip span,.stint-chip b{font-size:8px;white-space:nowrap}.stint-chip span{color:var(--muted)}.timeline-empty{align-self:center;color:var(--muted);font-size:10px}
+.strategy-config{position:relative;align-self:center}.strategy-config summary{list-style:none;cursor:pointer;border:1px solid var(--line);background:#0d1117;padding:6px 8px;border-radius:4px;font-size:9px;font-weight:900}.strategy-config summary::-webkit-details-marker{display:none}.strategy-config[open]{z-index:40}.strategy-config-grid{display:none;position:absolute;right:0;bottom:34px;width:560px;grid-template-columns:repeat(4,1fr);gap:7px;background:#0b0f14f7;border:1px solid #46515f;box-shadow:0 16px 50px #000b;padding:10px}.strategy-config[open] .strategy-config-grid{display:grid}.strategy-config label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:8px;font-weight:800}.strategy-config input{width:100%;border:1px solid var(--line);background:#111820;color:var(--text);padding:6px;border-radius:3px;font-size:11px}.strategy-config .drivers-input{grid-column:span 2}.strategy-config>p{display:none}.strategy-config[open]>p{display:block;position:absolute;right:0;bottom:-25px;width:560px;margin:0;padding:5px 10px;background:#0b0f14f7;border:1px solid #46515f;color:var(--muted);font-size:8px}
+@media(min-width:1500px) and (min-height:900px){.race-tools-grid{flex-basis:205px}}@media(max-height:820px){.race-tools-grid{flex-basis:174px}.rival-main{padding:7px 10px}.strategy-live-kpis>div{padding:5px 6px}.strategy-bottom{padding:5px 8px}.strategy-timeline{height:40px}.rival-kpis>div{padding:6px 8px}}@media(max-width:1100px){.race-tools-grid{grid-template-columns:1fr;flex:auto}.strategy-live-kpis{grid-template-columns:repeat(2,1fr)}.strategy-bottom{grid-template-columns:1fr}.strategy-config-grid,.strategy-config[open]>p{position:static;width:auto}.strategy-timeline{overflow:auto}}
+
+/* Spotter reuses the existing timing, rival and strategy cards. */
+.role-control select{max-width:110px}.spotter-summary{display:flex;flex-wrap:wrap;gap:12px;padding:12px;background:#121d27;border:1px solid #354a59;margin:8px 0}.spotter-summary[hidden]{display:none}.spotter-summary>div,.spotter-summary>label{display:flex;flex-direction:column;gap:4px;min-width:130px}.spotter-summary span{font-size:11px;color:#9fb2c0}.spotter-summary strong{font-size:18px;color:#fff}body[data-role=spotter] .lap-card,body[data-role=spotter] .live-telemetry .data-card:nth-child(2){display:none}body[data-role=spotter] .spotter-summary{display:flex}
+
+/* Independent, scrollable engineering workspace. Driver screens retain their original rules. */
+.spotter-screen{height:100%;overflow-y:auto;overflow-x:hidden;padding:4px 8px 24px;display:flex;flex-direction:column;gap:12px}.spotter-screen[hidden]{display:none}.spotter-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.spotter-kpis>div{min-width:0;background:#14212b;border:1px solid #31434f;border-radius:5px;padding:9px;display:flex;flex-direction:column;gap:6px}.spotter-kpis small{font-size:10px;color:#9eb4c1;letter-spacing:.4px}.spotter-kpis strong{font-size:19px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spotter-choice{display:flex;align-items:center;gap:14px;background:#16222b;padding:10px;border:1px solid #31434f}.spotter-choice label,.spotter-controls label{display:flex;flex-direction:column;gap:4px;color:#b7cbd8;font-size:11px}.spotter-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.spotter-panels>.focus-card{min-width:0;overflow:hidden}.spotter-panels .spotter-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.spotter-panels .spotter-kpis strong{font-size:15px}.spotter-panels .row{font-size:11px}.spotter-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.spotter-controls h2,.spotter-controls p{flex-basis:100%;margin:0}.spotter-controls input,.spotter-controls select,.spotter-choice input,.spotter-choice select{background:#10202c;color:#fff;border:1px solid #637d8f;padding:6px}.spotter-controls button{background:#284558;color:#fff;border:1px solid #668293;border-radius:4px;padding:7px 10px;cursor:pointer}.spotter-controls button:hover{background:#375b6e}#spotter-identity-warning{color:#ffcc66}#driver-view-control{display:flex;flex-direction:column;gap:3px;color:#a9bdcb;font-size:10px}#driver-view-control select{min-width:82px}@media(max-width:1100px){.spotter-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.spotter-panels{grid-template-columns:1fr}}
+
+/* v2.4.3 candidate · spotter clarity */
+.rival-picker{display:grid;grid-template-columns:auto minmax(140px,1fr) minmax(180px,1.2fr);gap:8px;align-items:end;margin:8px 0 12px}
+.rival-picker button,.rival-picker input,.rival-picker select{min-height:34px}
+.rival-picker button.active{font-weight:800}
+.spotter-screen h2 small{font-size:.65em;font-weight:500;opacity:.7}
+.spotter-controls>p{max-width:980px;opacity:.82;line-height:1.35}
+@media(max-width:1100px){.rival-picker{grid-template-columns:1fr}.spotter-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+.stop-plan-panel{margin-top:10px}.stop-plan-panel summary{font-size:12px;color:#c7deed;cursor:pointer}.stop-plan-row{display:grid;grid-template-columns:110px minmax(170px,1fr) 95px 115px 125px 95px;gap:7px;align-items:center;margin:8px 0;padding:8px;background:#162833;border:1px solid #415563}.stop-plan-row strong,.stop-plan-row span,.stop-plan-row small{font-size:11px}.stop-plan-row small{grid-column:1/-1;color:#b9cfda}.stop-plan-row input,.stop-plan-row select{min-width:0;background:#10202c;color:#fff;border:1px solid #637d8f;padding:5px}@media(max-width:1100px){.stop-plan-row{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* Race Engineer: full class roster stays available without expanding the live window. */
+#spotter-standing-all{max-height:58vh;overflow-y:auto;overscroll-behavior:contain}
+#spotter-standing-all .row{min-height:34px}
+#spotter-driver{display:block;white-space:normal;letter-spacing:0;color:#d4e3e9}
+#spotter-stop-history{line-height:1.7;color:#c6dce8}
+.race-plan-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.race-plan-metrics>div{display:flex;justify-content:space-between;gap:8px;padding:6px;border-bottom:1px solid #354a59;color:#b7cbd8;font-size:11px}
+.race-plan-metrics strong{color:#fff;text-align:right}
+
+#capture-sdk{background:#334c58;color:#fff;border:1px solid #8db6c7;border-radius:4px;padding:7px;cursor:pointer;font-weight:700;white-space:nowrap}#capture-status{font-size:11px;color:#d8e6eb;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+/* v2.5.6 — responsive viewport stabilization
+   Keep PILOTO/SPOTTER readable without global scaling. */
+.dashboard,.screen,.live-view,.telemetry-grid,.race-tools-grid,.boards-grid,
+.pit-top-grid,.pit-bottom-grid,.summary-grid,.spotter-screen,.spotter-panels,
+.timing-card,.pace-card,.data-card,.focus-card{min-width:0}
+.session-header>*{min-width:0}
+
+@media(min-width:1101px){
+  .dashboard{overflow:hidden}
+  .live-view,.boards-grid,.race-tools-grid{min-height:0}
+  .boards-grid{overflow:hidden}
+  .boards-grid>*{min-width:0;min-height:0}
+  .live-map-wrap{min-width:0;min-height:0;overflow:hidden}
+  #live-track-map{min-width:0;min-height:0;max-width:100%;max-height:100%}
+  .race-tools-grid{flex-basis:clamp(174px,19vh,205px)}
+}
+
+@media(min-width:1101px) and (max-width:1650px){
+  .dashboard{padding-left:12px;padding-right:12px}
+  .session-header{gap:8px 10px;flex-wrap:wrap;align-content:center}
+  .brand-block{min-width:145px}
+  .session-info{min-width:220px}
+  .session-info strong{font-size:23px}
+  .driver-header{min-width:80px;padding-left:10px}
+  .driver-header.compact{min-width:64px}
+  .driver-header strong{font-size:16px;max-width:160px}
+  .coach-controls{gap:5px;padding-left:10px}
+  .coach-controls select{max-width:125px}
+  .state-stack{min-width:96px}
+  .role-control select{max-width:96px}
+  #capture-status{max-width:120px}
+
+  .boards-grid{gap:8px;grid-template-columns:minmax(0,.9fr) minmax(0,1.35fr) minmax(250px,.72fr)}
+  .race-tools-grid{gap:8px;grid-template-columns:minmax(270px,.68fr) minmax(0,1.5fr)}
+
+  .table-head,.row{
+    grid-template-columns:58px 110px minmax(86px,1fr) 68px 78px 66px;
+    column-gap:5px;
+    padding-left:8px;
+    padding-right:8px
+  }
+  .brand-logo{width:32px;flex-basis:32px}
+  .brand-logo img{max-width:30px}
+  .driver,.gap{font-size:15px}
+  .time{font-size:14px}
+  .car-cell .car-model{font-size:9px}
+}
+
+@media(min-width:1101px) and (max-height:850px){
+  .dashboard{padding-top:8px;padding-bottom:6px;gap:7px}
+  .session-header{min-height:54px;padding-bottom:7px}
+  .live-view{gap:7px}
+  .telemetry-grid,.boards-grid,.race-tools-grid{gap:7px}
+  .race-tools-grid{margin-top:7px;flex-basis:clamp(160px,22vh,174px)}
+  .data-card{padding:6px 9px;gap:7px}
+  .data-card strong{font-size:17px}
+  .card-title{min-height:30px;padding:6px 9px}
+  .table-head{padding-top:5px;padding-bottom:5px}
+  .boards-grid .row{height:clamp(38px,5.3vh,45px)}
+  .boards-grid .pace-row{height:clamp(29px,4.1vh,34px);font-size:15px}
+  .live-map-wrap{padding:8px}
+  #live-track-map{min-height:0}
+  .dashboard-footer{font-size:9px;line-height:12px}
+}
+
+/* Coach map phases: entry/braking, mid-corner and exit are visually distinct. */
+.loss-marker.loss-phase-entry circle:first-child{fill:#f6c85f33;stroke:var(--amber)}
+.loss-marker.loss-phase-entry circle:nth-child(2){fill:var(--amber)}
+.loss-marker.loss-phase-mid circle:first-child{fill:#ff402833;stroke:var(--accent)}
+.loss-marker.loss-phase-mid circle:nth-child(2){fill:var(--accent)}
+.loss-marker.loss-phase-exit circle:first-child{fill:#55d9ff33;stroke:var(--cyan)}
+.loss-marker.loss-phase-exit circle:nth-child(2){fill:var(--cyan)}
+
+
+/* Setup Engineer feedback stays modal so PIT layout and responsive geometry remain unchanged. */
+.card-actions{display:flex;align-items:center;gap:8px;min-width:0}.card-actions>span{color:var(--muted);font-size:9px;letter-spacing:.6px;font-weight:700}.card-actions button{border:1px solid #f6c85f66;background:#f6c85f12;color:var(--amber);border-radius:4px;padding:5px 8px;font-size:9px;font-weight:900;letter-spacing:.6px;cursor:pointer}.card-actions button:disabled{opacity:.35;cursor:not-allowed}
+.setup-engineer-dialog{width:min(760px,92vw);max-height:88vh;border:1px solid #56626f;border-radius:6px;background:#0d1117;color:var(--text);box-shadow:0 24px 90px #000d;padding:0}.setup-engineer-dialog::backdrop{background:#000b}.setup-engineer-dialog form{padding:18px;display:grid;gap:14px}.setup-engineer-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:12px}.setup-engineer-heading span{color:var(--amber);font-size:9px;font-weight:900;letter-spacing:1px}.setup-engineer-heading h2{margin:4px 0 0;font-size:22px}.setup-engineer-heading>button{border:0;background:transparent;color:var(--muted);font-size:26px;cursor:pointer}.setup-engineer-dialog p{margin:0}.setup-engineer-dialog #setup-engineer-status{color:var(--green);font-weight:800}.setup-engineer-dialog #setup-engineer-meta{color:var(--muted);font-size:12px}.setup-import-row{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(220px,1fr) minmax(0,1fr);gap:10px;align-items:end}.setup-import-row label{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.6px}.setup-import-row select,.setup-import-row input{border:1px solid #3a4652;background:#111820;color:var(--text);border-radius:4px;padding:8px;font:inherit;min-width:0}.setup-import-row span{align-self:center;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.setup-feedback-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.setup-feedback-grid label,.setup-comment{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.6px}.setup-feedback-grid select,.setup-comment textarea{border:1px solid #3a4652;background:#111820;color:var(--text);border-radius:4px;padding:9px;font:inherit}.setup-comment textarea{min-height:92px;resize:vertical}.setup-engineer-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.setup-engineer-actions button{border:1px solid #46515f;background:#18202a;color:var(--text);border-radius:4px;padding:9px 12px;font-size:10px;font-weight:900;cursor:pointer}.setup-engineer-actions #setup-report-export{border-color:#55d9ff66;color:var(--cyan)}.setup-engineer-actions #setup-feedback-save{border-color:#68e0a066;color:var(--green)}
+@media(max-width:700px){.setup-import-row,.setup-feedback-grid{grid-template-columns:1fr}.setup-engineer-actions{justify-content:stretch}.setup-engineer-actions button{flex:1 1 100%}}
+
+
+/* Race Plan vNext — SPOTTER compact + expanded dialog */
+.spotter-race-plan-card{display:flex;flex-direction:column;gap:9px;min-width:0}
+.race-plan-title>div{display:flex;align-items:center;gap:8px;min-width:0}
+.race-plan-title span{font-size:10px;color:var(--muted);font-weight:800;letter-spacing:.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.race-plan-title button{border:1px solid #4f7289;background:#12222d;color:#d9edf7;border-radius:4px;padding:4px 8px;cursor:pointer;font-weight:900}
+.race-plan-compact-main{display:grid;grid-template-columns:minmax(150px,.6fr) minmax(0,1.4fr);gap:10px;align-items:stretch}
+.race-plan-next,.race-plan-window{border:1px solid #31434f;background:#111d26;border-radius:5px;padding:9px;min-width:0}
+.race-plan-next{display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+.race-plan-next small,.race-plan-window>small,.race-plan-compact-metrics span{font-size:9px;color:#9eb4c1;letter-spacing:.55px;font-weight:800}
+.race-plan-next strong{font-size:28px;line-height:1.05}
+.race-plan-next b{margin-top:4px;font-size:11px;color:#6ebcff}
+.race-plan-window-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
+.race-plan-window-values span{display:flex;flex-direction:column;gap:2px;font-size:8px;color:#91a9b8}
+.race-plan-window-values b{font-size:14px;color:#fff}
+.race-plan-window-bar{position:relative;height:7px;margin-top:10px;border-radius:999px;background:linear-gradient(90deg,#2e6c8e,#55d59c);overflow:visible}
+.race-plan-window-bar i{position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px #ffffff22}
+.race-plan-window-bar em{position:absolute;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:#fff;border:2px solid #0b1117;box-shadow:0 0 0 2px #67d7ff55}
+.race-plan-compact-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.race-plan-compact-metrics>div{min-width:0;padding:7px 8px;border:1px solid #2d414e;background:#13202a;border-radius:4px;display:flex;flex-direction:column;gap:3px}
+.race-plan-compact-metrics strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.race-plan-stint-map{display:flex;gap:4px;min-width:0;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.race-stint-chip{flex:0 0 auto;min-width:58px;border:1px solid #405563;background:#162630;border-radius:4px;padding:5px 7px;display:flex;flex-direction:column;gap:2px}
+.race-stint-chip b{font-size:8px;color:#90a9b8}
+.race-stint-chip strong{font-size:10px}
+.race-stint-chip.done{border-color:#4f9b70;background:#173329}
+.race-stint-chip.current{border-color:#4e9cd1;background:#153149}
+.race-stint-chip.final{border-color:#7a8790;background:#1c252c}
+#spotter-plan-summary{margin:0;color:#9fb3bf;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spotter-race-plan-card[data-state="box-this-lap"]{border-color:#ff9a6b}
+.spotter-race-plan-card[data-state="box-next-lap"]{border-color:#ffd56b}
+.spotter-race-plan-card[data-state="window-open"]{border-color:#62d99b}
+
+.race-plan-dialog{width:min(1180px,94vw);max-height:92vh;border:1px solid #56626f;border-radius:7px;background:#0d1117;color:var(--text);box-shadow:0 24px 90px #000d;padding:0}
+.race-plan-dialog::backdrop{background:#000c}
+.race-plan-dialog form{padding:16px;display:grid;gap:12px;max-height:92vh;overflow:auto}
+.race-plan-dialog-heading{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:10px}
+.race-plan-dialog-heading span{font-size:9px;color:var(--cyan);font-weight:900;letter-spacing:1px}
+.race-plan-dialog-heading h2{margin:3px 0 0;font-size:24px}
+.race-plan-dialog-heading>button{border:0;background:transparent;color:var(--muted);font-size:28px;cursor:pointer}
+.race-plan-dialog-kpis,.race-plan-dialog-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.race-plan-dialog-kpis>div,.race-plan-dialog-grid>div{border:1px solid #31434f;background:#121d27;border-radius:5px;padding:9px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.race-plan-dialog-kpis span,.race-plan-dialog-grid>div{font-size:10px;color:#9eb4c1}
+.race-plan-dialog-kpis strong,.race-plan-dialog-grid strong{font-size:16px;color:#fff;overflow:hidden;text-overflow:ellipsis}
+.race-plan-dialog-section{border:1px solid #293b47;background:#101921;border-radius:5px;padding:10px}
+.race-plan-dialog-section h3{margin:0 0 9px;font-size:12px;letter-spacing:.5px}
+.race-plan-stint-map.expanded{padding:4px 0}.race-plan-stint-map.expanded .race-stint-chip{min-width:76px}
+.race-plan-simulator>div{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.race-plan-simulator label{display:flex;flex-direction:column;gap:4px;color:#a8becb;font-size:10px}
+.race-plan-simulator input{background:#10202c;color:#fff;border:1px solid #637d8f;padding:8px;border-radius:4px}
+.race-plan-simulator button,.race-plan-dialog-actions button{background:#18344a;color:#fff;border:1px solid #4d7896;border-radius:4px;padding:9px 12px;font-weight:900;cursor:pointer}
+#race-plan-sim-result{margin:9px 0 0;color:#d8e6ee;font-weight:700}
+.race-plan-manual summary{cursor:pointer;color:#bcd2df;font-size:11px}.race-plan-manual>p{font-size:10px;color:#91a9b8}
+.race-plan-dialog-actions{display:flex;justify-content:flex-end}
+
+@media(max-width:1100px){
+  .race-plan-compact-main{grid-template-columns:1fr}
+  .race-plan-compact-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .race-plan-dialog-kpis,.race-plan-dialog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  .race-plan-window-values{grid-template-columns:1fr 1fr 1fr}
+  .race-plan-dialog-kpis,.race-plan-dialog-grid{grid-template-columns:1fr}
+}
+
+
+/* Race Plan vNext — PILOTO execution-only card */
+.pilot-race-plan-card{display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;min-height:0;overflow:hidden}
+.pilot-race-plan-card .strategy-title>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pilot-race-plan-main{display:grid;grid-template-columns:1.05fr 1.25fr 1fr .9fr;gap:1px;background:var(--line);min-height:0;border-bottom:1px solid var(--line)}
+.pilot-race-plan-main>div{min-width:0;background:var(--panel2);padding:10px 11px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.pilot-race-plan-main span{font-size:8px;font-weight:900;color:var(--muted);letter-spacing:.55px}
+.pilot-race-plan-main strong{font-size:18px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pilot-race-plan-main small{font-size:9px;color:#9eb4c1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pilot-plan-box strong{font-size:30px}
+.pilot-plan-box b{font-size:11px;color:#6ebcff}
+.pilot-plan-alert{padding:8px 12px;text-align:center;font-size:13px;font-weight:1000;letter-spacing:.75px;background:#15212b;color:#bcd0dc;border-top:1px solid #31434f}
+.pilot-race-plan-card[data-state="window-open"] .pilot-plan-alert{background:#153727;color:#7cf2ad}
+.pilot-race-plan-card[data-state="box-next-lap"] .pilot-plan-alert{background:#443919;color:#ffe077}
+.pilot-race-plan-card[data-state="box-this-lap"] .pilot-plan-alert{background:#4c211b;color:#ff987b;font-size:15px}
+.pilot-race-plan-card[data-state="en-boxes"] .pilot-plan-alert{background:#16334a;color:#6fc8ff}
+.pilot-strategy-config{justify-self:end;margin:4px 7px 5px}
+.pilot-strategy-config summary{padding:4px 7px}
+@media(max-height:850px){
+  .pilot-race-plan-main>div{padding:7px 9px}
+  .pilot-race-plan-main strong{font-size:16px}
+  .pilot-plan-box strong{font-size:25px}
+  .pilot-plan-alert{padding:5px 10px;font-size:11px}
+  .pilot-strategy-config{margin:2px 6px 3px}
+}
+@media(max-width:1350px) and (min-width:1101px){
+  .pilot-race-plan-main{grid-template-columns:1fr 1.15fr .9fr .85fr}
+  .pilot-race-plan-main>div{padding-left:8px;padding-right:8px}
+}
+@media(max-width:1100px){
+  .pilot-race-plan-main{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* 2.6.4 · Practice-specific driver workspace */
+.practice-session .practice-boards{grid-template-columns:minmax(260px,.9fr) minmax(360px,1.35fr) minmax(360px,1.15fr)}
+.practice-session .practice-history{grid-column:1/-1}
+.curve-coach-card{min-width:0}
+.curve-coach-rows{display:grid;gap:8px;max-height:360px;overflow:auto;padding-right:3px}
+.curve-coach-row{padding:10px 12px;border:1px solid rgba(255,255,255,.09);border-radius:8px;background:rgba(255,255,255,.025)}
+.curve-coach-row>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.curve-coach-row strong{font-size:13px}
+.curve-coach-row span{font-size:9px;opacity:.65}
+.curve-coach-row b{display:block;margin-top:5px;font-size:12px}
+.curve-coach-row p,.curve-coach-empty{margin:4px 0 0;font-size:11px;line-height:1.35;opacity:.82}
+@media(max-width:1100px){.practice-session .practice-boards{grid-template-columns:1fr}.practice-session .practice-history{grid-column:auto}}
+
+/* 2.6.4 session workspaces */
+.session-workspace-badge{padding:3px 7px;border:1px solid #405563;border-radius:999px;font-size:9px;font-weight:900;letter-spacing:.8px}
+.qualifying-session .practice-boards{grid-template-columns:minmax(280px,.9fr) minmax(380px,1.25fr) minmax(380px,1.15fr)}
+.qualifying-session .practice-history{grid-column:1/-1}
+.qualifying-focus-card{min-width:0;overflow:hidden}
+.quali-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line)}
+.quali-kpis>div{background:var(--panel2);padding:12px 10px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.quali-kpis span{font-size:8px;color:var(--muted);font-weight:900}.quali-kpis strong{font-size:19px}
+.quali-focus{padding:12px;display:flex;flex-direction:column;gap:5px}.quali-focus span{font-size:9px;color:var(--amber);font-weight:900}.quali-focus strong{font-size:14px}.quali-focus p{margin:0;font-size:11px;line-height:1.4}
+.race-session .practice-boards{grid-template-columns:minmax(0,1.35fr) minmax(300px,.65fr)}
+.race-session .race-tools-grid{display:grid}
+@media(max-width:1100px){.qualifying-session .practice-boards,.race-session .practice-boards{grid-template-columns:1fr}.qualifying-session .practice-history{grid-column:auto}.quali-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* 2.6.4 Session Intelligence */
+.session-intelligence-card{min-width:0}.intel-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line)}.intel-grid>div{background:var(--panel2);padding:9px;display:flex;flex-direction:column;gap:3px}.intel-grid span{font-size:8px;color:var(--muted);font-weight:900}.intel-grid strong{font-size:13px}.session-intelligence-card>p{margin:0;padding:9px 11px;font-size:10px;line-height:1.35;color:#b9cbd5}.practice-session .session-intelligence-card,.qualifying-session .session-intelligence-card{grid-column:1/-1}.race-session .session-intelligence-card{grid-column:1/-1}@media(max-width:700px){.intel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Session tools apply equally to garage and on-track screens. */
+.practice-session .pit-view .strategy-card,.practice-session .pit-view .director-card,
+.qualifying-session .pit-view .strategy-card,.qualifying-session .pit-view .director-card,
+.race-session .pit-view .coach-card{display:none}
+.practice-session .pit-top-grid,.qualifying-session .pit-top-grid{grid-template-columns:1fr}
+#intel-extra{grid-column:1/-1;font-size:.75rem;line-height:1.6;color:var(--muted)}
+
+/* ZRE 2.6.6 — Race workspace visual foundation. Scoped to race only. */
+@media(min-width:1101px){
+ body.race-session{background:#000}
+ body.race-session .dashboard{max-width:none;background:#000;gap:7px;padding:8px 12px}
+ body.race-session .live-view{min-width:0;min-height:0;overflow:auto;scrollbar-width:thin}
+ body.race-session .telemetry-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+ body.race-session .boards-grid{grid-template-columns:minmax(0,1.05fr) minmax(0,1.6fr) minmax(250px,.65fr);gap:7px}
+ body.race-session .race-tools-grid{gap:7px}
+ body.race-session .focus-card,body.race-session .data-card,body.race-session .timing-card,body.race-session .pace-card{background:#080a0d;border-color:#252a33;min-width:0}
+ body.race-session .card-title{min-height:30px;padding:5px 9px}
+ body.race-session .data-card{padding:7px 9px}
+ body.race-session .session-header{min-height:50px}
+}
+@media(min-width:1101px) and (max-height:850px){body.race-session .dashboard{padding-top:5px;padding-bottom:5px;gap:5px}body.race-session .card-title{min-height:27px}}

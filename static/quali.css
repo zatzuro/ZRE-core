@@ -1,0 +1,64 @@
+/* Qualifying is a self-contained workspace, independent of archived builder. */
+body.quali-session{background:#192638;color:#f4f9fe}
+body.quali-session .dashboard{max-width:none;grid-template-rows:auto auto minmax(0,1fr) auto;gap:6px;padding:7px 10px}
+body.quali-session .session-header{min-height:47px;padding-bottom:4px;gap:10px}
+body.quali-session .session-info strong{font-size:20px}
+#quali-mode-control{display:flex;align-items:center;gap:7px;color:#e4f2fc;font-size:10px;font-weight:850;white-space:nowrap}
+#quali-mode-select,#quali-new-run{background:#314961;border:1px solid #7898ae;color:#fff;font-size:11px;font-weight:800;padding:5px 9px;border-radius:5px;cursor:pointer}
+#quali-new-run{background:#476079;border-color:#b5c9d5}
+.quali-view{height:100%;min-height:0;min-width:0;display:grid;grid-template-rows:minmax(26px,.32fr) minmax(75px,1.06fr) minmax(0,4.35fr) minmax(110px,1.35fr);gap:6px}
+.q-head,.q-kpis>div,.q-panel{background:#273b4f;border:1px solid #516c81;border-radius:6px;min-width:0;min-height:0;overflow:hidden}
+.q-head{padding:4px 11px;display:flex;align-items:center;gap:14px;font-size:11px;white-space:nowrap}
+.q-head strong{font-size:14px;letter-spacing:.07em}.q-head b{color:#94e8ef}.q-head span{color:#cadae7;text-overflow:ellipsis;overflow:hidden}
+.q-kpis{display:grid;grid-template-columns:minmax(0,1.75fr) repeat(6,minmax(0,1fr));gap:6px;min-height:0}
+.q-kpis>div{display:flex;flex-direction:column;justify-content:center;gap:5px;padding:7px 9px}
+.q-kpis small,.q-bottom small,.q-traffic-grid small{font-size:9px;font-weight:800;letter-spacing:.045em;color:#b8cbdc}
+.q-kpis strong{font-size:clamp(16px,1.75vw,28px);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.q-kpis .q-hero{background:#31506a;border-color:#76a7c5}
+.q-kpis .q-hero strong{font-size:clamp(26px,3vw,48px);color:#f5faff}
+.q-hero em{font-style:normal;font-size:9px;color:#b8dce8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#q-delta[data-trend="loss"]{color:#ff938d}.q-kpis #q-delta[data-trend="gain"]{color:#83f6bd}
+.q-center{display:grid;grid-template-columns:minmax(0,34fr) minmax(0,37fr) minmax(0,29fr);gap:6px;min-height:0;min-width:0}
+.q-panel{display:flex;flex-direction:column}
+.q-panel>header{height:30px;flex:0 0 30px;display:flex;align-items:center;justify-content:space-between;gap:5px;padding:5px 9px;border-bottom:1px solid #526d82}
+.q-panel>header strong{font-size:11px;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-panel>header small{font-size:9px;color:#b7cedf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-map-body{min-height:0;flex:1;position:relative;display:grid;place-items:center;background:#223447}
+#q-map-svg{width:100%;height:100%;max-height:100%;padding:8px;min-height:0}
+#q-map-line{fill:none;stroke:#ecf4fc;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.q-map-spot circle{fill:#ffab76;stroke:#ffe7d5;stroke-width:.6}.q-map-spot text{fill:white;font-size:3px;font-weight:800;paint-order:stroke;stroke:#182b3a;stroke-width:.7px}
+#q-map-empty{position:absolute;padding:14px;text-align:center;color:#cbdeee;max-width:300px;font-size:12px}
+.q-priorities{display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:3px;padding:5px;min-height:95px;max-height:39%;overflow:auto}
+.q-priorities>p{margin:3px;font-size:12px;color:#d0dce8}.q-priority{display:flex;gap:7px;align-items:center;background:#344d63;border-left:3px solid #e8ae74;border-radius:3px;padding:3px 7px;min-height:0;overflow:hidden}
+.q-priority>b{font-size:11px;flex:0 0 auto}.q-priority>span{font-size:10px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-sector-head,.q-sector-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;text-align:center;align-items:center;padding:5px 8px}
+.q-sector-head{background:#30475c;color:#c8dce9;font-size:9px;font-weight:800}
+.q-sector-rows{overflow-y:auto;min-height:0;flex:1}
+.q-sector-row{border-bottom:1px solid #415c70;min-height:34px;font-variant-numeric:tabular-nums;font-size:12px}.q-sector-row.current{background:#466077}.q-sector-row b[data-trend="gain"]{color:#81ebba}.q-sector-row b[data-trend="loss"]{color:#ffa49a}
+.q-focus{background:#334e63;padding:10px 12px;min-height:82px;flex:0 0 auto}
+.q-focus small{font-size:9px;color:#b5cddd}.q-focus strong{display:block;font-size:15px;margin:4px 0}.q-focus p{color:#e0ecf4;font-size:11px;line-height:1.3;margin:4px 0}
+.q-traffic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:8px;flex:1;min-height:0}
+.q-traffic-grid>div{background:#334d63;padding:10px 7px;display:flex;flex-direction:column;justify-content:center;gap:8px;min-width:0;border:1px solid #47657a;border-radius:3px}
+.q-traffic-grid strong{font-size:clamp(12px,1.2vw,19px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-traffic-grid span{font-size:10px;color:#d6e3ee}
+.q-traffic-warning{padding:7px 9px;margin:0;color:#bfcfdb;font-size:10px}
+.q-bottom{display:grid;grid-template-columns:1fr 1fr;gap:6px;min-height:0}
+.q-car-metrics{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:8px 9px;min-height:0;flex:1;align-items:center}
+.q-car-metrics>div{display:flex;flex-direction:column;gap:7px;min-width:0}
+.q-car-metrics strong{font-size:clamp(12px,1.3vw,19px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.q-attempt-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:6px 8px}
+.q-attempt-stats>div{display:flex;gap:6px;align-items:baseline;min-width:0}.q-attempt-stats strong{font-size:16px}
+.q-attempt-timeline{padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2edf5;font-size:11px}
+.quali-view.q-garage-active{grid-template-rows:28px minmax(74px,.75fr) minmax(0,5fr)}
+.q-garage-active .q-center,.q-garage-active .q-bottom{display:none!important}
+.q-garage{grid-column:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}
+.q-garage>.q-panel{min-height:0;overflow:auto}
+.q-garage-selectors{display:flex;gap:7px;padding:8px;align-items:flex-end;flex-wrap:wrap}
+.q-garage-selectors label{display:flex;flex-direction:column;gap:4px;font-size:10px}
+.q-garage-selectors select,.q-garage-selectors button{background:#38556b;color:white;border:1px solid #7490a5;border-radius:3px;padding:5px;font-size:11px}
+#q-comparison{padding:8px;margin:0;line-height:1.3}#q-comparison-sectors{padding:6px;font-size:12px}
+#q-garage-curves{padding:8px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;overflow:auto}
+.q-garage-curve{background:#354e64;border-left:3px solid #6a9db9;padding:7px;min-width:0}.q-garage-curve[data-valid="true"]{border-left-color:#e8ac73}
+.q-garage-curve strong{display:block;font-size:11px}.q-garage-curve p{font-size:11px;line-height:1.35;color:#d9e6ef}
+@media(max-height:790px){.quali-view{grid-template-rows:25px 66px minmax(0,1fr) 100px}.q-panel>header{height:25px;flex-basis:25px}.q-kpis>div{padding:4px 6px;gap:3px}.q-kpis strong{font-size:18px}.q-kpis .q-hero strong{font-size:28px}.q-traffic-grid>div{padding:6px}.q-priorities{min-height:80px}.q-focus{padding:5px 8px;min-height:70px}.q-car-metrics{padding:5px}.q-attempt-stats{padding:4px}.q-garage-active{grid-template-rows:25px 65px minmax(0,1fr)!important}}
+@media(max-width:1100px){body.quali-session .dashboard{display:grid;height:100dvh}.q-center{grid-template-columns:34fr 37fr 29fr}.q-kpis strong{font-size:15px}.q-kpis .q-hero strong{font-size:23px}.q-car-metrics strong{font-size:11px}.q-panel>header strong{font-size:9px}.q-priority>span{font-size:9px}}
