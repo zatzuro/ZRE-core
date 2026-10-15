@@ -15,6 +15,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: zre-visual-lab-publish
@@ -49,8 +51,22 @@ jobs:
           path: diagnostics/visual-lab-screenshots/
           if-no-files-found: ignore
           retention-days: 7
-      - name: Publish ONLY static Visual Lab to gh-pages
-        if: success() && github.ref == 'refs/heads/develop/visual-lab-web'
+      - name: Detect Pages source without enabling or changing repository settings
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" --jq '.build_type' > /tmp/zre-pages-source 2>/dev/null; then
+            if [ "$(cat /tmp/zre-pages-source)" = 'workflow' ]; then
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Stage static assets in gh-pages until repository Pages is enabled
+        if: success() && github.ref == 'refs/heads/develop/visual-lab-web' && steps.pages.outputs.enabled != 'true'
         env:
           SOURCE_SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
@@ -80,3 +96,12 @@ jobs:
             git push -q origin HEAD:gh-pages
           fi
           echo "Only public synthetic assets were published; main and Windows release untouched."
+
+      - name: Upload public static site to native GitHub Pages
+        if: success() && steps.pages.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/visual-lab
+      - name: Deploy GitHub Pages (not Windows, not main)
+        if: success() && steps.pages.outputs.enabled == 'true'
+        uses: actions/deploy-pages@v4
