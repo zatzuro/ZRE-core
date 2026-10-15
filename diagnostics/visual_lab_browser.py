@@ -77,7 +77,7 @@ def main():
                     assert "ERROR VISUAL LAB" not in page.locator("#lab-status").inner_text(),name
                 page.locator("#lab-screen").select_option("practice")
                 frame.locator("#capture-sdk").click()
-                assert "SOLO EN ZRE LOCAL" in page.locator("#lab-status").inner_text()
+                page.locator("#lab-status").filter(has_text="FUNCIÓN DISPONIBLE SOLO EN ZRE LOCAL").wait_for(timeout=5000)
                 assert not sockets and not mutations
                 for w,h in [(1366,768),(1920,1080),(2560,1440)]:
                     page.set_viewport_size({"width":w,"height":h})
