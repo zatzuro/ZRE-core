@@ -45,16 +45,16 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zre-visual-lab-browser-\${{ github.sha }}
+          name: zre-visual-lab-browser-${{ github.sha }}
           path: diagnostics/visual-lab-screenshots/
           if-no-files-found: ignore
           retention-days: 7
       - name: Publish ONLY static Visual Lab to gh-pages
         if: success() && github.ref == 'refs/heads/develop/visual-lab-web'
         env:
-          SOURCE_SHA: \${{ github.sha }}
-          REPO: \${{ github.repository }}
-          GH_TOKEN: \${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
@@ -62,7 +62,7 @@ jobs:
           git init -q
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add origin "https://x-access-token:\${GH_TOKEN}@github.com/\${REPO}.git"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
             git fetch -q --depth=1 origin gh-pages
             git checkout -q -B gh-pages FETCH_HEAD
@@ -76,7 +76,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "gh-pages already represents $SOURCE_SHA — no redundant commit"
           else
-            git commit -qm "Visual Lab preview from \${SOURCE_SHA}"
+            git commit -qm "Visual Lab preview from ${SOURCE_SHA}"
             git push -q origin HEAD:gh-pages
           fi
           echo "Only public synthetic assets were published; main and Windows release untouched."
