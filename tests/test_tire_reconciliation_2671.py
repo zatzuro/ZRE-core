@@ -18,8 +18,8 @@ OWNER={"authorized":True,"scope":"own","car_idx":1,
        "team_id":"mclaren","driver_user_id":"101","reason":"SDK_CONFIRMED"}
 SESSION={"car":"McLaren 720S GT3 Evo","track":"Indianapolis Motor Speedway",
          "layout":"Road Course","session":"Practice","driver":"Piloto 101",
-         "sessionID":420,"subSessionID":17,"trackID":18}
-WEEKEND={"SessionID":420,"SubSessionID":17,"TrackID":18}
+         "sessionNum":0,"sessionGeneration":"test-generation","sessionID":420,"subSessionID":17,"trackID":18}
+WEEKEND={"SessionNum":0,"SessionGeneration":"test-generation","SessionID":420,"SubSessionID":17,"TrackID":18}
 
 def garage(updated=False):
     real={"LF":(185,[72,75,78],[81,63,63]),
@@ -79,18 +79,18 @@ class TireEngineering2671(unittest.TestCase):
         updated=self.engine.reconcile_tires(fresh,WEEKEND,in_pits=True)
         self.assertEqual(updated["stintNumber"],old["stintNumber"])
         self.assertEqual(len(list(folder.glob("stint-*.json"))),1)
-        self.assertEqual(updated["tires"]["inspection"]["status"],"CONFIRMED")
-        self.assertEqual(updated["tires"]["end"]["wheels"]["LF"]["lastHotPressureKPa"],185)
-        self.assertEqual(updated["tires"]["end"]["wheels"]["LF"]["treadRemainingPct"]["middle"],63)
-        self.assertEqual(updated["tires"]["end"]["wheels"]["RF"]["treadRemainingPct"]["inside"],66)
-        self.assertEqual(updated["tires"]["end"]["wheels"]["RR"]["treadRemainingPct"]["outside"],85)
-        self.assertEqual(updated["tires"]["end"]["wheels"]["LR"]["lastTempsC"]["outside"],70)
+        self.assertEqual(updated["tires"]["inspection"]["status"],"OBSERVED")
+        self.assertEqual(updated["tires"]["garageAtEnd"]["wheels"]["LF"]["lastHotPressureKPa"],185)
+        self.assertEqual(updated["tires"]["garageAtEnd"]["wheels"]["LF"]["treadRemainingPct"]["middle"],63)
+        self.assertEqual(updated["tires"]["garageAtEnd"]["wheels"]["RF"]["treadRemainingPct"]["inside"],66)
+        self.assertEqual(updated["tires"]["garageAtEnd"]["wheels"]["RR"]["treadRemainingPct"]["outside"],85)
+        self.assertEqual(updated["tires"]["garageAtEnd"]["wheels"]["LR"]["lastTempsC"]["outside"],70)
         self.assertEqual(updated["tires"]["delta"],{})
         report=self.engine.last_report_path.read_text(encoding="utf-8")
         self.assertIn("185",report);self.assertIn("63",report)
         self.assertIn("NO COMPARABLE",report)
         self.assertIn("GARAGE INSPECCIONADO",report)
-        self.assertEqual(json.loads((folder/"stint-001.json").read_text())["tires"]["inspection"]["status"],"CONFIRMED")
+        self.assertEqual(json.loads((folder/"stint-001.json").read_text())["tires"]["inspection"]["status"],"OBSERVED")
 
     def test_stint07_differentiated_raw_samples_remain_provisional(self):
         record=self.finish(valid=27,end=raw_tires(used=True))
@@ -129,7 +129,7 @@ class TireEngineering2671(unittest.TestCase):
         self.assertIsNotNone(fresh.pending_tire_record)
         fresh.set_owner(OWNER)
         updated=fresh.reconcile_tires(capture_garage_tires(garage(True),2905),WEEKEND,in_pits=True)
-        self.assertEqual(updated["tires"]["inspection"]["status"],"CONFIRMED")
+        self.assertEqual(updated["tires"]["inspection"]["status"],"OBSERVED")
 
     def test_orientation_and_explicit_pressure_units(self):
         snapshot=capture_garage_tires(garage(True),2905)
