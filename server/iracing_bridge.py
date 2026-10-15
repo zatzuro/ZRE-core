@@ -3,6 +3,7 @@
 Serves the dashboard and broadcasts a compact timing payload over WebSocket.
 Runs in demo mode automatically until iRacing's SDK is available.
 """
+from uuid import uuid4
 import argparse
 import asyncio
 import json
@@ -313,6 +314,7 @@ class DashboardSource:
         self.strategy_prediction_audit={}
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
+        self._session_generation = uuid4().hex
         self.stint_active = False
         self._tire_garage_last_check=None
         self._stint_offtrack_since = None
@@ -850,7 +852,7 @@ class DashboardSource:
                 self.coach.start_stint()
                 sdk_setup=snapshot_from_sdk(self.get("CarSetup",{}) or {},driver_info)
                 setup_snapshot=self.setup_engineer.resolve_setup(sdk_setup)
-                setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID")}
+                setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID"),"sessionNum":session_num,"sessionGeneration":self._session_generation}
                 setup_conditions=capture_conditions(self.get)
                 setup_tires=capture_tires(self.get)
                 setup_garage_tires=capture_garage_tires(self.get("CarSetup",{}) or {},session_time)
@@ -877,7 +879,8 @@ class DashboardSource:
                     self._tire_garage_last_check=stamp
                     measured_garage=capture_garage_tires(self.get("CarSetup",{}) or {},session_time)
                     amended=self.setup_engineer.reconcile_tires(
-                        measured_garage,weekend,in_pits=True)
+                        measured_garage,{**weekend,"SessionNum":session_num,
+                            "SessionGeneration":self._session_generation},in_pits=True)
                     if amended:
                         logger.info("TIRE INSPECTION RECONCILED stint=%s source=CARSETUP_GARAGE",
                             amended.get("stintNumber"))
@@ -1442,6 +1445,7 @@ class DashboardSource:
             return None
 
     def reset_session_tracking(self):
+        self._session_generation = uuid4().hex
         self.session_state.last_valid_payload=None
         self._sdk_units=None
         self.last_strategy_log_signature=None

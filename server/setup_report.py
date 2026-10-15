@@ -99,6 +99,7 @@ def render_setup_report(stint, previous=None, setup_changes=None):
         "name": setup_name or "UNAVAILABLE",
         "source": setup.get("source") or "UNAVAILABLE",
         "fingerprint": setup.get("fingerprint") or "UNAVAILABLE",
+        "mechanicalFingerprintV2": setup.get("setupFingerprintV2") or "LEGACY",
         "modified": meta.get("setupModified"),
     }
 
@@ -165,7 +166,13 @@ def render_setup_report(stint, previous=None, setup_changes=None):
     tires=stint.get("tires") or {}
     inspection=tires.get("inspection") or {}
     status=inspection.get("status") or "LEGACY · SIN VERIFICACIÓN TEMPORAL"
+    if status=="CONFIRMED" and inspection.get("attribution")!="CONFIRMED_SAME_STINT":
+        status="LEGACY_CONFIRMED_UNVERIFIED"
     lines.append(f"- **Inspección final:** {status}")
+    for dimension in ("freshness", "attribution", "comparison", "tireSetEvidence"):
+        lines.append(f"- **{dimension}:** {inspection.get(dimension) or 'NO VERIFICADO (LEGACY)'}")
+    for wheel, evidence in (tires.get("wheelEvidence") or {}).items():
+        lines.append(f"- **{wheel} evidencia:** {evidence}")
     lines.append(f"- **Fuente:** {_value(inspection.get('source'))}")
     lines.append(f"- **Última lectura SDK:** {_value(inspection.get('sessionTimeObserved'))} s (SessionTime)")
     if inspection.get("reason"):
@@ -174,14 +181,14 @@ def render_setup_report(stint, previous=None, setup_changes=None):
     lines.append("- **Aviso:** completar campos no certifica su frescura; presión fría != última presión caliente.")
     lines.append("")
     for phase in ("start","end"):
-        snapshot=tires.get(phase) or {}
-        pending=phase=="end" and status!="CONFIRMED"
+        snapshot=(tires.get("garageAtEnd") if phase=="end" else None) or tires.get(phase) or {}
+        pending=phase=="end" and status not in ("OBSERVED", "CONFIRMED")
         lines.append(f"### {phase.upper()} · "+("PROVISIONAL / NO CONFIRMADO" if pending else
                      ("GARAGE INSPECCIONADO" if phase=="end" else "REFERENCIA AL INICIO")))
         lines.append("- **Presión dinámica:** NO DISPONIBLE EN SDK")
         if snapshot.get("source"):
             lines.append(f"- **Fuente específica:** {snapshot['source']}")
-        if phase=="end" and status=="CONFIRMED" and snapshot.get("updateCount") is not None:
+        if phase=="end" and status in ("OBSERVED", "CONFIRMED") and snapshot.get("updateCount") is not None:
             lines.append(f"- **CarSetup.UpdateCount:** {snapshot['updateCount']}")
         wheels=snapshot.get("wheels") or {}
         if not wheels:
@@ -208,10 +215,10 @@ def render_setup_report(stint, previous=None, setup_changes=None):
                              f"carcasa L/M/R {_value(raw.get('left'))}/{_value(raw.get('middle'))}/"
                              f"{_value(raw.get('right'))} °C · goma restante L/M/R "
                              f"{_value(remaining.get('left'))}/{_value(remaining.get('middle'))}/"
-                             f"{_value(remaining.get('right'))} [unidad SDK, no homologada a garage]")
+                             f"{_value(remaining.get('right'))} [fracción SDK 0–1; garage usa % 0–100]")
         lines.append("")
     deltas=tires.get("delta") or {}
-    if status!="CONFIRMED":
+    if status not in ("OBSERVED", "CONFIRMED"):
         lines.append("### DELTA INICIO → FINAL")
         observed=tires.get("provisionalDelta") or {}
         if observed:
@@ -219,7 +226,7 @@ def render_setup_report(stint, previous=None, setup_changes=None):
             for wheel,values in observed.items():
                 wear=(values.get("wearRemainingDelta") or {})
                 temps=(values.get("carcassTempCDelta") or {})
-                lines.append(f"- {wheel} goma restante L/M/R: "
+                lines.append(f"- {wheel} goma restante L/M/R (delta en fracción SDK): "
                              f"{_value(wear.get('left'))}/{_value(wear.get('middle'))}/{_value(wear.get('right'))}; "
                              f"carcasa °C L/M/R: {_value(temps.get('left'))}/"
                              f"{_value(temps.get('middle'))}/{_value(temps.get('right'))}")
@@ -234,8 +241,8 @@ def render_setup_report(stint, previous=None, setup_changes=None):
         lines.append("### DELTA INICIO → FINAL · COMPARABLE")
         for wheel,values in deltas.items():
             lines.append(f"- **{wheel}:** {_value(values)}")
-    if status=="CONFIRMED":
-        confirmed=(tires.get("end") or {}).get("wheels") or {}
+    if status in ("OBSERVED", "CONFIRMED"):
+        confirmed=(tires.get("garageAtEnd") or tires.get("end") or {}).get("wheels") or {}
         for label,wheels in (("DELANTEROS",("LF","RF")),("TRASEROS",("LR","RR"))):
             minima=[value for wheel in wheels for value in
                     (((confirmed.get(wheel) or {}).get("treadRemainingPct") or {}).values())
@@ -294,5 +301,7 @@ def render_setup_report(stint, previous=None, setup_changes=None):
 def write_setup_report(path, stint, previous=None, setup_changes=None):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_setup_report(stint, previous, setup_changes), encoding="utf-8")
+    temp=path.with_suffix(path.suffix+".tmp")
+    temp.write_text(render_setup_report(stint, previous, setup_changes), encoding="utf-8")
+    temp.replace(path)
     return path

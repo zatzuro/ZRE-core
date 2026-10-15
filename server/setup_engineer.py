@@ -6,6 +6,7 @@ does not duplicate raw telemetry capture.
 from datetime import datetime
 from copy import deepcopy
 from pathlib import Path
+from uuid import uuid4
 import math
 
 try:
@@ -233,7 +234,8 @@ class SetupEngineer:
         recovered = self.store.latest_stint()
         if recovered:
             self.last_saved = recovered
-            if ((recovered.get("tires") or {}).get("inspection") or {}).get("status")=="PENDING":
+            if (((recovered.get("tires") or {}).get("inspection") or {}).get("status") in ("PENDING", "OBSERVED")
+                    and not ((recovered.get("tires") or {}).get("inspection") or {}).get("autoReconcileClosed")):
                 self.pending_tire_record=recovered
             try:
                 # Historical records stay readable but are never auto-exported
@@ -317,8 +319,15 @@ class SetupEngineer:
         session = {**dict(session or {}), "setupOwner": dict(self.owner)}
         # Never associate a late garage reading to an already replaced set.
         # Old saved record remains PENDING for human inspection.
+        if self.pending_tire_record and self._can_write(self.pending_tire_record):
+            prior=deepcopy(self.pending_tire_record)
+            prior["tires"]["inspection"].update(autoReconcileClosed=True,
+                reason="NEXT_STINT_STARTED; late inspection attribution disabled")
+            self.store.save_stint(prior)
+            self.export_report(prior)
         self.pending_tire_record=None
         self.current = {
+            "stintId": uuid4().hex,
             "startedAt": datetime.now().isoformat(timespec="seconds"),
             "session": dict(session or {}),
             "conditions": dict(conditions or {}),
@@ -401,6 +410,7 @@ class SetupEngineer:
         repeated=build_repeated_behavior(engineering);feedback=base.get("driverFeedback") or {}
         record = {
             "createdAt": datetime.now().isoformat(timespec="seconds"),
+            "stintId": base["stintId"],
             "session": session,
             "conditions": {"start":base.get("conditions") or {},"end":conditions_end or {}},
             "trackProfile": build_track_profile(engineering),
@@ -413,6 +423,9 @@ class SetupEngineer:
                       "provisionalDelta":provisional_delta if changed_provisional else {},
                       "garageAtStart":base.get("garageTiresStart") or {},
                       "inspection":{"status":"PENDING",
+                          "linkedStintId":base["stintId"],
+                          "freshness":"NOT_VERIFIED", "attribution":"UNVERIFIED",
+                          "comparison":"NOT_COMPARABLE", "tireSetEvidence":"UNKNOWN",
                           "reason":"ESPERANDO INSPECCIÓN GARAGE ACTUALIZADA",
                           "finishedSessionTime":session_time,
                           "sessionId":session.get("sessionID"),
@@ -472,59 +485,84 @@ class SetupEngineer:
             return None
         if not self._can_write(record):return None
         session=record.get("session") or {}
-        if not isinstance(session_identity,dict) or any(
+        owner=session.get("setupOwner") or {}
+        if (owner.get("scope")!="own" or self.owner.get("scope")!="own" or
+            owner.get("driver_user_id")!=self.owner.get("driver_user_id") or
+            owner.get("team_id")!=self.owner.get("team_id")):
+            return None
+        if session.get("sessionNum") is None or not isinstance(session_identity,dict) or any(
             session.get(a)!=session_identity.get(b)
             for a,b in (("sessionID","SessionID"),("subSessionID","SubSessionID"),
-                        ("trackID","TrackID"))):
+                        ("trackID","TrackID"),("sessionNum","SessionNum"))):
             return None
+        # Offline identifiers are reused by iRacing; only this runtime generation
+        # may amend an offline record. After process restart it stays unverified.
+        if not all(session.get(k) for k in ("sessionID","subSessionID","trackID")):
+            generation=session.get("sessionGeneration")
+            if not generation or generation!=session_identity.get("SessionGeneration"):
+                return None
         tires=record.get("tires") or {}
         inspection=tires.get("inspection") or {}
-        if inspection.get("status")!="PENDING":return None
+        if (inspection.get("status") not in ("PENDING","OBSERVED") or
+            inspection.get("autoReconcileClosed") or
+            inspection.get("linkedStintId")!=record.get("stintId")):
+            return None
         last_end=inspection.get("finishedSessionTime")
         now=(garage_snapshot or {}).get("sessionTimeObserved")
-        if isinstance(last_end,(int,float)) and isinstance(now,(int,float)) and now<last_end:
+        if not all(isinstance(v,(int,float)) and math.isfinite(v) for v in (last_end,now)) or now<last_end:
             return None
-        if (garage_snapshot or {}).get("availableFields",0)<24:
-            return None
+        if now-last_end>300:
+            amended=deepcopy(record)
+            amended["tires"]["inspection"].update(autoReconcileClosed=True,
+                reason="INSPECTION_WINDOW_EXPIRED")
+            self.store.save_stint(amended)
+            self.last_saved=amended;self.pending_tire_record=None
+            self.export_report(amended)
+            return amended
         baseline=tires.get("garageAtStart") or {}
-        old=garage_signature(baseline)
-        fresh=garage_signature(garage_snapshot)
-        if old==fresh or not any(d for d in fresh if d[1] is not None or d[2] or d[3]):
+        previous=tires.get("garageAtEnd") or baseline
+        if garage_signature(previous)==garage_signature(garage_snapshot or {}):
+            if inspection.get("status")=="OBSERVED" and self.last_report_path is None:
+                self.export_report(record)
             return None
-        # A tread percentage increase indicates a replaced tire (or a changed
-        # source/set), never the post-stint wear of the same wheel.
-        # Reject mixed partial replacements instead of certifying the wrong set.
-        original=(baseline.get("wheels") or {})
-        updated=(garage_snapshot.get("wheels") or {})
+        amended=deepcopy(record);measures=amended["tires"]
+        observed={}
         for wheel in ("LF","RF","LR","RR"):
-            initial=(original.get(wheel) or {}).get("treadRemainingPct") or {}
-            latest=(updated.get(wheel) or {}).get("treadRemainingPct") or {}
-            if any(isinstance(initial.get(segment),(int,float)) and
-                   isinstance(latest.get(segment),(int,float)) and
-                   latest[segment]>initial[segment]+1.5
-                   for segment in ("outside","middle","inside")):
-                return None
-        # Do not manufacture wear deltas across differing SDK source types,
-        # or assume iRacing has not replaced the tire set before inspection.
-        amended=dict(record);measures=dict(tires)
-        measures["end"]=garage_snapshot
-        measures["inspection"]={"status":"CONFIRMED",
-            "source":"CARSETUP_GARAGE_CHANGED_AFTER_STINT",
-            "sessionTimeObserved":now,"finishedSessionTime":last_end,
-            "basis":"GARAGE_VALUES_CHANGED_AFTER_END / SAME_LOCAL_CAR",
-            "comparison":"INCOMPARABLE_TIRE_SET_NOT_IDENTIFIED"}
+            data=((garage_snapshot or {}).get("wheels") or {}).get(wheel) or {}
+            initial=(baseline.get("wheels") or {}).get(wheel) or {}
+            if not any(data.get(k) for k in ("lastTempsC","treadRemainingPct")) and data.get("lastHotPressureKPa") is None:
+                observed[wheel]={"freshness":"UNAVAILABLE","attribution":"UNVERIFIED",
+                                 "comparison":"NOT_COMPARABLE"}
+                continue
+            increased=any(isinstance((initial.get("treadRemainingPct") or {}).get(k),(int,float))
+                          and isinstance(v,(int,float)) and v>initial["treadRemainingPct"][k]+1.5
+                          for k,v in (data.get("treadRemainingPct") or {}).items())
+            changed=any(data.get(k)!=initial.get(k) for k in
+                        ("lastTempsC","treadRemainingPct","lastHotPressureKPa"))
+            observed[wheel]={"freshness":"CHANGED_AFTER_STINT" if changed else "REPEATED",
+                "attribution":"AMBIGUOUS" if increased else "UNVERIFIED",
+                "comparison":"NOT_COMPARABLE", "tireSetEvidence":"POSSIBLE_REPLACEMENT" if increased else "UNKNOWN"}
+        if not any(v["freshness"]=="CHANGED_AFTER_STINT" for v in observed.values()):
+            return None
+        # A changed inspection is useful evidence, never proof of the same set.
+        # Preserve original transition samples and store the garage source apart.
+        measures["garageAtEnd"]=deepcopy(garage_snapshot)
+        measures["wheelEvidence"]=observed
+        measures["inspection"].update(status="OBSERVED",freshness="CHANGED_AFTER_STINT",
+            attribution="UNVERIFIED",comparison="NOT_COMPARABLE",tireSetEvidence="UNKNOWN",
+            source="CARSETUP_GARAGE",sessionTimeObserved=now,
+            reason="INSPECTION_CHANGED; SAME_STINT_AND_TIRE_SET_NOT_PROVEN")
         measures["delta"]={}
         measures["comparability"]="NO COMPARABLE: identidad física del juego no verificada"
-        amended["tires"]=measures
-        quality=dict(amended.get("dataQuality") or {})
-        quality["tireEnd"]={"availableFields":garage_snapshot.get("availableFields"),
-            "status":"CONFIRMED","source":"CARSETUP_GARAGE"}
-        amended["dataQuality"]=quality
-        path=self.store.save_stint(amended) # retains stintNumber, no duplicate
+        amended.setdefault("dataQuality",{})["tireEnd"]={
+            "availableFields":garage_snapshot.get("availableFields"),"status":"OBSERVED",
+            "freshness":"CHANGED_AFTER_STINT","attribution":"UNVERIFIED",
+            "comparison":"NOT_COMPARABLE","source":"CARSETUP_GARAGE"}
+        path=self.store.save_stint(amended)
         self.last_saved=self.store._read_json(path,amended)
-        self.pending_tire_record=None
+        self.pending_tire_record=self.last_saved
         self.export_report(self.last_saved)
-        self.status="Stint "+str(self.last_saved.get("stintNumber"))+" · neumáticos garage confirmados"
+        self.status="Stint "+str(self.last_saved.get("stintNumber"))+" · inspección observada, atribución no confirmada"
         return self.last_saved
 
     def update_feedback(self, stint, entry=None, mid=None, exit=None, comment=None):
@@ -569,7 +607,12 @@ class SetupEngineer:
             session.get("car"), session.get("track"), session.get("layout"),
             before_number=number,
         )
-        result=write_setup_report(path, record, previous, record.get("setupChanges"))
+        try:
+            result=write_setup_report(path, record, previous, record.get("setupChanges"))
+        except OSError:
+            self.last_report_path=None
+            self.status="Stint guardado · reporte pendiente por error de escritura"
+            return None
         self.last_report_path=result
         self.status=f"Reporte exportado · {result.name}"
         return result

@@ -53,6 +53,16 @@ jobs:
           path: diagnostics/visual-lab-screenshots/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Enable authorized public GitHub Pages for Visual Lab
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Product Owner authorized production publication; public static only.
+          if gh api "repos/$GITHUB_REPOSITORY/pages" >/dev/null 2>&1; then
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/pages" -f build_type=workflow || echo "Pages settings require repository-owner permissions."
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/pages" -f build_type=workflow || echo "Pages enablement requires repository-owner permissions."
+          fi
       - name: Detect Pages source without enabling or changing repository settings
         id: pages
         env:

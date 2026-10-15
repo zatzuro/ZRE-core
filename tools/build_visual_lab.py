@@ -19,6 +19,7 @@ CUT = "let webBuildReloading=false,buildCheckPending=false,reconnectTimer=null;"
 
 
 def build(out: Path, branch: str, sha: str) -> None:
+    version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["version"]
     src = (STATIC / "index.html").read_text(encoding="utf-8")
     assert src.count("/static/") >= 6, "ZRE frontend paths have changed"
     assert '<script src="/static/app.js' in src, "ZRE entrypoint changed"
@@ -55,7 +56,7 @@ def build(out: Path, branch: str, sha: str) -> None:
     html = html.replace("</head>", '<link rel="stylesheet" href="./static/visual_lab.css"></head>', 1)
     inject = (
         '<script>window.ZRELabManifest='
-        + json.dumps({"sha": sha, "branch": branch, "version": "2.6.7"}, ensure_ascii=False)
+        + json.dumps({"sha": sha, "branch": branch, "version": version}, ensure_ascii=False)
         + ';</script>\n'
         '<script src="./static/visual_lab.js"></script>\n'
     )
@@ -68,7 +69,7 @@ def build(out: Path, branch: str, sha: str) -> None:
     for filename in ("lab_shell.css", "lab_shell.js"):
         shutil.copyfile(PREVIEW / filename, out / filename)
     (out / "lab_manifest.json").write_text(
-        json.dumps({"branch": branch, "sha": sha, "version": "2.6.7", "simulated": True},
+        json.dumps({"branch": branch, "sha": sha, "version": version, "simulated": True},
                    ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / ".nojekyll").write_text("", encoding="utf-8")
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
