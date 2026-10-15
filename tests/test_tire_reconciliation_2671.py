@@ -90,13 +90,13 @@ class TireEngineering2671(unittest.TestCase):
         self.assertIn("185",report);self.assertIn("63",report)
         self.assertIn("NO COMPARABLE",report)
         self.assertIn("GARAGE INSPECCIONADO",report)
-        self.assertEqual(json.loads((folder/"stint-001.json").read_text())["tires"]["inspection"]["status"],"OBSERVED")
+        self.assertEqual(json.loads((folder/"stint-001.json").read_text(encoding="utf-8"))["tires"]["inspection"]["status"],"OBSERVED")
 
     def test_stint07_differentiated_raw_samples_remain_provisional(self):
         record=self.finish(valid=27,end=raw_tires(used=True))
         self.assertEqual(record["tires"]["inspection"]["status"],"PENDING")
         self.assertAlmostEqual(record["tires"]["provisionalDelta"]["LF"]["wearRemainingDelta"]["left"],-.247)
-        report=self.engine.last_report_path.read_text()
+        report=self.engine.last_report_path.read_text(encoding="utf-8")
         self.assertIn("PROVISIONAL",report)
         self.assertIn("NO CONFIRMADO",report)
 
