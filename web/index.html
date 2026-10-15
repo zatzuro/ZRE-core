@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/quali.css?v=2.6.7">
   <link rel="stylesheet" href="/static/race_v2.css?v=2.6.7">
   <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.7">
+  <link rel="stylesheet" href="/static/black_theme.css?v=2.6.7.1">
 </head>
 <body data-view="live">
 <main class="dashboard">
@@ -36,6 +37,9 @@
         <option value="practice">PRÁCTICA</option>
         <option value="quali">QUALI</option>
         <option value="race">CARRERA</option>
+        <option value="pit">GARAGE</option>
+        <option value="summary">RESUMEN</option>
+        <option value="spotter">SPOTTER</option>
       </select>
       <span id="screen-mode-context" role="status" aria-live="polite">ESPERANDO SESIÓN iRacing</span>
     </div>
@@ -44,6 +48,7 @@
     <label class="rv2-control-mini rv2-font-control" for="rv2-font-select">LETRA
       <select id="rv2-font-select" aria-label="Tamaño de fuente en Carrera"><option value="normal">NORMAL</option><option value="large">GRANDE</option><option value="xlarge">EXTRA</option></select></label>
     <label id="rv2-emphasis-control" hidden>ÉNFASIS CARRERA<select id="rv2-emphasis-select" aria-label="Énfasis visual sin cambiar la sesión"><option value="auto">AUTO</option><option value="sprint">SPRINT</option><option value="endurance">ENDURANCE</option></select></label>
+    <button id="archive-open" type="button" title="Gestionar historial de sesiones y protección de registros">REGISTROS</button>
     <button id="header-collapse-toggle" type="button" aria-expanded="true" title="Plegar o desplegar controles">PLEGAR CONTROLES</button>
     
   </nav>
@@ -94,9 +99,9 @@
             <p>MÍN <b id="pr-fuel-min">—</b> · MÁX <b id="pr-fuel-max">—</b> · Solo vueltas válidas</p>
           </article>
           <article class="pr-pace-panel">
-            <header><b>EVOLUCIÓN DE RITMO</b><span id="pr-pace-status">SIN VUELTAS VÁLIDAS</span></header>
-            <svg id="pr-pace-svg" viewBox="0 0 400 94" role="img" aria-label="Evolución de tiempos de vueltas válidas"><polyline id="pr-pace-line" points=""></polyline><g id="pr-pace-dots"></g></svg>
-            <div class="pr-pace-caption"><span id="pr-pace-count">0 vueltas válidas</span><span id="pr-pace-fuel">Consumo por vuelta: —</span></div>
+            <header><b>EVOLUCIÓN DE RITMO</b><label class="pr-pace-mode-label">ESCALA <select id="pr-pace-scale" aria-label="Escala de gráfica"><option value="focus">FOCO ±1 s</option><option value="all">AJUSTAR TODAS</option></select></label><span id="pr-pace-status">SIN VUELTAS</span></header>
+            <svg id="pr-pace-svg" viewBox="0 0 400 94" role="img" aria-label="Tiempos de todas las vueltas registradas, promedio y marcadores fuera de escala"><polyline id="pr-pace-line" points=""></polyline><g id="pr-pace-dots"></g></svg>
+            <div class="pr-pace-caption"><span id="pr-pace-count">0 vueltas</span><span id="pr-pace-fuel">Consumo por vuelta: —</span></div>
           </article>
         </section>
       </section>
@@ -137,7 +142,8 @@
     <div class="q-head"><strong>ZRE · QUALI</strong><b id="q-kind">—</b><span id="q-run-id">SIN TANDA</span><span id="q-lap-state">ESPERANDO DATOS</span><span id="q-session-source">—</span></div>
     <section class="q-kpis">
       <div class="q-hero"><small>DELTA EN VIVO · MEJOR PERSONAL SDK</small><strong id="q-delta">—</strong><em id="q-delta-source">SIN REFERENCIA VÁLIDA</em></div>
-      <div><small>MEJOR REAL · SDK</small><strong id="q-best">—</strong></div>
+      <div><small id="q-best-source">MEJOR REAL · SDK</small><strong id="q-best">—</strong></div>
+      <div><small>VUELTA ACTUAL · SDK</small><strong id="q-current">—</strong></div>
       <div><small>ÚLTIMA VUELTA</small><strong id="q-last">—</strong></div>
       <div><small>ÓPTIMA · ZRE</small><strong id="q-optimal">—</strong></div>
       <div><small>POTENCIAL · ZRE</small><strong id="q-potential">—</strong></div>

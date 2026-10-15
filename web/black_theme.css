@@ -1,0 +1,118 @@
+/* ZRE Core 2.6.7.1 — universal cockpit-black theme.
+   Loaded last: never hide telemetry; preserve functional colors in text and signals. */
+:root{
+  --bg:#000;--panel:#050505;--panel2:#0b0b0b;
+  --line:#353535;--text:#fff;--muted:#c9c9c9;
+  --pr-bg:#000;--pr-panel:#050505;--pr-line:#393939;
+  --pr-muted:#c8c8c8;--pr-text:#fff;
+}
+html,body,body.practice-session,body.quali-session,body.race-session,body.race-v2-session,
+body .dashboard,body.practice-session .dashboard,body.quali-session .dashboard,
+body.race-session .dashboard,body.race-v2-session .dashboard{
+  background:#000!important;color:#fff!important;
+  background-image:none!important;
+}
+body .session-header,body #screen-nav,body .screen,body .live-view,body .practice-workspace,
+body .race-v2-view,body .quali-view,body .spotter-screen,body .pit-view,body .summary-view{
+  background-color:#000!important;color:#fff;
+}
+body .timing-card,body .pace-card,body .data-card,body .focus-card,
+body .practice-stat-row>div,body .practice-map-panel,body .practice-coach-panel,
+body .pr-fuel-panel,body .pr-pace-panel,body .q-head,body .q-kpis>div,
+body .q-panel,body .q-bottom>*,body .rv2-kpi,body .rv2-panel,
+body .spotter-kpis>div,body .spotter-panels>article,body .spotter-choice,
+body .archive-admin,body .race-plan-dialog,body .setup-engineer-dialog,
+body .rv2-standings-dialog,body .pr-corner-dialog,body .q-garage-panel,
+body .session-intelligence-card,body .strategy-config,
+body .race-plan-dialog-section,body .admin-panel,body .archive-table-wrap{
+  background:#060606!important;background-image:none!important;
+  color:#fff!important;border-color:#363636!important;box-shadow:none!important;
+}
+body .practice-map-stage,body .q-map-body,body .q-traffic-grid>div,
+body .q-garage-curve,body .pr-corner,body .q-priority,
+body .rv2-rival-grid>div,body .rv2-fuel-grid>div,body .rv2-standing-head,
+body .rv2-standing-row,body .rv2-plan-status,body .rv2-window-track,
+body .q-sector-row,body .q-attempt-row,body .q-sector-rows,
+body .intel-grid>div,body .quali-kpis>div,body .qualifying-focus-card{
+  background:#080808!important;background-image:none!important;
+  color:#fff;border-color:#333!important;
+}
+body .rv2-standing-row[data-player="true"],body .rv2-standing-row[data-rival="true"],
+body .pr-corner[data-selected="true"],body .rv2-kpi-alert[data-severity],
+body .q-kpis .q-hero{
+  background:#0c0c0c!important;background-image:none!important;
+}
+body .rv2-standing-row[data-player="true"]{border-left-color:#81daf0!important}
+body .rv2-standing-row[data-rival="true"]{border-left-color:#bba3fd!important}
+body .rv2-plan-panel[data-state="box-this-lap"] .rv2-plan-status{color:#ff9d9d!important;border-color:#ff7a74!important}
+body .rv2-plan-panel[data-state="box-next-lap"] .rv2-plan-status{color:#ffde8a!important;border-color:#d5a344!important}
+body .rv2-plan-panel[data-state="window-open"] .rv2-plan-status{color:#8df0b7!important;border-color:#3fc889!important}
+body .card-title h2,body .q-panel>header strong,body .rv2-panel>header strong,
+body .session-info strong,body .driver-header strong,body .rv2-kpi strong,
+body .q-kpis strong,body .practice-stat-row strong,body .archive-admin h2{
+  color:#fff;
+}
+body .q-head span,body .q-panel small,body .rv2-kpi small,body .rv2-kpi em,
+body .rv2-panel small,body .rv2-panel>header>span,body .practice-stat-row small,
+body .session-info span,body .driver-header span,body .card-title>span,
+body .rv2-fuel-context,body .pr-pace-caption,body .archive-admin p{
+  color:#c8c8c8;
+}
+body button,body select,body input,body textarea,
+body #screen-mode-select,body #quali-mode-select,body #rv2-emphasis-select,
+body #rv2-font-select,body #header-collapse-toggle,body #archive-open,
+body .rv2-panel button,body .rv2-panel select{
+  background-color:#070707!important;background-image:none!important;
+  color:#fff!important;border:1px solid #555!important;
+  accent-color:#69c6f0;
+}
+body button:hover:not(:disabled),body select:hover:not(:disabled),
+body button:focus-visible,body select:focus-visible,body input:focus-visible{
+  background-color:#171717!important;outline:2px solid #7dd6ff;outline-offset:1px;
+}
+body button:disabled,body select:disabled,body input:disabled{
+  color:#a3a3a3!important;opacity:.6;cursor:not-allowed;
+}
+body .rv2-standing-row,body .pr-corner,body .q-priority{border-color:#404040!important}
+body .rv2-standing-row:hover,body .rv2-standing-row:focus-visible{background:#1b1b1b!important}
+body .rv2-pace-series svg,body #rv2-pace-chart,body #pr-pace-svg,body #q-map-svg,
+body .rv2-chart-content,body .q-map-body{background:#000!important;background-image:none!important}
+body .race-plan-dialog::backdrop,body .setup-engineer-dialog::backdrop,
+body .rv2-standings-dialog::backdrop,body .pr-corner-dialog::backdrop,
+body .zre-archive-dialog::backdrop{background:rgba(0,0,0,.82)}
+/* A single navigation selector; the obsolete duplicate header selector is hidden. */
+body #driver-view-control{display:none!important}
+/* These selectors expose no configurable choice in this release. Don't fake controls. */
+body #coach-controls>label{display:none!important}
+body #screen-mode-control{display:flex!important;color:#fff!important}
+body #screen-mode-control[hidden]{display:flex!important}
+body #screen-mode-context{color:#dadada!important}
+body #screen-nav{gap:7px;z-index:10}
+body #archive-open{white-space:nowrap;border-radius:4px;padding:5px 10px;font-size:10px;font-weight:800;cursor:pointer}
+body[data-visual-consultation="true"] #screen-mode-context{color:#f4ca75!important}
+/* Session archive is not part of the archived Screen Builder. */
+body .zre-archive-dialog{
+  width:min(1020px,96vw);max-height:92dvh;overflow:auto;padding:12px;
+  background:#000!important;color:#fff;border:1px solid #656565;border-radius:8px;
+}
+body .zre-archive-dialog-head{position:sticky;top:-12px;z-index:3;display:flex;
+  align-items:center;justify-content:space-between;gap:16px;background:#000;
+  border-bottom:1px solid #555;padding:8px 4px 12px;margin-bottom:10px}
+body .zre-archive-dialog-head strong{font-size:14px;color:#fff}
+body .zre-archive-dialog-head button{padding:6px 12px;border-radius:5px}
+body .archive-admin{padding:10px;border:1px solid #444;border-radius:6px}
+body .archive-admin header,body .archive-toolbar{display:flex;flex-wrap:wrap;gap:10px;
+  align-items:center;justify-content:space-between;margin-bottom:12px}
+body .archive-toolbar label{display:flex;gap:6px;align-items:center;color:#fff}
+body .archive-toolbar button,body .archive-table-wrap button{padding:6px 9px;border-radius:4px;cursor:pointer}
+body .archive-table-wrap{max-height:50vh;overflow:auto;width:100%}
+body .archive-table{width:100%;border-collapse:collapse;color:#fff;font-size:12px}
+body .archive-table th,body .archive-table td{padding:8px;border-bottom:1px solid #404040;text-align:left}
+body .archive-table th{position:sticky;top:0;background:#080808}
+body .archive-actions{display:flex;gap:6px}
+body #archive-message[data-error="true"]{color:#ff8b8b!important}
+@media(max-width:850px){
+ body #screen-nav{flex-wrap:wrap;justify-content:flex-start}
+ body #screen-mode-context{max-width:240px}
+ body .archive-admin header,body .archive-toolbar{justify-content:flex-start}
+}

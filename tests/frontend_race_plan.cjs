@@ -27,8 +27,8 @@ const makeNode=()=>({hidden:false,value:'',textContent:'',dataset:{},style:{left
 const el=id=>{if(!nodes.has(id))nodes.set(id,makeNode());return nodes.get(id);};
 const rendered={};
 const ui={
-  $:el,renderCache:new Map(),strategyConfig:{driverNames:['Santiago','David','Herney']},
-  document:{activeElement:null,createElement:()=>makeNode()},
+  $:el,renderCache:new Map(),strategyConfig:{driverNames:['Santiago','David','Herney']},activeRole:'spotter',
+  document:{activeElement:null,createElement:()=>makeNode(),querySelectorAll:()=>[]},
   localStorage:{getItem:()=>null},Option:context.Option,
   setText(id,value){el(id).textContent=String(value??'—');},
   timingRows(id,rows,full){rendered[id]={size:rows.length,full};},

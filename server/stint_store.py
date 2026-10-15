@@ -34,7 +34,7 @@ class StintStore:
 
     def save_setup(self, car, track, layout, snapshot):
         folder = self.context_dir(car, track, layout) / "setups"
-        fingerprint = (snapshot or {}).get("fingerprint") or "unknown"
+        fingerprint = (snapshot or {}).get("setupFingerprintV2") or (snapshot or {}).get("fingerprint") or "unknown"
         path = folder / f"setup-{slug(fingerprint)}.json"
         if not path.exists():
             self._write_json(path, snapshot)

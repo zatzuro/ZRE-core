@@ -126,13 +126,17 @@
    set('rv2-lap',data.connected&&lap?lap[0]:'—');
    set('rv2-autonomy',good(fuel.autonomyLaps)?'≈'+fuel.autonomyLaps.toFixed(1)+' V':'—');
    const caution=data.sessionIntelligence?.caution;
-   const state=data.racePlanVNext?.currentPlan?.window?.state||'';
+   const trial=Boolean(race.practicePreview),livePlan=trial?data.practiceRacePlan:data.racePlanVNext;
+   const state=livePlan?.currentPlan?.window?.state||'';
+   const label=trial?'ENSAYO · ZRE':'RACE PLAN';
    const alert=!data.connected?['SDK SIN SEÑAL','critical','NO ACTUAL']:
-     race.practicePreview?['ENSAYO','info','iRacing PRÁCTICA']:
+     data.self?.pit==='EN BOXES'?['EN PIT ROAD','warning','SDK · OBSERVADO']:
+     good(fuel.autonomyLaps)&&fuel.autonomyLaps<2?['FUEL BAJO','critical','SDK · AUTONOMÍA']:
+     state==='BOX THIS LAP'?['BOX '+(trial?'ENSAYO ':'')+'AHORA','critical',label]:
+     state==='BOX NEXT LAP'?['BOX '+(trial?'ENSAYO ':'')+'PRÓX.','warning',label]:
+     state==='WINDOW OPEN'?['VENTANA ABIERTA','warning',label]:
      caution?.active?['CAUTION','warning','BANDERA · SDK']:
-     state==='BOX THIS LAP'?['BOX AHORA','critical','RACE PLAN']:
-     state==='BOX NEXT LAP'?['BOX PRÓX.','warning','RACE PLAN']:
-     good(fuel.autonomyLaps)&&fuel.autonomyLaps<2?['FUEL BAJO','critical','AUTONOMÍA OBSERVADA']:
+     trial?['ENSAYO · ESTABLE','info','iRacing PRÁCTICA']:
      ['SIN ALERTAS','none','SDK / RACE PLAN'];
    set('rv2-alert',alert[0]);set('rv2-alert-source',alert[2]);
    const alertBox=el('rv2-alert')?.closest('.rv2-kpi-alert');if(alertBox)alertBox.dataset.severity=alert[1];
@@ -147,13 +151,16 @@
  }
  function plan(data){
    const preview=Boolean(data.raceDashboard?.practicePreview);
-   const v=preview?{}:data.racePlanVNext||{},plan=v.currentPlan||v.plan||{},state=v.raceState||{},fuel=v.fuelModel||{},window=plan.window||{},stops=plan.stops||[],next=stops[0]||{};
+   const v=preview?(data.practiceRacePlan||{}):(data.racePlanVNext||{}),plan=v.currentPlan||v.plan||{},state=v.raceState||{},fuel=v.fuelModel||{},window=plan.window||{},stops=plan.stops||[],next=stops[0]||{};
    const has=Boolean(plan.available),current=state.current_lap??state.completed_laps,goal=window.target??next.lap;
    const countdown=goal!=null&&current!=null?Math.max(0,Number(goal)-Number(current)):null;
-   const status=preview?'NO APLICA · PRÁCTICA':!has?'PLAN NO DISPONIBLE':state.on_pit_road?'EN BOXES':window.state||'PLAN ESTABLE';
+   const status=preview?(state.on_pit_road?'EN PIT ROAD · SDK':!has?'PLAN NO DISPONIBLE · ENSAYO':
+      'ENSAYO · '+({'BOX THIS LAP':'BOX ESTA VUELTA','BOX NEXT LAP':'BOX PRÓXIMA VUELTA',
+                    'WINDOW OPEN':'VENTANA ABIERTA','PLAN STABLE':'PLAN ESTABLE'}[window.state]||'PLAN ESTABLE')):
+      !has?'PLAN NO DISPONIBLE':state.on_pit_road?'EN BOXES':window.state||'PLAN ESTABLE';
    const root=el('rv2-plan-card');if(root)root.dataset.state=String(status).toLowerCase().replaceAll(' ','-');
    set('rv2-box-lap',!has?'—':goal!=null?'V'+goal:plan.minimum_stops===0?'META':'—');
-   set('rv2-box-countdown',!has?'SIN PLAN':countdown==null?'—':countdown===0?'AHORA':countdown+' VUELTAS');
+   set('rv2-box-countdown',!has?'SIN PLAN':countdown==null?'—':countdown===0?'AHORA':countdown+' VUELTA'+(countdown===1?'':'S'));
    set('rv2-plan-status',status);
    for(const [id,key] of [['rv2-earliest','earliest_safe'],['rv2-target','target'],['rv2-fuel-limit','fuel_limit']])
       set(id,has&&window[key]!=null?'V'+window[key]:'—');
@@ -165,11 +172,11 @@
    set('rv2-add-fuel',has&&good(next.fuel_to_add_liters)?'+'+next.fuel_to_add_liters.toFixed(1)+' L':'—');
    set('rv2-stops-left',has&&Number.isFinite(Number(plan.minimum_stops))?plan.minimum_stops:'—');
    const autonomy=data.raceDashboard?.fuel?.autonomyLaps ?? plan.current_autonomy_laps;
-   set('rv2-plan-autonomy',has&&good(autonomy)?'≈'+Number(autonomy).toFixed(1)+' V':'—');
+   set('rv2-plan-autonomy',good(autonomy)?'≈'+Number(autonomy).toFixed(1)+' V':'—');
    set('rv2-tyres',state.require_tire_change===true?'REGLA ACTIVA · SIN DECISIÓN':'NO DEFINIDO');
    const future=(data.enduranceStrategy?.timeline||[]).find(x=>x.status==='future'&&x.driver);
    set('rv2-next-driver',next.driver||future?.driver||'SIN ASIGNAR');
-   set('rv2-plan-source',preview?'ENSAYO VISUAL · SIN ESTRATEGIA OFICIAL':'RACE PLAN VNEXT · '+(fuel.confidence||'SIN CONFIANZA')+' · '+(fuel.source||'SIN FUENTE'));
+   set('rv2-plan-source',preview?'RACE PLAN · ENSAYO · '+(v.reason||'FUEL LOCAL Y OBJETIVO MANUAL'):'RACE PLAN VNEXT · '+(fuel.confidence||'SIN CONFIANZA')+' · '+(fuel.source||'SIN FUENTE'));
  }
  function rival(data){
    const race=data.raceDashboard||{},selected=race.rival||{},row=selected.selectedRival,obs=selected.observation||{},director=data.raceDirector||{};
@@ -267,7 +274,7 @@
    g.replaceChildren(...nodes);
  }
  function fuel(data){
-    const f=data.raceDashboard?.fuel||{},vnext=data.raceDashboard?.practicePreview?{}:data.racePlanVNext||{};
+    const f=data.raceDashboard?.fuel||{},vnext=data.raceDashboard?.practicePreview?(data.practiceRacePlan||{}):(data.racePlanVNext||{});
     set('rv2-fuel-quality',f.source||'SIN DATO');
     set('rv2-fuel-observed',unit(f.observedLpl,' L/v',2));
     set('rv2-fuel-target',good(f.targetLpl)?unit(f.targetLpl,' L/v',2):'OBJETIVO NO DEFINIDO');
@@ -275,7 +282,7 @@
     if(el('rv2-fuel-deviation'))el('rv2-fuel-deviation').dataset.trend=f.deviationLpl>0?'over':f.deviationLpl<0?'under':'equal';
     set('rv2-fuel-autonomy',good(f.autonomyLaps)?'≈'+f.autonomyLaps.toFixed(1)+' V':'—');
     const window=vnext.currentPlan?.window||{};
-    set('rv2-fuel-context',vnext.available?'PRÓXIMA PARADA: '+(window.target!=null?'V'+window.target:'NO DEFINIDA')+' · '+(vnext.fuelModel?.confidence||'SIN CONFIANZA'):'PLAN NO DISPONIBLE · no asumir que se evita una parada');
+    set('rv2-fuel-context',vnext.available?'PRÓXIMA PARADA: '+(window.target!=null?'V'+window.target:'NO DEFINIDA')+' · '+(vnext.practicePreview?'ENSAYO · FUEL LOCAL':vnext.fuelModel?.confidence||'SIN CONFIANZA'):'PLAN NO DISPONIBLE · '+(vnext.reason||'no asumir parada'));
     const official=data.enduranceStrategy?.raceFormat;
     set('rv2-race-emphasis',emphasis==='auto'?(official?'FORMATO '+official+' · SDK / MODELO':'FORMATO: NO CONFIRMADO · VISTA GENERAL'):
         'ÉNFASIS VISUAL '+emphasis.toUpperCase()+' · NO ALTERA ESTRATEGIA');

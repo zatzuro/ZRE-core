@@ -49,6 +49,14 @@ def setup_fingerprint(parameters):
     return sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
+def mechanical_parameters(parameters):
+    """Exclude observed inspection values; retain all configurable settings."""
+    ignored = {"updatecount", "lasthotpressure", "treadremaining"}
+    return {key: value for key, value in flatten_parameters(parameters).items()
+            if not any(part.lower() in ignored or part.lower().startswith("lasttemps")
+                       for part in key.split("."))}
+
+
 def snapshot_from_sdk(car_setup, driver_info=None):
     params = _json_safe(car_setup or {})
     if isinstance(params, dict):
@@ -62,7 +70,8 @@ def snapshot_from_sdk(car_setup, driver_info=None):
     }
     return {
         "source": "SDK",
-        "fingerprint": setup_fingerprint(params),
+        "fingerprint": setup_fingerprint(params),  # Legacy identity remains readable.
+        "setupFingerprintV2": setup_fingerprint(mechanical_parameters(params)),
         "metadata": meta,
         "parameters": params,
         "flatParameters": flatten_parameters(params),
@@ -126,6 +135,7 @@ def snapshot_from_html(html_text, filename=None):
     return {
         "source": "IRACING_HTML",
         "fingerprint": setup_fingerprint(parameters),
+        "setupFingerprintV2": setup_fingerprint(mechanical_parameters(parameters)),
         "metadata": {"filename": _clean_text(filename)},
         "parameters": parameters,
         "flatParameters": flatten_parameters(parameters),
@@ -136,6 +146,8 @@ def compare_setups(previous, current):
     before = (previous or {}).get("flatParameters") or flatten_parameters((previous or {}).get("parameters") or {})
     after = (current or {}).get("flatParameters") or flatten_parameters((current or {}).get("parameters") or {})
     changes = []
+    before = mechanical_parameters(before)
+    after = mechanical_parameters(after)
     for key in sorted(set(before) | set(after), key=str.lower):
         old = before.get(key)
         new = after.get(key)

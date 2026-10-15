@@ -14,7 +14,8 @@ for(const id of ['rv2-alert','rv2-autonomy','rv2-lap','rv2-visible-count','rv2-f
 assert(js.includes('visibleCount=2'),'Compact standings should default to self ±2');
 assert(js.includes('center.push(strategic)'),'Always include manually selected rival');
 assert(js.includes('race.practicePreview'),'Practice race preview source');
-assert(js.includes('preview?{}:data.racePlanVNext'),'Do not present practice race plan as real');
+assert(js.includes('data.practiceRacePlan||{}'),'Practice preview must read simulated Race Plan separately from official');
+assert(!js.includes('preview?{}:data.racePlanVNext'),'Do not discard valid trial plan');
 assert(js.includes('rv2-font-select')&&js.includes('zre-race-font'),'Persist readable font');
 assert(js.includes('rv2-visible-count')&&js.includes('zre-race-visible'),'Persist visible cars');
 assert(js.includes('physicalGapSeconds'),'Never infer rival seconds from classification');

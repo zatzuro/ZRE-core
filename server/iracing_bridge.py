@@ -3,6 +3,7 @@
 Serves the dashboard and broadcasts a compact timing payload over WebSocket.
 Runs in demo mode automatically until iRacing's SDK is available.
 """
+from uuid import uuid4
 import argparse
 import asyncio
 import json
@@ -42,7 +43,7 @@ try:
     from server.setup_ownership import resolve_setup_owner
     from server.quali_runs import QualiRuns
     from server.setup_snapshot import snapshot_from_sdk
-    from server.stint_engineering_snapshot import capture_conditions, capture_tires
+    from server.stint_engineering_snapshot import capture_conditions, capture_tires, capture_garage_tires
     from server.kpi_library import build_kpi_library
 except ModuleNotFoundError:
     from session_state import SessionIdentity, SessionState
@@ -62,7 +63,7 @@ except ModuleNotFoundError:
     from setup_ownership import resolve_setup_owner
     from quali_runs import QualiRuns
     from setup_snapshot import snapshot_from_sdk
-    from stint_engineering_snapshot import capture_conditions, capture_tires
+    from stint_engineering_snapshot import capture_conditions, capture_tires, capture_garage_tires
     from kpi_library import build_kpi_library
 
 from aiohttp import web
@@ -313,7 +314,9 @@ class DashboardSource:
         self.strategy_prediction_audit={}
         self.setup_engineer = SetupEngineer(ROOT)
         self.race_plan_runtime = RacePlanRuntime(ROOT)
+        self._session_generation = uuid4().hex
         self.stint_active = False
+        self._tire_garage_last_check=None
         self._stint_offtrack_since = None
         self._sdk_link_state = None
         self._clock_probe_baseline = None
@@ -323,7 +326,7 @@ class DashboardSource:
         self._recovery_provenance = None
         self._recovered_own_laps = []
         self._recovered_car_idx = None
-        self.race_director=RaceDirector();self.race_class_candidates=set();self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
+        self.race_director=RaceDirector();self.race_class_candidates=set();self.practice_race_configured=False;self.strategy_settings={"baseStintLaps":37,"extendedStintLaps":38,"pitLossSeconds":30.0,"manualRaceSeconds":36000,"averageLapSeconds":None,"consumptionLiters":None,"tankCapacityLiters":None,"driverNames":["Santiago","David","Herney"]};self.strategy_driver_assignments={};self.strategy_completed_stints=[];self.strategy_stint_start_lap=None;self.strategy_stops_completed=0;self.strategy_last_on_pit=False;self.strategy_target_total_stops=None
         self.team_car_idx=None;self.manual_team_car_idx=None;self.team_car_number=None;self.manual_team_car_number=None;self.confirmed_driver_id=None;self.confirmed_driver_name=None;self.manual_team_driver=None;self.demo_role='driver';self.active_stint_driver=None;self.local_user_id=None;self.local_driver_name=None;self.team_id=None;self.team_fuel_reference=None;self.team_fuel_reference_valid=False;self.team_fuel_reference_source=None;self.spotter_control=SpotterControl();self.team_completed_now=None;self.spotter_pre_pit_fuel=None;self.manual_stop_counted=False;self.spotter_event_error=None;self.stop_overrides={};self.kpi_last_valid={};self.current_sector_times=[];self.last_completed_sectors=[];self.sector_lap_number=None;self.debug_team_enabled=False;self.capture_status='Listo para capturar';self.sector_tracking_armed=False;self.sector_last_sample=None
 
     def handle_race_plan_audio(self, payload):
@@ -598,7 +601,7 @@ class DashboardSource:
         if not restored:
             return
         self.lap_history=sorted({e["lap"]:e for e in restored}.values(),
-                                key=lambda x:x["lap"])[-10:]
+                                key=lambda x:x["lap"])[-1200:]
         last=self.lap_history[-1]
         self.last_lap_number=completed_laps if isinstance(completed_laps,int) else last["lap"]
         self.last_recorded_lap_time=last["time"]
@@ -792,7 +795,10 @@ class DashboardSource:
                 self.team_fuel_reference=(fuel,int(team_completed))
                 self.team_fuel_reference_valid=True;self.team_fuel_reference_source='REAL LOCAL'
             session_coach_mode=self.coach_mode_for_session(session.get("SessionType"))
+            previous_coach_mode=self.coach_session_mode
             self.coach_session_mode="qualifying" if self.quali.mode else session_coach_mode
+            if self.coach_session_mode=="qualifying" and previous_coach_mode!="qualifying":
+                if hasattr(self.audio_coach,"clear_pending"):self.audio_coach.clear_pending()
             self.update_sector_tracking(lap_number,self.get("LapDistPct",player_pct),last_lap)
             self.restore_local_laps_once(pilot_idx,completed_laps,results)
             if completed_laps is not None:
@@ -846,11 +852,12 @@ class DashboardSource:
                 self.coach.start_stint()
                 sdk_setup=snapshot_from_sdk(self.get("CarSetup",{}) or {},driver_info)
                 setup_snapshot=self.setup_engineer.resolve_setup(sdk_setup)
-                setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID")}
+                setup_session={"car":car_label(player_driver),"track":weekend.get("TrackDisplayName") or weekend.get("TrackName") or "Pista","layout":weekend.get("TrackConfigName") or "default","session":session.get("SessionType"),"driver":player_driver.get("UserName","Piloto"),"sessionID":weekend.get("SessionID"),"subSessionID":weekend.get("SubSessionID"),"trackID":weekend.get("TrackID"),"sessionNum":session_num,"sessionGeneration":self._session_generation}
                 setup_conditions=capture_conditions(self.get)
                 setup_tires=capture_tires(self.get)
+                setup_garage_tires=capture_garage_tires(self.get("CarSetup",{}) or {},session_time)
                 setup_controls=driver_controls(self.get)
-                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls)
+                self.setup_engineer.start_stint(setup_session,setup_snapshot,setup_conditions,fuel_start=fuel,session_time=session_time,tires_start=setup_tires,controls_start=setup_controls,garage_tires_start=setup_garage_tires)
                 logger.info("COACH STINT START setup=%s source=%s session=%s lap=%s",setup_snapshot.get("fingerprint"),setup_snapshot.get("source"),identity,lap_number)
                 self.recorder.write({"type":"stint_start","sessionTime":session_time,
                     "lap":lap_number,"sessionIdentity":str(identity),
@@ -859,6 +866,24 @@ class DashboardSource:
             if driving_stint and self.setup_engineer.current is not None:
                 self.setup_engineer.observe_controls(driver_controls(self.get),session_time=session_time,lap=lap_number)
             self.stint_active = driving_stint
+            # The sports stint closes immediately, but iRacing publishes tire
+            # inspection values only when they are available in CarSetup.
+            # Reconcile original saved stint (not a new stint); never SPOTTER.
+            if (not driving_stint and self.setup_engineer.current is None and
+                self.setup_engineer.pending_tire_record is not None and
+                (on_pit_road or in_garage) and resolved_owner.get("authorized") and
+                resolved_owner.get("scope")=="own"):
+                stamp=number(session_time)
+                if (self._tire_garage_last_check is None or stamp is None or
+                    stamp<self._tire_garage_last_check or stamp-self._tire_garage_last_check>=1):
+                    self._tire_garage_last_check=stamp
+                    measured_garage=capture_garage_tires(self.get("CarSetup",{}) or {},session_time)
+                    amended=self.setup_engineer.reconcile_tires(
+                        measured_garage,{**weekend,"SessionNum":session_num,
+                            "SessionGeneration":self._session_generation},in_pits=True)
+                    if amended:
+                        logger.info("TIRE INSPECTION RECONCILED stint=%s source=CARSETUP_GARAGE",
+                            amended.get("stintNumber"))
             completed_for_strategy=completed_laps if completed_laps is not None else max(0,lap_number-1)
             if driving_stint and self.strategy_stint_start_lap is None:self.strategy_stint_start_lap=completed_for_strategy
             if on_pit_road and not self.strategy_last_on_pit and self.strategy_stint_start_lap is not None:
@@ -890,12 +915,25 @@ class DashboardSource:
             coach = self.coach.payload(self.lap_text)
             payload["capabilities"] = {"coachControls": True}
             payload["sessionMode"] = session_coach_mode
+            payload["coachContract"]={
+                "officialSessionMode":session_coach_mode,
+                "effectiveCoachMode":self.coach_session_mode,
+                "selectedVisualMode":None,  # Client-local view; never shared SDK state.
+                "coachDataSource":"LAP_COACH_OBSERVED",
+                "referenceScope":"ZRE_QUALI_RUN" if self.quali.mode=="simulated" else "OFFICIAL_SDK" if self.quali.mode=="official" else "SESSION",
+                "audioPolicy":"SILENT_DRIVER_COACH" if self.coach_session_mode=="qualifying" else "SESSION_POLICY",
+            }
             quali=self.quali.snapshot()
             payload["effectiveDashboard"]=quali["effectiveDashboard"]
             payload["qualifying"]={**quali,"officialSessionType":session.get("SessionType"),
                 "sessionTime":session_time,"timeRemaining":number(self.get("SessionTimeRemain")),
                 "onTrack":on_track,"onPitRoad":on_pit_road,"inGarage":in_garage,
                 "bestPersonalSDK":number(self.get("LapBestLapTime")),
+                "currentLapTime":number(self.get("LapCurrentLapTime")),
+                "lastLapSDK":seconds(self.get("LapLastLapTime")),
+                "bestPersonalZRE":self.personal_session_best,
+                "optimalZRE":self.coach.optimal,
+                "recoverySource":self._recovery_provenance,
                 "deltaReferences":{key:self._quali_sdk_delta(key) for key in
                     ("LapDeltaToBestLap","LapDeltaToOptimalLap","LapDeltaToSessionBestLap")},
                 "sectorBoundaries":self._sector_boundaries(),"sectorTimes":list(self.current_sector_times),
@@ -937,7 +975,11 @@ class DashboardSource:
                 "fuelLapsEstimated":round(fuel/mean_fuel,1)
                     if fuel is not None and mean_fuel is not None and mean_fuel>0 else None,
                 "laps":[{"lap":row.get("lap"),"seconds":round(row["time"],3),
-                         "fuelUse":row.get("fuelUse")} for row in valid_practice],
+                         "fuelUse":row.get("fuelUse"),"valid":bool(row.get("valid")),
+                          "caution":bool(row.get("caution")),"onPitRoad":bool(row.get("onPitRoad")),
+                          "comparable":bool(row.get("valid") and not row.get("caution") and not row.get("onPitRoad")),
+                          "source":row.get("source") or "SDK_OBSERVED"}
+                        for row in self.lap_history if isinstance(row.get("time"),(int,float)) and row["time"]>0],
             }
             payload["setupEngineer"]={"stintActive":bool(self.setup_engineer.current),"available":bool(self.setup_engineer.last_saved),"lastStintNumber":(self.setup_engineer.last_saved or {}).get("stintNumber"),"lastSetupFingerprint":last_setup.get("fingerprint"),"setupName":(last_setup.get("metadata") or {}).get("setupName"),"setupSource":last_setup.get("source"),"driverFeedback":(self.setup_engineer.last_saved or {}).get("driverFeedback") or {},"status":self.setup_engineer.status,"reportFile":self.setup_engineer.last_report_path.name if self.setup_engineer.last_report_path else None,"owner":dict(self.setup_engineer.owner),"setupSourcePreference":self.setup_engineer.setup_source_preference,"importedSetupAvailable":bool(self.setup_engineer.imported_setup),"importedSetupFile":((self.setup_engineer.imported_setup or {}).get("metadata") or {}).get("filename")}
             payload["strategy"] = self.strategy_payload(fuel)
@@ -973,6 +1015,9 @@ class DashboardSource:
                     fuel_history=self.fuel_per_lap,race_plan=payload["racePlanVNext"],
                     session_time=session_time)
                 payload["raceDashboard"]["practicePreview"]=session_coach_mode=="practice"
+                if session_coach_mode=="practice":
+                    payload["practiceRacePlan"]=self.practice_race_preview(
+                        fuel,lap_number,completed_for_strategy,on_pit_road,average_lap)
                 payload["raceDashboard"]["recoveredFromJournal"]=self._recovery_provenance
             payload["enduranceStrategy"]=self.endurance_strategy_payload(fuel,lap_number,completed_for_strategy,average_lap,session_time,driver_info,player_driver.get("UserName","Piloto"))
             in_front=min((r for r in relative if r.get('gapSeconds') is not None and r['gapSeconds']>0),key=lambda r:r['gapSeconds'],default=None)
@@ -1105,6 +1150,78 @@ class DashboardSource:
         except (ValueError,TypeError,OverflowError,ZeroDivisionError):
             logger.exception('RACE PLAN VNEXT FAILED carIdx=%s',car_idx)
             return {'available':False,'reason':'Error en Race Plan vNext.'}
+
+    def practice_race_preview(self, fuel, lap, completed, on_pit, pace):
+        """Race Plan *ENSAYO* using real Practice laps, explicit user horizon.
+
+        Reuses the existing stop_plan.race_plan and current local lap filtering.
+        Never uses the official Practice SessionTimeRemain as simulated race time.
+        """
+        clean=[r for r in self.lap_history if isinstance(r,dict)
+               and r.get("valid") and not r.get("caution") and not r.get("onPitRoad")
+               and 0 < (number(r.get("fuelUse")) or 0) < 30]
+        samples=[r["fuelUse"] for r in clean[-8:]]
+        observed=sum(samples)/len(samples) if len(samples)>=2 else None
+        current=number(fuel);current_lap=max(0,int(lap or 0))
+        estimate=(current/observed) if current is not None and observed else None
+        base={"available":False,"practicePreview":True,"mode":"ENSAYO",
+              "source":"PRACTICE_LOCAL_LAP_HISTORY","currentFuelLiters":current,
+              "fuelModel":{"observed_lpl":observed,"green_samples":len(samples),
+                           "last_lpl":samples[-1] if samples else None,
+                           "source":"REAL_LOCAL_CLEAN_LAPS"},
+              "autonomyLaps":round(estimate,2) if estimate is not None else None,
+              "raceState":{"current_lap":current_lap,"completed_laps":completed,
+                           "on_pit_road":bool(on_pit)},
+              "currentPlan":{"available":False,"window":{},
+                             "stops":[],"source":"PRACTICE_TRIAL"},
+              "reason":"SIN CONSUMO COMPARABLE" if observed is None else
+                       "DEFINE OBJETIVO EN AJUSTES" if not self.practice_race_configured
+                       else "OBJETIVO O TANQUE SIN DATOS"}
+        if not self.practice_race_configured or observed is None or current is None:
+            return base
+        horizon=number(self.strategy_settings.get("manualRaceSeconds"))
+        tank=number(self.strategy_settings.get("tankCapacityLiters"))
+        if tank is None:
+            driver_info=self.get("DriverInfo") or {}
+            tank=number(driver_info.get("DriverCarFuelMaxLtr")) if isinstance(driver_info,dict) else None
+        chosen_pace=number(self.strategy_settings.get("averageLapSeconds")) or number(pace)
+        if tank is None or tank<=0 or chosen_pace is None or chosen_pace<=0 or not horizon:
+            return base
+        strategy=race_plan(remaining_seconds=horizon,current_lap=current_lap,
+                           lap_seconds=chosen_pace,
+                           pit_seconds=self.strategy_settings.get("pitLossSeconds",30),
+                           current_fuel=current,consumption=observed,tank=tank,
+                           base_stint_laps=self.strategy_settings.get("baseStintLaps"),
+                           extended_stint_laps=self.strategy_settings.get("extendedStintLaps"),
+                           stint_start_lap=self.strategy_stint_start_lap)
+        if not strategy.get("available"):
+            return base
+        stops=strategy.get("stops") or []
+        next_stop=stops[0] if stops else None
+        if not next_stop:
+            return {**base,"available":True,"reason":"ENSAYO SIN PARADAS NECESARIAS",
+                    "currentPlan":{"available":True,"minimum_stops":0,"stops":[],
+                                   "window":{},"source":"PRACTICE_TRIAL"}}
+        target=int(next_stop["lap"])
+        # User target is bounded by fuel available: no unobserved refuel.
+        usable_laps=max(0,math.floor(current/observed)-1)
+        fuel_limit=current_lap+usable_laps
+        goal=min(target,fuel_limit)
+        remaining=max(0,goal-current_lap)
+        state="BOX THIS LAP" if remaining<=0 else "BOX NEXT LAP" if remaining==1 else "WINDOW OPEN" if remaining<=2 else "PLAN STABLE"
+        if on_pit:state="IN PIT ROAD"
+        earliest=max(current_lap,goal-2)
+        return {**base,"available":True,"reason":None,
+                "currentPlan":{"available":True,"minimum_stops":len(stops),
+                    "source":"PRACTICE_TRIAL","stops":[{"lap":goal,
+                    "fuel_to_add_liters":next_stop.get("liters"),
+                    "driver":next_stop.get("driver")}],
+                    "window":{"state":state,"target":goal,
+                              "earliest_safe":earliest,"fuel_limit":fuel_limit}},
+                "fuelModel":{**base["fuelModel"],
+                            "strategy_lpl":number(self.strategy_settings.get("consumptionLiters"))},
+                "raceState":{**base["raceState"],"require_tire_change":False},
+                "configuredHorizonSeconds":horizon}
 
     def team_diagnostics(self,context):
         idx=context.car_idx
@@ -1328,6 +1445,7 @@ class DashboardSource:
             return None
 
     def reset_session_tracking(self):
+        self._session_generation = uuid4().hex
         self.session_state.last_valid_payload=None
         self._sdk_units=None
         self.last_strategy_log_signature=None
@@ -1561,8 +1679,8 @@ class DashboardSource:
         elif sectors and len(sectors)!=len(self._sector_boundaries()):
             sectors=[]
         prior_best=self.personal_session_best
-        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid")),"caution":bool(pending.get("caution")),"sessionTime":number(self.get("SessionTime")),"driverName":self.local_driver_name,"source":"SDK_OBSERVED"})
-        self.lap_history=self.lap_history[-10:]
+        self.lap_history.append({"lap":pending["lap"],"time":completed,"sectors":sectors,"priorBest":prior_best,"fuelUse":usage,"valid":bool(pending.get("valid")),"caution":bool(pending.get("caution")),"onPitRoad":bool(pending.get("onPitRoad")),"sessionTime":number(self.get("SessionTime")),"driverName":self.local_driver_name,"source":"SDK_OBSERVED"})
+        self.lap_history=self.lap_history[-1200:]  # complete long stint, bounded memory
         for index,value in enumerate(sectors if pending.get("valid") else []):
             while index>=len(self.best_sectors):self.best_sectors.append(None)
             if self.best_sectors[index] is None or value<self.best_sectors[index]:self.best_sectors[index]=value
@@ -1613,6 +1731,7 @@ class DashboardSource:
 
     def apply_strategy_settings(self,values):
         if not isinstance(values,dict):return
+        self.practice_race_configured=values.get("practiceRaceConfigured") is True
         numeric={"baseStintLaps":int,"extendedStintLaps":int,"pitLossSeconds":float,"manualRaceSeconds":float,"averageLapSeconds":float,"consumptionLiters":float,"tankCapacityLiters":float};reset_target=False
         for key,cast in numeric.items():
             if key not in values:continue

@@ -4,9 +4,10 @@ let timingMode = localStorage.getItem('zre-timing-mode') === 'standing' ? 'stand
 let rolePreference=['driver','spotter'].includes(localStorage.getItem('zre-role'))?localStorage.getItem('zre-role'):'auto',activeRole='driver';
 let driverViewPreference='auto';
 // This chooses only a visual workspace; the official SDK SessionType is immutable.
-let screenChoice='auto',screenSessionIdentity=null;
+const SCREEN_OPTIONS=['auto','practice','quali','race','pit','summary','spotter'];
+let screenChoice=(()=>{try{const saved=localStorage.getItem('zre-screen-choice-v2');return SCREEN_OPTIONS.includes(saved)?saved:'auto'}catch(_){return'auto'}})(),screenSessionIdentity=null;
 const renderCache = new Map(), query = new URLSearchParams(location.search);
-const forcedView=query.get('view'),debugEnabled=query.get('debug')==='1';const defaultStrategyConfig={baseStintLaps:37,extendedStintLaps:38,pitLossSeconds:30,manualRaceSeconds:36000,averageLapSeconds:null,consumptionLiters:null,tankCapacityLiters:null,driverNames:['Santiago','David','Herney'],driverAssignments:{}};let strategyConfig=(()=>{try{return {...defaultStrategyConfig,...JSON.parse(localStorage.getItem('zre-strategy-config')||'{}')}}catch(_){return {...defaultStrategyConfig}}})();
+const forcedView=query.get('view'),debugEnabled=query.get('debug')==='1';const defaultStrategyConfig={baseStintLaps:37,extendedStintLaps:38,pitLossSeconds:30,manualRaceSeconds:36000,averageLapSeconds:null,consumptionLiters:null,tankCapacityLiters:null,driverNames:['Santiago','David','Herney'],driverAssignments:{},practiceRaceConfigured:false};let strategyConfig=(()=>{try{return {...defaultStrategyConfig,...JSON.parse(localStorage.getItem('zre-strategy-config')||'{}')}}catch(_){return {...defaultStrategyConfig}}})();
 
 function setText(id,value){const el=$(id);if(!el)return;const next=value??'—';if(el.textContent!==String(next))el.textContent=next;}
 function rowsSignature(rows){return JSON.stringify(rows||[]);}
@@ -24,38 +25,42 @@ function timingRows(target,rows,full=false){
  }));
 }
 function paceRows(target,rows){rows=(rows||[]).slice().reverse();const signature=rowsSignature(rows);if(renderCache.get(target)===signature)return;renderCache.set(target,signature);$(target).replaceChildren(...rows.map(row=>{const el=document.createElement('div');el.className='pace-row';[row.lap,row.time,row.delta,row.consumption].forEach(value=>{const cell=document.createElement('span');cell.textContent=value??'—';el.append(cell);});return el;}));}
-function sessionScreenAvailability(data){
- const mode=sessionWorkspaceMode(data),connected=Boolean(data?.connected),driver=activeRole!=='spotter';
- return {practice:connected&&driver&&Boolean(data?.practiceAnalytics),quali:connected&&driver&&(mode==='practice'||mode==='qualifying'),race:connected&&driver&&Boolean(data?.raceDashboard)};
+// Navigation is never an SDK command. Availability controls *data quality*, not access.
+function sessionScreenAvailability(_data){
+ return {practice:true,quali:true,race:true,pit:true,summary:true,spotter:true};
 }
 function reconcileScreenChoice(data){
  const incoming=data?.qualifying?.officialSessionIdentity;
- if(incoming!=null&&String(incoming)!==''){
-  const identity=String(incoming);
-  if(screenSessionIdentity!==null&&screenSessionIdentity!==identity)screenChoice='auto';
-  screenSessionIdentity=identity;
- }
- const allowed=sessionScreenAvailability(data);
- if(screenChoice!=='auto'&&!allowed[screenChoice])screenChoice='auto';
+ if(incoming!=null&&String(incoming)!=='')screenSessionIdentity=String(incoming);
+ if(!SCREEN_OPTIONS.includes(screenChoice))screenChoice='auto';
 }
 function syncScreenMenu(data,view){
  const control=$('screen-mode-control'),select=$('screen-mode-select'),context=$('screen-mode-context');
  if(!select||!control)return;
- control.hidden=activeRole==='spotter';
- const allowed=sessionScreenAvailability(data);
- for(const option of select.options)if(option.value!=='auto')option.disabled=!allowed[option.value];
- select.value=screenChoice;
+ control.hidden=false;
+ for(const option of select.options)option.disabled=false;
+ if(select.value!==screenChoice)select.value=screenChoice;
  const mode=sessionWorkspaceMode(data),label=mode==='race'?'CARRERA':mode==='qualifying'?'QUALI':'PRÁCTICA';
+ const selected=screenChoice==='auto'?'AUTO':({practice:'PRÁCTICA',quali:'QUALI',race:'CARRERA',pit:'GARAGE',summary:'RESUMEN',spotter:'SPOTTER'}[screenChoice]||screenChoice.toUpperCase());
+ const matches=screenChoice==='auto'||(screenChoice==='practice'&&mode==='practice')||(screenChoice==='quali'&&(mode==='qualifying'||data?.qualifying?.qualifyingMode==='simulated'))||(screenChoice==='race'&&mode==='race')||screenChoice==='pit'||screenChoice==='summary'||(screenChoice==='spotter'&&activeRole==='spotter');
+ const rolePreview=activeRole==='spotter'&&screenChoice!=='spotter'&&screenChoice!=='auto';
+ const displayOnly=screenChoice!=='auto'&&(!matches||rolePreview);
+ const state=!data?.connected?' · SDK SIN CONEXIÓN':displayOnly?' · SOLO CONSULTA':'';
  const simulation=mode==='practice'&&data?.qualifying?.qualifyingMode==='simulated';
- const consulting=screenChoice==='practice'&&mode!=='practice';
- const status='iRacing: '+label+(simulation?' · SIMULACIÓN QUALI ACTIVA':'')+(consulting?' · SOLO CONSULTA':'');
+ const status='iRacing: '+label+' · VISTA: '+selected+(simulation?' · SIMULACIÓN QUALI ACTIVA':'')+state;
  if(context){context.textContent=status;context.title=status;}
- select.setAttribute('aria-label','Pantalla visual ZRE; sesión iRacing: '+label);
+ select.setAttribute('aria-label','Elegir cualquier pantalla visual sin cambiar la sesión de iRacing. '+status);
+ document.body.dataset.visualConsultation=displayOnly?'true':'false';
 }
-function desiredView(data){if(driverViewPreference==='admin'||window.ZREScreenAdmin?.isCustom(driverViewPreference))return driverViewPreference;if(activeRole==='spotter')return'spotter';
+function desiredView(data){if(driverViewPreference==='admin'||window.ZREScreenAdmin?.isCustom(driverViewPreference))return driverViewPreference;
+ if(screenChoice==='spotter')return'spotter';
+ if(screenChoice==='pit')return'pit';
+ if(screenChoice==='summary')return'summary';
  if(screenChoice==='practice')return'live';
  if(screenChoice==='quali')return data?.qualifying?.inGarage?'quali-garage':'quali';
- if(screenChoice==='race')return'race-v2';if(data?.connected&&data?.qualifying?.qualifyingMode)return driverViewPreference==='pit'||(driverViewPreference==='auto'&&data.qualifying.inGarage)?'quali-garage':'quali';if((data?.connected||data?.raceDashboard)&&data?.raceDashboard&&sessionWorkspaceMode(data)==='race'){
+ if(screenChoice==='race')return'race-v2';
+ if(activeRole==='spotter')return'spotter';
+ if(data?.connected&&data?.qualifying?.qualifyingMode)return driverViewPreference==='pit'||(driverViewPreference==='auto'&&data.qualifying.inGarage)?'quali-garage':'quali';if((data?.connected||data?.raceDashboard)&&data?.raceDashboard&&sessionWorkspaceMode(data)==='race'){
  const preference=['live','pit','summary'].includes(driverViewPreference)?driverViewPreference:
    ['live','pit','summary'].includes(forcedView)?forcedView:'auto';
  if(preference==='pit'||preference==='summary')return preference;
@@ -64,7 +69,7 @@ function desiredView(data){if(driverViewPreference==='admin'||window.ZREScreenAd
  const pit=data.self?.pit;
  return pit&&pit!=='EN PISTA'?'pit':'race-v2';
 }if(['live','pit','summary'].includes(driverViewPreference))return driverViewPreference;if(['live','pit','summary'].includes(forcedView))return forcedView;if(data.sessionSummary?.active)return'summary';const pit=data.self?.pit;return pit&&pit!=='EN PISTA'?'pit':'live';}
-function switchView(view){if(activeView===view)return;window.ZREScreenAdmin?.leaveView(activeView);activeView=view;document.body.dataset.view=view;document.body.classList.toggle('race-v2-session',view==='race-v2');if($('race-v2-view'))$('race-v2-view').hidden=view!=='race-v2';document.body.classList.toggle('quali-session',view==='quali'||view==='quali-garage');document.body.classList.toggle('practice-session',view==='live'&&document.body.classList.contains('practice-session'));if($('quali-view'))$('quali-view').hidden=!['quali','quali-garage'].includes(view);$('live-view').hidden=view!=='live';$('pit-view').hidden=view!=='pit';$('summary-view').hidden=view!=='summary';$('spotter-view').hidden=view!=='spotter';window.ZREScreenAdmin?.enterView(view);const managed=window.ZREScreenAdmin?.screenLabel(view);setText('view-badge',managed||(view==='race-v2'?'CARRERA':view==='spotter'?'SPOTTER':view==='live'?'PISTA':(view==='pit'?'PIT / GARAGE':'RESUMEN')));}
+function switchView(view){if(activeView===view)return;window.ZREScreenAdmin?.leaveView(activeView);activeView=view;document.body.dataset.view=view;document.body.classList.toggle('race-v2-session',view==='race-v2');if($('race-v2-view'))$('race-v2-view').hidden=view!=='race-v2';document.body.classList.toggle('quali-session',view==='quali'||view==='quali-garage');document.body.classList.toggle('practice-session',view==='live'&&document.body.classList.contains('practice-session'));if($('quali-view'))$('quali-view').hidden=!['quali','quali-garage'].includes(view);$('live-view').hidden=view!=='live';$('pit-view').hidden=view!=='pit';$('summary-view').hidden=view!=='summary';$('spotter-view').hidden=view!=='spotter';window.ZREScreenAdmin?.enterView(view);const managed=window.ZREScreenAdmin?.screenLabel(view);setText('view-badge',managed||(view==='race-v2'?'CARRERA':view==='spotter'?'SPOTTER':view==='quali'?'QUALI':view==='quali-garage'?'QUALI / GARAGE':view==='live'?'PRÁCTICA':view==='pit'?'PIT / GARAGE':'RESUMEN'));}
 function renderHeader(data){
  const identity=data.buildIdentity;
  if(identity){setText('runtime-build-status',`${identity.mode} BUILD · v${identity.runtimeVersion} · ${String(identity.sourceCommit||'').slice(0,8)}`);}
@@ -124,7 +129,13 @@ function renderSpotterRacePlan(data,legacyPlan){
 function renderSpotter(data){
  const team=data.teamContext||{},strategy=data.enduranceStrategy||{},rival=data.raceDirector||{},legacyPlan=data.racePlan||strategy.stopPlan||{},vnext=data.racePlanVNext||{},newPlan=vnext.currentPlan||vnext.plan;
  const fields={'spotter-car':team.carNumber?'#'+team.carNumber:data.header?.car,'spotter-driver':'Piloto: '+(team.driver||'AUTO · no confirmado')+(team.driverSource==='MANUAL'?' · MANUAL':''),'spotter-position':data.header?.position,'spotter-lap':data.header?.lap,'spotter-time':team.remainingTime,'spotter-fuel':data.self?.fuel,'spotter-autonomy':newPlan?.current_autonomy_laps==null?(legacyPlan.autonomyLaps==null?'—':legacyPlan.autonomyLaps+' vueltas · EST.'):newPlan.current_autonomy_laps+' vueltas','spotter-next-stop':newPlan?.window?.target!=null?'VUELTA '+newPlan.window.target:legacyPlan.stops?.length?'VUELTA '+legacyPlan.stops[0].lap:'—','spotter-stops':newPlan?.minimum_stops??legacyPlan.stopsRemaining??'—','spotter-rival-name':rival.rival,'spotter-rival-pos':rival.position,'spotter-rival-gap':rival.gap,'spotter-rival-last':rival.lastLap,'spotter-rival-lap':rival.lap,'spotter-rival-pit':rival.pit};Object.entries(fields).forEach(([id,value])=>setText(id,value));
- $('spotter-identity-warning').hidden=team.carIdx!=null;setText('spotter-control-status',team.controlError||(team.fuelState||'NO DISPONIBLE')+' · '+(team.manualEvents?.length||0)+' eventos');
+ const operational=activeRole==='spotter'&&Boolean(data.connected)&&team.carIdx!=null;
+ document.querySelectorAll('.spotter-controls button,.spotter-controls input,.spotter-controls select').forEach(node=>node.disabled=!operational);
+ for(const id of ['team-car-select','team-driver-input','spotter-rival-select','spotter-rival-auto']){
+   const element=$(id);if(element)element.disabled=activeRole!=='spotter'||!data.connected;
+ }
+ const controlStatus=!operational?'SOLO CONSULTA · selecciona el rol SPOTTER y confirma el coche para operar':team.controlError||(team.fuelState||'NO DISPONIBLE')+' · '+(team.manualEvents?.length||0)+' eventos';
+ $('spotter-identity-warning').hidden=team.carIdx!=null;setText('spotter-control-status',controlStatus);
  timingRows('spotter-relative-rows',data.relative||[]);timingRows('spotter-standing-rows',data.standing||[]);timingRows('spotter-standing-all',data.standingAll||data.standing||[],true);setText('spotter-relative-count','· '+(data.relativeAvailableCars??0)+' coches con posición disponible');
  if(!data.relative?.length)setText('spotter-relative-rows','NO DISPONIBLE · sin posición dinámica del coche');if(!data.standing?.length)setText('spotter-standing-rows','NO DISPONIBLE · revisa COCHE DEL EQUIPO');
  renderSpotterRacePlan(data,legacyPlan);
@@ -164,7 +175,7 @@ function renderPilotRacePlan(data){const vnext=data.racePlanVNext||{},plan=vnext
 }
 function saveStrategyConfig(){localStorage.setItem('zre-strategy-config',JSON.stringify(strategyConfig));sendSetting('strategy',strategyConfig);renderCache.delete('strategy-timeline');renderCache.delete('spotter-timeline')}
 function positiveInput(id){const raw=$(id)?.value;const n=raw==null||raw.trim()===''?null:Number(raw);return n!=null&&Number.isFinite(n)&&n>0?n:null}
-function readStrategyInputs(){const num=(id,f=0)=>{const v=Number($(id)?.value);return Number.isFinite(v)?v:f};strategyConfig.baseStintLaps=Math.max(1,Math.round(num('strategy-base-input',37)));strategyConfig.extendedStintLaps=Math.max(strategyConfig.baseStintLaps,Math.round(num('strategy-extended-input',38)));strategyConfig.pitLossSeconds=Math.max(0,num('strategy-pit-loss-input',30));strategyConfig.manualRaceSeconds=Math.max(0,num('strategy-race-hours-input',10)*3600);strategyConfig.averageLapSeconds=Math.max(0,num('strategy-lap-input',0));strategyConfig.consumptionLiters=positiveInput('strategy-consumption-input');strategyConfig.tankCapacityLiters=positiveInput('strategy-tank-input');strategyConfig.driverNames=String($('strategy-drivers-input')?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,6);saveStrategyConfig()}
+function readStrategyInputs(){strategyConfig.practiceRaceConfigured=true;const num=(id,f=0)=>{const v=Number($(id)?.value);return Number.isFinite(v)?v:f};strategyConfig.baseStintLaps=Math.max(1,Math.round(num('strategy-base-input',37)));strategyConfig.extendedStintLaps=Math.max(strategyConfig.baseStintLaps,Math.round(num('strategy-extended-input',38)));strategyConfig.pitLossSeconds=Math.max(0,num('strategy-pit-loss-input',30));strategyConfig.manualRaceSeconds=Math.max(0,num('strategy-race-hours-input',10)*3600);strategyConfig.averageLapSeconds=Math.max(0,num('strategy-lap-input',0));strategyConfig.consumptionLiters=positiveInput('strategy-consumption-input');strategyConfig.tankCapacityLiters=positiveInput('strategy-tank-input');strategyConfig.driverNames=String($('strategy-drivers-input')?.value||'').split(',').map(v=>v.trim()).filter(Boolean).slice(0,6);saveStrategyConfig()}
 function cycleStintDriver(number,current){const names=strategyConfig.driverNames||[];if(!names.length)return;const index=names.indexOf(current),next=names[(index+1)%names.length];strategyConfig.driverAssignments={...(strategyConfig.driverAssignments||{}),[String(number)]:next};saveStrategyConfig();if(latestData?.enduranceStrategy)renderStrategyTimeline(latestData.enduranceStrategy)}
 
 function sessionWorkspaceMode(data){
@@ -275,26 +286,28 @@ function render(data){setText('capture-status',data.captureStatus);latestData=da
 if(activeRole==='spotter'||['quali','quali-garage'].includes(view)){$('lap-flash').hidden=true;document.body.classList.remove('practice-session');}else renderLapFlash(data);renderDebug(data);window.ZREKPI?.render(data.kpiLibrary);if(view==='admin'){/* Preserve the editor draft across telemetry updates. */}else if(window.ZREScreenAdmin?.isCustom(view)){renderLive(data);renderPit(data);renderSummary(data);renderSpotter(data);window.ZREScreenAdmin?.renderCustom(view);}else if(view==='quali'||view==='quali-garage'){window.ZREQuali?.render(data,{garage:view==='quali-garage'});renderSetupEngineer(data);}else if(view==='race-v2'){window.ZRERaceV2?.render(data);renderSetupEngineer(data);if($('race-plan-dialog')?.open)renderSpotterRacePlan(data,data.racePlan||data.enduranceStrategy?.stopPlan||{});}else if(view==='live')renderLive(data);else if(view==='pit')renderPit(data);else if(view==='summary')renderSummary(data);else renderSpotter(data);if(['live','pit','summary','spotter'].includes(view))window.ZREScreenAdmin?.applyBuiltIn(view);setText('notice',data.demo?`Modo demostración · vista ${window.ZREScreenAdmin?.screenLabel(view)||view.toUpperCase()}`:(data.connected?'Telemetría de iRacing en directo':'iRacing no detectado · último estado válido conservado'));}
 
 $('screen-mode-select')?.addEventListener('change',event=>{
- const next=event.target.value,allowed=sessionScreenAvailability(latestData);
- if(next!=='auto'&&!allowed[next]){event.target.value=screenChoice;return;}
- // Quali simulation is an existing backend authority; visual navigation never ends a run.
- if(next==='quali'&&sessionWorkspaceMode(latestData)==='practice'&&latestData?.qualifying?.qualifyingMode!=='simulated'){
-  if(socket?.readyState!==WebSocket.OPEN){event.target.value=screenChoice;setText('notice','Sin conexión para activar Quali simulada');return;}
-  socket.send(JSON.stringify({type:'action',action:'quali_mode',value:'simulate'}));
- }
- screenChoice=next;driverViewPreference='auto';$('driver-view-select').value='auto';
+ const next=event.target.value;
+ if(!SCREEN_OPTIONS.includes(next)){event.target.value=screenChoice;return;}
+ // Selecting a visual screen never starts Quali, changes SDK role, or mutates session data.
+ screenChoice=next;driverViewPreference='auto';
+ try{localStorage.setItem('zre-screen-choice-v2',screenChoice)}catch(_){}
+ if($('driver-view-select'))$('driver-view-select').value='auto';
  if(latestData)render(latestData);
 });
-$('driver-view-select').addEventListener('change',event=>{screenChoice='auto';driverViewPreference=event.target.value;if(latestData)render(latestData);});$('capture-sdk').addEventListener('click',()=>{if(socket?.readyState===WebSocket.OPEN){setText('capture-status','Capturando una lectura…');socket.send(JSON.stringify({type:'action',action:'capture_sdk'}));}else setText('capture-status','Captura fallida: ZRE desconectado');});$('team-debug-toggle').addEventListener('click',()=>{teamDebugOpen=!teamDebugOpen;$('team-debug-toggle').setAttribute('aria-pressed',String(teamDebugOpen));sendSetting('teamDebug',debugEnabled||teamDebugOpen);if(latestData)renderDebug(latestData);else $('debug-panel').hidden=!teamDebugOpen;});$('role-select').value=rolePreference;$('role-select').addEventListener('change',event=>{rolePreference=event.target.value;localStorage.setItem('zre-role',rolePreference);sendSetting('role',rolePreference);if(latestData)render(latestData);});$('demo-role-select').addEventListener('change',event=>sendSetting('demoRole',event.target.value));$('team-car-select').addEventListener('change',event=>{localStorage.setItem('zre-team-car',event.target.value);const number=event.target.selectedOptions[0]?.dataset.number||'';localStorage.setItem('zre-team-car-number',number);sendSetting('teamCar',event.target.value);sendSetting('teamCarNumber',number);});$('spotter-rival-select').addEventListener('change',event=>sendSetting('rival',event.target.value));
-$('spotter-rival-auto')?.addEventListener('click',()=>{sendSetting('rival','auto');if($('spotter-rival-select'))$('spotter-rival-select').value='auto';setText('spotter-rival-mode','AUTO');});
+$('driver-view-select').addEventListener('change',event=>{screenChoice='auto';driverViewPreference=event.target.value;try{localStorage.setItem('zre-screen-choice-v2','auto')}catch(_){}if(latestData)render(latestData);});$('capture-sdk').addEventListener('click',()=>{if(socket?.readyState===WebSocket.OPEN){setText('capture-status','Capturando una lectura…');socket.send(JSON.stringify({type:'action',action:'capture_sdk'}));}else setText('capture-status','Captura fallida: ZRE desconectado');});$('team-debug-toggle').addEventListener('click',()=>{teamDebugOpen=!teamDebugOpen;$('team-debug-toggle').setAttribute('aria-pressed',String(teamDebugOpen));sendSetting('teamDebug',debugEnabled||teamDebugOpen);if(latestData)renderDebug(latestData);else $('debug-panel').hidden=!teamDebugOpen;});$('role-select').value=rolePreference;$('role-select').addEventListener('change',event=>{rolePreference=event.target.value;localStorage.setItem('zre-role',rolePreference);sendSetting('role',rolePreference);if(latestData)render(latestData);});$('demo-role-select').addEventListener('change',event=>sendSetting('demoRole',event.target.value));$('team-car-select').addEventListener('change',event=>{localStorage.setItem('zre-team-car',event.target.value);const number=event.target.selectedOptions[0]?.dataset.number||'';localStorage.setItem('zre-team-car-number',number);sendSetting('teamCar',event.target.value);sendSetting('teamCarNumber',number);});$('spotter-rival-select').addEventListener('change',event=>sendSetting('rival',event.target.value));
+$('spotter-rival-auto')?.addEventListener('click',()=>{if(activeRole!=='spotter')return;sendSetting('rival','auto');if($('spotter-rival-select'))$('spotter-rival-select').value='auto';setText('spotter-rival-mode','AUTO');});
 $('spotter-race-plan-expand')?.addEventListener('click',()=>{$('race-plan-dialog')?.showModal();if(latestData)renderSpotterRacePlan(latestData,latestData.racePlan||latestData.enduranceStrategy?.stopPlan||{});});
 $('race-plan-sim-now')?.addEventListener('click',()=>{if(socket?.readyState!==WebSocket.OPEN){setText('race-plan-sim-result','Sin conexión con ZRE');return;}const raw=$('race-plan-sim-lap')?.value,lap=raw&&Number.isFinite(Number(raw))?Number(raw):null;setText('race-plan-sim-result','Simulando…');socket.send(JSON.stringify({type:'action',action:'race_plan_simulate',lap}));});
 $('spotter-rival-filter')?.addEventListener('input',()=>refreshSpotterRivalOptions(latestData?.raceDirector||{}));$('team-driver-input').addEventListener('change',event=>sendSetting('teamDriver',event.target.value));const timingSelect=$('timing-mode');if(timingSelect)timingSelect.value=timingMode;timingSelect?.addEventListener('change',e=>{timingMode=e.target.value==='standing'?'standing':'relative';localStorage.setItem('zre-timing-mode',timingMode);renderCache.delete('timing-rows');if(latestData&&activeView==='live')renderLive(latestData);});$('rival-select')?.addEventListener('change',e=>sendSetting('rival',e.target.value));['strategy-base-input','strategy-extended-input','strategy-pit-loss-input','strategy-race-hours-input','strategy-lap-input','strategy-consumption-input','strategy-tank-input','strategy-drivers-input'].forEach(id=>$(id)?.addEventListener('change',readStrategyInputs));strategyInputValue('strategy-base-input',strategyConfig.baseStintLaps);strategyInputValue('strategy-extended-input',strategyConfig.extendedStintLaps);strategyInputValue('strategy-pit-loss-input',strategyConfig.pitLossSeconds);strategyInputValue('strategy-race-hours-input',(strategyConfig.manualRaceSeconds||36000)/3600);strategyInputValue('strategy-lap-input',strategyConfig.averageLapSeconds||0);strategyInputValue('strategy-consumption-input',strategyConfig.consumptionLiters>0?strategyConfig.consumptionLiters:null);strategyInputValue('strategy-tank-input',strategyConfig.tankCapacityLiters>0?strategyConfig.tankCapacityLiters:null);if($('strategy-drivers-input'))$('strategy-drivers-input').value=(strategyConfig.driverNames||[]).join(', ');
-function sendSpotterEvent(action){const event={type:'spotterEvent',action,id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,driver:$('spotter-driver-select').value,liters:$('spotter-added-liters').value};if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(event));else setText('spotter-control-status','Sin conexión con el servidor');}
+function sendSpotterEvent(action){if(activeRole!=='spotter'||!latestData?.connected||latestData?.teamContext?.carIdx==null){setText('spotter-control-status','SOLO CONSULTA · selecciona SPOTTER y un coche confirmado');return;}const event={type:'spotterEvent',action,id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,driver:$('spotter-driver-select').value,liters:$('spotter-added-liters').value};if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(event));else setText('spotter-control-status','Sin conexión con el servidor');}
 document.querySelectorAll('[data-spotter-action]').forEach(button=>button.addEventListener('click',()=>sendSpotterEvent(button.dataset.spotterAction)));$('spotter-fuel-submit').addEventListener('click',()=>sendSpotterEvent($('spotter-fuel-action').value));
 $('spotter-tank-input').value=strategyConfig.tankCapacityLiters||'';$('spotter-consumption-input').value=strategyConfig.consumptionLiters||'';['spotter-tank-input','spotter-consumption-input'].forEach(id=>$(id).addEventListener('change',()=>{strategyConfig.tankCapacityLiters=positiveInput('spotter-tank-input');strategyConfig.consumptionLiters=positiveInput('spotter-consumption-input');saveStrategyConfig();}));
 function sendSetting(key,value){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'settings',key,value}));}
-$('reference-select')?.addEventListener('change',e=>sendSetting('reference',e.target.value));const audioSelect=$('audio-select');localStorage.removeItem('iracing-audio-mode');$('audio-test')?.addEventListener('click',()=>{if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'action',action:'audio_test'}));});
+$('reference-select')?.addEventListener('change',e=>sendSetting('reference',e.target.value));const audioSelect=$('audio-select');localStorage.removeItem('iracing-audio-mode');$('audio-test')?.addEventListener('click',()=>{
+ if(socket?.readyState!==WebSocket.OPEN){setText('notice','PROBAR VOZ: sin conexión con ZRE');return;}
+ if(latestData?.qualifying?.qualifyingMode||sessionWorkspaceMode(latestData)==='qualifying'){setText('notice','PROBAR VOZ: Coach silenciado durante Quali');return;}
+ socket.send(JSON.stringify({type:'action',action:'audio_test'}));setText('notice','Prueba de audio solicitada');
+});
 $('setup-engineer-open')?.addEventListener('click',()=>{$('setup-engineer-dialog')?.showModal();});
 $('setup-feedback-save')?.addEventListener('click',()=>{if(socket?.readyState!==WebSocket.OPEN){setText('setup-engineer-status','Sin conexión con ZRE');return;}setText('setup-engineer-status','Guardando feedback…');socket.send(JSON.stringify({type:'action',action:'setup_feedback',entry:$('setup-feedback-entry')?.value||null,mid:$('setup-feedback-mid')?.value||null,exit:$('setup-feedback-exit')?.value||null,comment:$('setup-feedback-comment')?.value||''}));});
 $('setup-report-export')?.addEventListener('click',()=>{if(socket?.readyState!==WebSocket.OPEN){setText('setup-engineer-status','Sin conexión con ZRE');return;}setText('setup-engineer-status','Generando reporte…');socket.send(JSON.stringify({type:'action',action:'export_setup_report'}));});
@@ -309,7 +322,8 @@ $('quali-new-run')?.addEventListener('click',()=>{
   if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:'action',action:'quali_mode',value:'new_run'}));
   else setText('notice','Sin conexión para abrir otra tanda');
 });
-window.ZREScreenAdmin?.init({onNavigate:view=>{screenChoice='auto';driverViewPreference=view;if(latestData)render(latestData);else switchView(view);}});
+// The archived screen builder has no active navigation authority.
+window.ZREScreenAdmin?.init({onNavigate:view=>{screenChoice='auto';driverViewPreference=view;try{localStorage.setItem('zre-screen-choice-v2','auto')}catch(_){}if(latestData)render(latestData);else switchView(view);}});
 let webBuildReloading=false,buildCheckPending=false,reconnectTimer=null;
 async function checkInstalledWebBuild(){if(webBuildReloading||buildCheckPending)return;buildCheckPending=true;try{const response=await fetch(`/version?fresh=${Date.now()}`,{cache:'no-store'});if(!response.ok)return;const status=await response.json();const pageBuild=document.querySelector('meta[name="zre-build"]')?.content;const installed=status.installedVersion;if(installed&&pageBuild&&installed!==pageBuild&&sessionStorage.getItem('zre-reload-attempt')!==installed){sessionStorage.setItem('zre-reload-attempt',installed);webBuildReloading=true;location.replace(`/?v=${encodeURIComponent(installed)}&fresh=${Date.now()}`);}else if(installed===pageBuild){sessionStorage.removeItem('zre-reload-attempt');}}catch(_){}finally{buildCheckPending=false;}}
 function connect(){if(webBuildReloading||socket&&[WebSocket.CONNECTING,WebSocket.OPEN].includes(socket.readyState))return;const ws=new WebSocket(`ws://${location.host}/ws`);socket=ws;ws.onopen=()=>{if(socket===ws){sendSetting('audio','auto');sendSetting('strategy',strategyConfig);sendSetting('role',rolePreference);sendSetting('teamDebug',debugEnabled||teamDebugOpen);sendSetting('teamCar',localStorage.getItem('zre-team-car')||'auto');sendSetting('teamCarNumber',localStorage.getItem('zre-team-car-number')||'');sendSetting('demoRole',$('demo-role-select').value);}};ws.onmessage=event=>{if(socket===ws){const packet=JSON.parse(event.data);const expected=query.get('instance');if(expected&&packet.buildIdentity?.instanceId!==expected){setText('notice','Otra instancia está respondiendo. Cierra este navegador y abre el launcher correcto.');ws.close();return;}render(packet);}};ws.onclose=()=>{if(socket!==ws||webBuildReloading)return;socket=null;if(reconnectTimer===null)reconnectTimer=setTimeout(()=>{reconnectTimer=null;connect();},2000);};}connect();checkInstalledWebBuild();setInterval(checkInstalledWebBuild,5000);

@@ -54,7 +54,30 @@ with tempfile.TemporaryFile(mode="w+") as log:
    pr=packet(practice(12),"Practice","P-101")
    feed(pr)
    assert page.locator("#practice-workspace").is_visible()
+   # Acceptance: actual 32- and 70-point graphs in Chromium. Mean excludes
+   # flagged invalid/pit laps; ±1.000s axis must be mathematically exact.
+   for count in (32,70):
+    laps=[{"lap":i,"seconds":round(85.2+(i%3-1)*.20,3),
+           "valid":True,"comparable":True,"caution":False,
+           "onPitRoad":False,"source":"SDK_OBSERVED"} for i in range(1,count+1)]
+    laps[5].update(seconds=91.9,valid=False,comparable=False,onPitRoad=True)
+    laps[17].update(seconds=83.0,valid=False,comparable=False,caution=True)
+    pr["practiceAnalytics"]["laps"]=laps
+    feed(pr)
+    page.locator("#pr-pace-scale").select_option("focus")
+    expected=sum(x["seconds"] for x in laps if x["comparable"])/(count-2)
+    actual=page.locator("#pr-pace-svg").evaluate("""node=>({
+      average:Number(node.dataset.averageSeconds),
+      min:Number(node.dataset.yMin),max:Number(node.dataset.yMax),
+      laps:Number(node.dataset.laps),points:node.querySelectorAll('#pr-pace-dots>*').length})""")
+    assert actual["laps"]==count and actual["points"]==count,actual
+    assert abs(actual["average"]-expected)<=.001,actual
+    assert abs(actual["min"]-(expected-1))<=.001,actual
+    assert abs(actual["max"]-(expected+1))<=.001,actual
+    page.screenshot(path=str(OUT/f"practice-full-{count}-laps.png"))
    page.locator("#screen-mode-select").select_option("quali")
+   assert not page.evaluate("window.__messages.some(m=>m.action==='quali_mode'&&m.value==='simulate')")
+   page.locator("#quali-mode-select").select_option("simulate")
    assert page.evaluate("window.__messages.some(m=>m.action==='quali_mode'&&m.value==='simulate')")
    q=quali(12)
    sim=packet(q,"Practice","P-101",{**q["qualifying"],"officialSessionIdentity":"P-101"})
@@ -74,21 +97,46 @@ with tempfile.TemporaryFile(mode="w+") as log:
    feed(sim)
    page.locator("#screen-mode-select").select_option("race")
    assert page.locator("#race-v2-view").is_visible()
-   assert "PRÁCTICA" in page.locator("#rv2-plan-status").inner_text()
-   assert page.locator("#rv2-alert").inner_text()=="ENSAYO"
+   assert "ENSAYO" in page.locator("#rv2-plan-status").inner_text()
+   assert "ENSAYO" in page.locator("#rv2-alert").inner_text()
+   assert "PLAN NO DISPONIBLE" in page.locator("#rv2-plan-status").inner_text()
+   # Real local lap consumption + explicitly configured preview plan remain
+   # independent of official RacePlanVNext from race fixture.
+   sim["practiceRacePlan"]={
+      "available":True,"practicePreview":True,"reason":None,
+      "fuelModel":{"observed_lpl":3.18,"green_samples":4,"source":"REAL_LOCAL"},
+      "raceState":{"current_lap":10,"completed_laps":9,"on_pit_road":False},
+      "currentPlan":{"available":True,"minimum_stops":1,
+                     "stops":[{"lap":11,"fuel_to_add_liters":92.0}],
+                     "window":{"state":"BOX NEXT LAP","target":11,
+                               "earliest_safe":10,"fuel_limit":12}}}
+   sim["raceDashboard"]["fuel"]={**sim["raceDashboard"]["fuel"],
+                                    "currentLiters":8.0,"observedLpl":3.18,
+                                    "autonomyLaps":2.52,"sampleCount":4}
+   feed(sim)
+   assert "BOX" in page.locator("#rv2-alert").inner_text()
+   assert "ENSAYO" in page.locator("#rv2-alert").inner_text()
+   assert "PRÓXIMA VUELTA" in page.locator("#rv2-plan-status").inner_text()
+   assert page.locator("#rv2-consumption").inner_text().strip()!="—"
+   assert page.locator("#rv2-box-countdown").inner_text().strip()=="1 VUELTA"
+   sim["practiceRacePlan"]["currentPlan"]["window"]["state"]="BOX THIS LAP"
+   sim["practiceRacePlan"]["currentPlan"]["window"]["target"]=10
+   feed(sim)
+   assert "BOX ESTA VUELTA" in page.locator("#rv2-plan-status").inner_text()
    page.locator("#screen-mode-select").select_option("quali")
    assert page.locator("#q-kind").inner_text()=="SIMULADA"
 
    official=quali(20,True)
    qa=packet(official,"Qualify","Q-102",{**official["qualifying"],"officialSessionIdentity":"Q-102"})
    feed(qa)
-   assert page.locator("#screen-mode-select").input_value()=="auto"
+   assert page.locator("#screen-mode-select").input_value()=="quali"  # user visual choice persists
    assert page.locator("#q-kind").inner_text()=="OFICIAL"
    assert page.locator("#q-best").inner_text()!="—"
    assert page.locator("#q-last").inner_text()!="—"
    # No braking/setup technique advice exposed in Quali time-only Coach.
    assert "Retrasa 5 metros" not in page.locator("#q-priorities").inner_text()
    assert page.locator("#q-delta").inner_text()!=""
+   page.locator("#screen-mode-select").select_option("auto")
    rc=packet(test_race,"Race","R-103")
    feed(rc)
    assert page.locator("#race-v2-view").is_visible()
@@ -114,20 +162,22 @@ with tempfile.TemporaryFile(mode="w+") as log:
     assert dims["scrollWidth"]<=dims["viewport"]+3,dims
     assert dims["scrollHeight"]<=dims["height"]+3,dims
     page.screenshot(path=str(OUT/f"race-{width}.png"))
-   # Existing Builder administration, with actual local storage management API.
-   admin=page.locator('[data-zre-view="admin"]')
-   if admin.count() and admin.is_visible():
-    admin.click()
-    assert page.locator("#admin-view").is_visible()
-    page.locator("#archive-refresh").click()
-    page.wait_for_function("document.getElementById('archive-retention-days').value!==''")
-    archive=page.evaluate("""async()=>await(await fetch('/api/session-archive')).json()""")
-    assert archive["retentionDays"]>=1
-    assert "sizeBytes" in archive and "sessions" in archive
-    page.screenshot(path=str(OUT/"admin-storage.png"))
+   # History management remains accessible without restoring the archived builder.
+   assert page.locator("#archive-open").is_visible()
+   page.locator("#archive-open").click()
+   assert page.locator("#zre-archive-dialog").is_visible()
+   page.locator("#archive-refresh").click()
+   page.wait_for_function("document.getElementById('archive-retention-days').value!==''")
+   archive=page.evaluate("""async()=>await(await fetch('/api/session-archive')).json()""")
+   assert archive["retentionDays"]>=1
+   assert "sizeBytes" in archive and "sessions" in archive
+   page.screenshot(path=str(OUT/"session-archive.png"))
+   page.locator("#zre-archive-dialog .zre-archive-dialog-head button").click()
+   assert not page.locator("#zre-archive-dialog").is_visible()
+   assert page.evaluate("getComputedStyle(document.body).backgroundColor")=="rgb(0, 0, 0)"
    assert not errors,errors
    browser.close()
-   print("PASS 2.6.7: simulated Practice → Quali → same run → Carrera preview, official Quali,")
+   print("PASS 2.6.7.1: unrestricted screen selection + explicit Quali action + Carrera,")
    print("  full Race → compact self/rival → all → zoom/resolution 1366/1920/2560 and storage API.")
  finally:
   proc.terminate();proc.wait(timeout=5)
