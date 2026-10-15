@@ -88,6 +88,17 @@ def main():
                         file=ROOT/"diagnostics"/"visual-lab-screenshots"/(screen+"-"+str(w)+"x"+str(h)+".png")
                         file.parent.mkdir(parents=True,exist_ok=True)
                         page.screenshot(path=str(file),full_page=True)
+                # Browser 110% zoom: same product panels stay accessible.
+                page.set_viewport_size({"width":1366,"height":768})
+                page.locator("#lab-resolution").select_option("1366x768")
+                frame.locator("body").evaluate("(el)=>{el.style.zoom='1.1'}")
+                for screen,name,required in [("practice","practice-32","#pr-pace-svg"),
+                                             ("quali","quali-attempts","#q-attempt-count"),
+                                             ("race","race-endurance","#rv2-plan-card"),
+                                             ("spotter","spotter-team","#spotter-car")]:
+                    scenario(screen,name,required)
+                    image=ROOT/"diagnostics"/"visual-lab-screenshots"/(screen+"-1366x768-110pct.png")
+                    page.screenshot(path=str(image),full_page=True)
                 assert not sockets and not mutations
                 print("VISUAL LAB BROWSER PASS:",len(names),"scenarios, seven screens, 3 sizes, no WebSocket/POST; screenshots in diagnostics/visual-lab-screenshots")
                 browser.close()

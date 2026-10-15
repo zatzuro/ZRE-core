@@ -24,6 +24,8 @@ concurrency:
 
 jobs:
   verify-build-publish:
+    outputs:
+      pages_enabled: ${{ steps.pages.outputs.enabled }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -102,6 +104,18 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/visual-lab
-      - name: Deploy GitHub Pages (not Windows, not main)
-        if: success() && steps.pages.outputs.enabled == 'true'
+
+  deploy-native-pages:
+    if: needs.verify-build-publish.outputs.pages_enabled == 'true'
+    needs: verify-build-publish
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy static LAB artifact to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
