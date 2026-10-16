@@ -14,6 +14,7 @@ on:
       - 'release-2.6.6.1'
       - 'release-2.6.7'
       - 'release-2.6.7.1'
+      - 'release-2.6.7.2'
       - 'release-2.6.4'
       - 'release-2.6.3'
   pull_request:
@@ -62,11 +63,11 @@ jobs:
           node tests/frontend_practice_2671.cjs
 
       - name: Server and WebSocket demo smoke
-        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || startsWith(github.head_ref, 'develop/2.6.6') || startsWith(github.head_ref, 'develop/2.6.7') || (github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1'))
+        if: contains(github.ref, '2.6.4') || contains(github.ref, '2.6.5') || startsWith(github.head_ref, 'develop/2.6.6') || startsWith(github.head_ref, 'develop/2.6.7') || (github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1' || github.ref == 'refs/heads/release-2.6.7.2'))
         run: python diagnostics/smoke_264.py
 
   practice-visual:
-    if: github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1') || github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.head_ref == 'develop/2.6.7-functionality-storage-quali-race' || github.head_ref == 'develop/2.6.7.1-navigation-controls-black-theme' || github.head_ref == 'develop/2.6.7.1-functional-p0-tire-integrity' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1'))
+    if: github.ref == 'refs/heads/release-2.6.6' || github.ref == 'refs/heads/release-2.6.6.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1' || github.ref == 'refs/heads/release-2.6.7.2') || github.event_name == 'pull_request' && (github.head_ref == 'develop/2.6.6-practice' || github.head_ref == 'develop/2.6.6-quali' || github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.head_ref == 'develop/2.6.7-functionality-storage-quali-race' || github.head_ref == 'develop/2.6.7.1-navigation-controls-black-theme' || github.head_ref == 'develop/2.6.7.1-functional-p0-tire-integrity' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1' || github.ref == 'refs/heads/release-2.6.7.2'))
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -101,7 +102,7 @@ jobs:
           path: diagnostics/quali-screenshots/
           if-no-files-found: warn
       - name: Archive Carrera V2 screenshots
-        if: always() && (github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.head_ref == 'develop/2.6.7-functionality-storage-quali-race' || github.head_ref == 'develop/2.6.7.1-navigation-controls-black-theme' || github.head_ref == 'develop/2.6.7.1-functional-p0-tire-integrity' || github.ref == 'refs/heads/release-2.6.6.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1'))
+        if: always() && (github.head_ref == 'develop/2.6.6-race-v2' || github.head_ref == 'develop/2.6.6.1-screen-menu' || github.head_ref == 'develop/2.6.7-functionality-storage-quali-race' || github.head_ref == 'develop/2.6.7.1-navigation-controls-black-theme' || github.head_ref == 'develop/2.6.7.1-functional-p0-tire-integrity' || github.ref == 'refs/heads/release-2.6.6.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1' || github.ref == 'refs/heads/release-2.6.7.2'))
         uses: actions/upload-artifact@v4
         with:
           name: race-v2-266-chromium-screenshots
@@ -113,7 +114,7 @@ jobs:
           if-no-files-found: warn
 
   windows-test-install:
-    if: github.ref == 'refs/heads/develop/2.6.5.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1')
+    if: github.ref == 'refs/heads/develop/2.6.5.1' || (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1' || github.ref == 'refs/heads/release-2.6.7.2')
     needs: validate
     runs-on: windows-2022
     timeout-minutes: 12
@@ -138,17 +139,19 @@ jobs:
         if: github.ref == 'refs/heads/develop/2.6.5.1'
         run: python diagnostics/windows_test_build_2651.py
       - name: Windows ZRE 2.6.7 recovery and runtime smoke
-        if: (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1')
+        if: (github.ref == 'refs/heads/release-2.6.7' || github.ref == 'refs/heads/release-2.6.7.1' || github.ref == 'refs/heads/release-2.6.7.2')
         shell: powershell
         run: |
           python -m unittest discover -s tests -p 'test_session_*267.py' -v
           if ($LASTEXITCODE -ne 0) { throw 'Windows session storage/recovery regression failed' }
           python -m unittest discover -s tests -p 'test_tire*2671.py' -v
           if ($LASTEXITCODE -ne 0) { throw 'Windows tire integrity regression failed' }
+          python -m unittest discover -s tests -p 'test_setup_ownership.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Windows setup ownership regression failed' }
           python diagnostics/smoke_264.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows runtime smoke failed' }
           $manifest = Get-Content -LiteralPath 'version.json' -Raw | ConvertFrom-Json
-          $expectedVersion = if ($env:GITHUB_REF -eq 'refs/heads/release-2.6.7.1') { '2.6.7.1' } else { '2.6.7' }
+          $expectedVersion = if ($env:GITHUB_REF -eq 'refs/heads/release-2.6.7.2') { '2.6.7.2' } elseif ($env:GITHUB_REF -eq 'refs/heads/release-2.6.7.1') { '2.6.7.1' } else { '2.6.7' }
           if ($manifest.version -ne $expectedVersion -or
               $manifest.archive_ref -ne ('release-' + $expectedVersion) -or
               $manifest.channel -ne 'stable') {
@@ -331,3 +334,33 @@ jobs:
             exit 0
           fi
           gh release create v2.6.7.1 --target "$GITHUB_SHA" --title "ZRE Core 2.6.7.1" --notes-file diagnostics/QA-2.6.7.1.md --latest
+
+  release-2672:
+    if: github.ref == 'refs/heads/release-2.6.7.2'
+    needs: [validate, practice-visual, windows-test-install]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Publish ZRE Core 2.6.7.2 for first real iRacing field test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c 'import json; m=json.load(open("version.json")); assert m["version"]=="2.6.7.2" and m["archive_ref"]=="release-2.6.7.2" and m["channel"]=="stable"'
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          # Activate the stable manifest only after every required job passed.
+          # The candidate must be a direct child of the approved integrated main.
+          parent_sha=$(git rev-parse HEAD^)
+          if [ "$main_sha" != "$GITHUB_SHA" ]; then
+            test "$main_sha" = "$parent_sha"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" -f sha="$GITHUB_SHA" -F force=false
+          fi
+          if gh release view v2.6.7.2 >/dev/null 2>&1; then
+            tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v2.6.7.2" --jq '.object.sha')
+            test "$tag_sha" = "$GITHUB_SHA"
+            exit 0
+          fi
+          gh release create v2.6.7.2 --target "$GITHUB_SHA" --title "ZRE Core 2.6.7.2" --notes-file diagnostics/QA-2.6.7.2.md --latest
