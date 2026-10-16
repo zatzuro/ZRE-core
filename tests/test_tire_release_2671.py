@@ -96,7 +96,7 @@ class TireRelease2671(unittest.TestCase):
         p=self.root/'atomic.json';StintStore._write_json(p,{'original':1})
         with patch.object(Path,'replace',side_effect=OSError('disk failure')):
             with self.assertRaises(OSError):StintStore._write_json(p,{'new':2})
-        self.assertEqual(json.loads(p.read_text()), {'original':1})
+        self.assertEqual(json.loads(p.read_text(encoding="utf-8")), {'original':1})
 
     def test_P1_14_partial_fields_never_zero_fill(self):
         self.finish();partial={'TiresAero':{'LeftFront':garage(True)['TiresAero']['LeftFront']}}
@@ -136,10 +136,10 @@ class TireRelease2671(unittest.TestCase):
 
     def test_P1_19_markdown_atomic_and_honest(self):
         self.finish();record=self.observed();p=self.engine.last_report_path
-        report=p.read_text();self.assertIn('UNVERIFIED',report);self.assertIn('NO COMPARABLE',report)
+        report=p.read_text(encoding="utf-8");self.assertIn('UNVERIFIED',report);self.assertIn('NO COMPARABLE',report)
         with patch.object(Path,'replace',side_effect=OSError('disk failure')):
             with self.assertRaises(OSError):write_setup_report(p,record)
-        self.assertEqual(p.read_text(),report)
+        self.assertEqual(p.read_text(encoding="utf-8"),report)
         legacy=copy.deepcopy(record);legacy['tires']['inspection']={'status':'CONFIRMED'}
         self.assertIn('LEGACY_CONFIRMED_UNVERIFIED',render_setup_report(legacy))
 
@@ -156,5 +156,5 @@ class TireRelease2671(unittest.TestCase):
         self.assertEqual(record['tires']['inspection']['status'],'OBSERVED')
         self.assertIsNone(self.engine.last_report_path)
         self.assertIsNone(self.observed(clock=2903))
-        self.assertIn('OBSERVED',self.engine.last_report_path.read_text())
+        self.assertIn('OBSERVED',self.engine.last_report_path.read_text(encoding="utf-8"))
         self.assertEqual(len(self.engine.store.load_stints(SESSION['car'],SESSION['track'],SESSION['layout'])),1)
