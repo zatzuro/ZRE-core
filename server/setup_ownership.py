@@ -25,9 +25,27 @@ def resolve_setup_owner(context, driver_info, player_idx):
     drivers = [d for d in (info.get("Drivers") or []) if isinstance(d, dict)]
     cars = {valid_index(d.get("CarIdx")): d for d in drivers
             if not d.get("IsSpectator") and valid_index(d.get("CarIdx")) is not None}
+    # CarSetup always belongs to the LOCAL SDK car. A manual rival or team
+    # selection belongs to timing/spotter views and must not override this
+    # identity when DriverUserID and the PlayerCarIdx roster independently
+    # identify the same local account.
     idx = valid_index(getattr(context, "car_idx", None))
     local_user = getattr(context, "local_user_id", None)
-    if idx is None or local_user in (None, "", 0):
+    if local_user in (None, "", 0):
+        return SetupOwner(reason="Sin coche e identidad local confirmados")
+    player_car_idx = valid_index(player_idx)
+    player_car = cars.get(player_car_idx)
+    sdk_local_user = info.get("DriverUserID")
+    if (player_car is not None
+            and sdk_local_user not in (None, "", 0)
+            and str(sdk_local_user) == str(local_user)
+            and player_car.get("UserID") not in (None, "", 0)
+            and str(player_car["UserID"]) == str(local_user)):
+        player_team = player_car.get("TeamID")
+        player_team_key = str(player_team) if player_team not in (None, "", 0) else None
+        return SetupOwner(True, "own", player_car_idx, player_team_key,
+                          str(local_user), "Piloto local confirmado por SDK")
+    if idx is None:
         return SetupOwner(reason="Sin coche e identidad local confirmados")
     selected = cars.get(idx)
     if not selected or selected.get("UserID") in (None, "", 0):
