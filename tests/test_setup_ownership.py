@@ -34,6 +34,61 @@ class OwnershipTests(unittest.TestCase):
         self.assertTrue(owner.authorized)
         self.assertEqual(owner.scope,"own")
 
+    def test_manual_rival_selection_preserves_verified_local_setup(self):
+        # A timing selector may target a rival, but CarSetup remains the
+        # locally verified player car. Do not confuse context.car_idx with
+        # PlayerCarIdx for ownership.
+        info={"DriverUserID":10,"Drivers":[
+            {"CarIdx":8,"UserID":10,"TeamID":99,"CarNumber":"18"},
+            {"CarIdx":9,"UserID":20,"TeamID":44,"CarNumber":"23"}]}
+        own=resolve_setup_owner(context(),info,8).payload()
+        rival_view=context(car_idx=9,current_user_id=20,team_id=44,local_driving=False)
+        selected=resolve_setup_owner(rival_view,info,8).payload()
+        self.assertTrue(selected["authorized"])
+        self.assertEqual(selected["scope"],"own")
+        self.assertEqual(selected["car_idx"],8)
+        self.assertEqual(selected["driver_user_id"],"10")
+        self.assertEqual(selected["team_id"],"99")
+        self.assertTrue(same_confirmed_owner(own,selected))
+
+    def test_manual_rival_never_grants_access_without_independent_sdk_identity(self):
+        info={"DriverUserID":10,"Drivers":[
+            {"CarIdx":8,"UserID":10,"TeamID":99},
+            {"CarIdx":9,"UserID":20,"TeamID":44}]}
+        rival_view=context(car_idx=9,current_user_id=20,team_id=44,local_driving=False)
+        for modified in (
+            {**info,"DriverUserID":None},
+            {**info,"DriverUserID":20},
+            {**info,"Drivers":[{"CarIdx":8,"UserID":21,"TeamID":99},
+                                {"CarIdx":9,"UserID":20,"TeamID":44}]},
+        ):
+            with self.subTest(modified=modified):
+                self.assertFalse(resolve_setup_owner(rival_view,modified,8).authorized)
+        self.assertFalse(resolve_setup_owner(context(car_idx=9,current_user_id=20,
+                             local_user_id=21,team_id=44),info,8).authorized)
+        # The setup owner is never the viewed opponent.
+        self.assertFalse(resolve_setup_owner(rival_view,info,9).authorized)
+
+    def test_manual_rival_selection_keeps_own_saved_stint_feedback_writable(self):
+        info={"DriverUserID":10,"Drivers":[
+            {"CarIdx":8,"UserID":10,"TeamID":99},
+            {"CarIdx":9,"UserID":20,"TeamID":44}]}
+        local_owner=resolve_setup_owner(context(),info,8).payload()
+        rival_selected=resolve_setup_owner(context(car_idx=9,current_user_id=20,team_id=44),
+                                           info,8).payload()
+        with tempfile.TemporaryDirectory() as root:
+            engineer=SetupEngineer(root)
+            engineer.set_owner(local_owner,{"car":"McLaren","track":"Indianapolis","layout":"Road"})
+            engineer.start_stint({"car":"McLaren","track":"Indianapolis","layout":"Road",
+                                  "driver":"Local"}, snapshot_from_sdk({"RearWing":8.5}))
+            saved=engineer.finish_stint({"validLaps":2,"bestLap":84.8})
+            self.assertIsNotNone(saved)
+            engineer.set_owner(rival_selected,{"car":"McLaren","track":"Indianapolis","layout":"Road"})
+            edited=engineer.update_feedback(saved,"NEUTRO","SUBVIRA","NEUTRO","Quali.")
+            self.assertIsNotNone(edited)
+            self.assertEqual(edited["driverFeedback"]["comment"],"Quali.")
+            self.assertTrue(engineer.last_report_path.exists())
+
     def test_forced_driver_does_not_authorize_rival(self):
         owner=resolve_setup_owner(context(local_driving=False),roster(selected_id=40,selected_team=44),8)
         self.assertFalse(owner.authorized)
