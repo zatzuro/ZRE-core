@@ -1,0 +1,101 @@
+name: ZRE Visual Lab - gated GitHub Pages publisher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zre-visual-lab-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zre-visual-lab-pages-publication
+  cancel-in-progress: false
+
+jobs:
+  verify-static:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable, browser-tested public static snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: '2bfba2f5b7551083d88a8932f4fcb125afa2cd79'
+          persist-credentials: false
+      - name: Validate approved SHA and static-only content
+        env:
+          EXPECTED_SHA: '8fde34c8ba259ef9aa7b36bcc3ffb31c061240b0'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib, shutil
+          root = pathlib.Path('.')
+          m = json.loads((root / 'lab_manifest.json').read_text(encoding='utf-8'))
+          assert m == {
+              'branch': 'develop/visual-lab-web',
+              'sha': os.environ['EXPECTED_SHA'],
+              'version': '2.6.7.1',
+              'simulated': True,
+          }, m
+          assert 'ZRE VISUAL LAB' in (root / 'dashboard.html').read_text(encoding='utf-8')
+          assert 'new WebSocket' not in (root / 'static/app.js').read_text(encoding='utf-8')
+          assert not list(root.rglob('*.sqlite')) and not list(root.rglob('*.jsonl'))
+          assert (root / '.nojekyll').is_file()
+          out = root / 'public'
+          out.mkdir(exist_ok=False)
+          for name in ('index.html', 'dashboard.html', 'lab_manifest.json',
+                       'lab_shell.css', 'lab_shell.js', 'robots.txt', '.nojekyll'):
+              shutil.copy2(root / name, out / name)
+          shutil.copytree(root / 'static', out / 'static')
+          print('PASS: approved version, immutable snapshot, static-only, no user data')
+          PY
+          for file in public/*.js public/static/*.js; do node --check "$file"; done
+      - name: Upload approved public Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: verify-static
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy approved artifact from default branch
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  smoke-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_SHA: '8fde34c8ba259ef9aa7b36bcc3ffb31c061240b0'
+    steps:
+      - name: Verify live web content and approved manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://zatzuro.github.io/ZRE-core"
+          for attempt in $(seq 1 12); do
+            if curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "$url/lab_manifest.json?run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$attempt" -o /tmp/zre-manifest.json && \
+               curl -fsSL --max-time 15 "$url/" -o /tmp/zre-index.html && \
+               curl -fsSL --max-time 15 "$url/dashboard.html" -o /tmp/zre-dashboard.html && \
+               python -c 'import os,json,pathlib; a=json.loads(pathlib.Path("/tmp/zre-manifest.json").read_text()); assert a["sha"]==os.environ["EXPECTED_SHA"] and a["simulated"] and a["version"]=="2.6.7.1"; assert "lab-frame" in pathlib.Path("/tmp/zre-index.html").read_text(); assert "ZRE VISUAL LAB" in pathlib.Path("/tmp/zre-dashboard.html").read_text()'; then
+              echo "LIVE VERIFIED: $url/ SHA=$EXPECTED_SHA"
+              exit 0
+            fi
+            echo "Pages propagation pending (attempt $attempt/12)"
+            sleep 5
+          done
+          echo 'Live smoke failed: site unavailable or SHA mismatch' >&2
+          exit 1
