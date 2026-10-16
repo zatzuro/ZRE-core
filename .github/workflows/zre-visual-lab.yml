@@ -1,4 +1,4 @@
-name: ZRE Visual Lab · QA and static-only publish
+name: ZRE Visual Lab · QA and stage static files
 
 on:
   push:
@@ -15,8 +15,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: zre-visual-lab-publish
@@ -24,8 +22,6 @@ concurrency:
 
 jobs:
   verify-build-publish:
-    outputs:
-      pages_enabled: ${{ steps.pages.outputs.enabled }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -53,32 +49,8 @@ jobs:
           path: diagnostics/visual-lab-screenshots/
           if-no-files-found: ignore
           retention-days: 7
-      - name: Enable authorized public GitHub Pages for Visual Lab
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Product Owner authorized production publication; public static only.
-          if gh api "repos/$GITHUB_REPOSITORY/pages" >/dev/null 2>&1; then
-            gh api --method PUT "repos/$GITHUB_REPOSITORY/pages" -f build_type=workflow || echo "Pages settings require repository-owner permissions."
-          else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/pages" -f build_type=workflow || echo "Pages enablement requires repository-owner permissions."
-          fi
-      - name: Detect Pages source without enabling or changing repository settings
-        id: pages
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh api "repos/$GITHUB_REPOSITORY/pages" --jq '.build_type' > /tmp/zre-pages-source 2>/dev/null; then
-            if [ "$(cat /tmp/zre-pages-source)" = 'workflow' ]; then
-              echo "enabled=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "enabled=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Stage static assets in gh-pages until repository Pages is enabled
-        if: success() && github.ref == 'refs/heads/develop/visual-lab-web' && steps.pages.outputs.enabled != 'true'
+      - name: Stage QA-approved static assets in gh-pages (no Pages deployment)
+        if: success() && github.ref == 'refs/heads/develop/visual-lab-web'
         env:
           SOURCE_SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
@@ -108,24 +80,3 @@ jobs:
             git push -q origin HEAD:gh-pages
           fi
           echo "Only public synthetic assets were published; main and Windows release untouched."
-
-      - name: Upload public static site to native GitHub Pages
-        if: success() && steps.pages.outputs.enabled == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist/visual-lab
-
-  deploy-native-pages:
-    if: needs.verify-build-publish.outputs.pages_enabled == 'true'
-    needs: verify-build-publish
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy static LAB artifact to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
