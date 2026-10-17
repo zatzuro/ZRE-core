@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
@@ -124,7 +125,15 @@ def main():
                     send(x){window.__zreSent.push(JSON.parse(x))}
                     close(){this.readyState=3}
                   };""")
-                page.goto(f"http://127.0.0.1:{p}/",wait_until="domcontentloaded",timeout=30000)
+                # Wait for the real aiohttp demo socket before testing layout; no test is skipped.
+                for attempt in range(50):
+                    try:
+                        page.goto(f"http://127.0.0.1:{p}/",wait_until="domcontentloaded",timeout=30000)
+                        break
+                    except Exception:
+                        time.sleep(.1)
+                else:
+                    raise RuntimeError("Demo server was not ready for Chromium")
                 page.wait_for_function("Boolean(window.ZRERaceV2)")
                 errors=[]
                 page.on("pageerror",lambda err:errors.append(str(err)))
