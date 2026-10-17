@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/static/race_v2.css?v=2.6.7.2">
   <link rel="stylesheet" href="/static/kpi_library.css?v=2.6.7.2">
   <link rel="stylesheet" href="/static/black_theme.css?v=2.6.7.2">
+  <link rel="stylesheet" href="/static/lap_history.css?v=2.6.7.2">
 </head>
 <body data-view="live">
 <main class="dashboard">
@@ -40,6 +41,7 @@
         <option value="pit">GARAGE</option>
         <option value="summary">RESUMEN</option>
         <option value="spotter">SPOTTER</option>
+        <option value="lap-history">HISTORIAL DE VUELTAS</option>
       </select>
       <span id="screen-mode-context" role="status" aria-live="polite">ESPERANDO SESIÓN iRacing</span>
     </div>
@@ -199,6 +201,39 @@
       </article>
       <article class="q-panel"><header><strong>COACH · TODAS LAS CURVAS</strong><small>DATOS OBSERVADOS / INFERIDOS</small></header><div id="q-garage-curves"></div></article>
     </section>
+  </section>
+  <section id="lap-history-view" class="screen" hidden aria-label="Historial comparativo de vueltas">
+    <header class="lh-top">
+      <div><p>ZRE · CARRERA / SPOTTER</p><h1>HISTORIAL DE VUELTAS</h1><p id="lh-status">Esperando telemetría del SDK.</p></div>
+      <div class="lh-actions">
+        <label for="lh-rival">RIVAL <select id="lh-rival" aria-label="Seleccionar coche rival"><option value="auto">RIVAL ESTRATÉGICO / AUTO</option></select></label>
+        <label for="lh-filter">VUELTAS <select id="lh-filter"><option value="all">TODAS</option><option value="normal">NORMALES</option></select></label>
+      </div>
+    </header>
+    <div class="lh-kpis" aria-label="Indicadores de comparación con el rival">
+      <div class="lh-kpi"><small>Δ RITMO · ÚLTIMAS 5</small><strong id="lh-kpi-five">—</strong><em>Positivo = equipo más rápido</em></div>
+      <div class="lh-kpi"><small>Δ RITMO · ÚLTIMAS 10</small><strong id="lh-kpi-ten">—</strong><em>Solo vueltas normales</em></div>
+      <div class="lh-kpi"><small>Δ MEJOR VUELTA</small><strong id="lh-kpi-best">—</strong><em>Equipo contra rival</em></div>
+      <div class="lh-kpi"><small>CONSISTENCIA · EQUIPO / RIVAL</small><strong id="lh-kpi-consistency">—</strong><em>Desviación estándar · 10 v</em></div>
+      <div class="lh-kpi"><small>VUELTAS · EQUIPO / RIVAL</small><strong id="lh-kpi-laps">—</strong><em>Completadas y registradas</em></div>
+      <div class="lh-kpi"><small>ENTRADAS A BOX · EQ / RIVAL</small><strong id="lh-kpi-pits">—</strong><em>Solo eventos observados</em></div>
+      <div class="lh-kpi"><small>Δ ÚLTIMAS 5 COMPARABLES</small><strong id="lh-kpi-trend">—</strong><em>Igual número de vuelta · normal</em></div>
+      <div class="lh-kpi"><small>REMAINING · EQUIPO</small><strong id="lh-kpi-fuel">—</strong><em>Revisar fuente en la tabla</em></div>
+    </div>
+    <form id="lh-manual-form" class="lh-fuel-form">
+      <strong>CALIBRAR FUEL REMAINING</strong>
+      <label>Vuelta real <input id="lh-manual-lap" type="number" min="1" step="1" required></label>
+      <label>Litros al paso por meta <input id="lh-manual-fuel" type="number" min="0" max="300" step="0.1" required placeholder="Ej.: 34.5"></label>
+      <button type="submit">GUARDAR LECTURA</button>
+      <span id="lh-edit-status" role="status" aria-live="polite">Selecciona una vuelta real para corregirla.</span>
+    </form>
+    <div class="lh-table-shell" role="region" aria-label="Una tabla comparativa de vueltas" tabindex="0">
+      <table id="lh-table"><thead>
+        <tr><th rowspan="2" scope="col">VUELTA</th><th colspan="6" scope="colgroup">NUESTRO EQUIPO · REAL / PROYECTADO</th><th colspan="4" scope="colgroup">EQUIPO RIVAL · REAL</th><th rowspan="2" scope="col">Δ VUELTA</th></tr>
+        <tr><th>NO. AUTO</th><th>PILOTO</th><th>TIEMPO</th><th>REMAINING</th><th>CONSUMO PROM.</th><th>TIPO VUELTA</th><th>NO. AUTO</th><th>PILOTO</th><th>TIEMPO</th><th>TIPO VUELTA</th></tr>
+      </thead><tbody id="lh-rows"></tbody></table>
+    </div>
+    <footer class="lh-footer"><span id="lh-row-count">SIN DATOS</span><span>VERDE = VENTAJA EQUIPO · ROJO = VENTAJA RIVAL · ≈ = ESTIMACIÓN · NO ES GAP FÍSICO</span></footer>
   </section>
   <section id="race-v2-view" class="screen race-v2-view" hidden aria-label="ZRE Carrera V2">
     <div class="rv2-kpis" aria-label="Indicadores críticos durante carrera">
@@ -411,6 +446,7 @@
 <script src="/static/practice.js?v=2.6.7.2"></script>
  <script src="/static/quali.js?v=2.6.7.2"></script>
  <script src="/static/race_v2.js?v=2.6.7.2"></script>
+ <script src="/static/lap_history.js?v=2.6.7.2"></script>
 <script src="/static/kpi_library.js?v=2.6.7.2"></script>
 <script src="/static/session_archive.js?v=2.6.7.2"></script>
 <script src="/static/app.js?v=2.6.7.2"></script>
