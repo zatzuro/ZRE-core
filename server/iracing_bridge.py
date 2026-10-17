@@ -36,7 +36,7 @@ try:
     from server.race_dashboard import race_view
     from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from server.race_state import RaceIdentity
-    from server.lap_database import LapDatabase
+    from server.lap_database import LapDatabase, UnavailableLapDatabase
     from server.team_context import TeamCarContext
     from server.team_timing import relative_position,relative_window,estimated_team_fuel
     from server.spotter_control import SpotterControl
@@ -57,7 +57,7 @@ except ModuleNotFoundError:
     from race_dashboard import race_view
     from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from race_state import RaceIdentity
-    from lap_database import LapDatabase
+    from lap_database import LapDatabase, UnavailableLapDatabase
     from team_context import TeamCarContext
     from team_timing import relative_position,relative_window,estimated_team_fuel
     from spotter_control import SpotterControl
@@ -312,7 +312,11 @@ class DashboardSource:
         self.race_plan_audio_state=None
         self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
-        self.lap_database = LapDatabase(ROOT)
+        try:
+            self.lap_database = LapDatabase(ROOT)
+        except (OSError, sqlite3.Error):
+            logger.exception('LAP_DATABASE_STARTUP_UNAVAILABLE')
+            self.lap_database = UnavailableLapDatabase()
         self.lap_database_error = None
         self.quali = QualiRuns(self.recorder)
         self.last_strategy_log_signature=None
@@ -435,9 +439,16 @@ class DashboardSource:
                 self._sdk_link_state=True
                 try:
                     key=self.session_key
-                    race_key='|'.join(str(x) for x in (
-                        key.subsession_id if key.subsession_id not in (None,'') else key.session_id,
-                        key.track_id,key.session_num)) if key else None
+                    # Fail closed without official session/track identity:
+                    # otherwise separate offline sessions would all share "None|None|0".
+                    race_key=None
+                    if (key and number(key.track_id) is not None
+                            and number(key.track_id)>0
+                            and (number(key.subsession_id) or number(key.session_id))
+                            and isinstance(key.session_num,int) and key.session_num>=0):
+                        race_key='|'.join(str(x) for x in (
+                            key.subsession_id if number(key.subsession_id) else key.session_id,
+                            key.track_id,key.session_num))
                     index=self.team_car_idx
                     director=payload.get('raceDirector') or {}
                     selected=(payload.get('raceDashboard') or {}).get('rival') or {}
@@ -2023,6 +2034,7 @@ async def close_session_journal(app):
     source.finalize_setup_stint_before_reset("shutdown")
     source.quali.close_session("shutdown")
     await asyncio.to_thread(source.recorder.close)
+    await asyncio.to_thread(source.lap_database.close)
 
 async def version_status(request):
     from zre_build import identity
@@ -2081,6 +2093,8 @@ async def websocket(request):
                                     'source':'MANUAL_REPORTED'})
                         except (ValueError,TypeError,OverflowError):
                             source.lap_database_error='Lectura de combustible inválida'
+                        except (OSError,sqlite3.Error):
+                            source.lap_database_error='No se pudo guardar combustible · disco no disponible'
                     elif setting.get('type')=='stopOverride':
                         source.spotter_event_error=source.apply_stop_override(setting)
                     elif setting.get("type")=="settings" and setting.get("key")=="teamDriver":
