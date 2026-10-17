@@ -88,6 +88,18 @@ class TeamCarContext:
             # A cold spectator session has no prior local driving snapshot. Two SDK
             # pointers agree on an entered race car; expose this as provisional.
             selected, source = observed, 'sdk-car-provisional'
+        # During a team driver handoff the SDK roster can temporarily omit
+        # the team car while the existing car-index counters keep advancing.
+        # Preserve *car identity* (not a claimed driver or track position) so
+        # spotter timing can continue from the stable team car index.
+        if (selected is None and last_team_id not in (None, '', 0)
+                and last_car_number not in (None, '')):
+            previous_idx = valid_index(last_team_idx)
+            if previous_idx is not None and previous_idx not in cars:
+                return cls(previous_idx, player_idx, last_team_id, None,
+                           None, False, 'spotter', 'previous-unconfirmed',
+                           local_user_id, local_driver_name, driver_idx,
+                           sdk_user, str(last_car_number), None, None)
         car_idx = valid_index(selected.get('CarIdx')) if selected else None
         if selected and (team_id is None or source in ('manual','manual-number')):
             team_id = selected.get('TeamID') or None

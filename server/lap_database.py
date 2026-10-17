@@ -110,7 +110,7 @@ class LapDatabase:
 
     def observe(self, race, get, drivers, team_idx, local_driving=False,
                 tank=None, consumption=None, pace=None, plan=None, rival_idx=None,
-                session_time=None):
+                session_time=None, results=None, team_car_number=None):
         if not race:
             return {"available": False, "reason": "SIN IDENTIDAD DE SESIÓN"}
         if self.race != str(race):
@@ -130,17 +130,39 @@ class LapDatabase:
         roster = {d.get("CarIdx"): d for d in drivers or []
                   if isinstance(d, dict) and isinstance(d.get("CarIdx"), int)
                   and not d.get("IsSpectator")}
+        # SessionInfo.ResultsPositions tracks car laps even while the local
+        # DriverInfo roster / per-car SDK arrays lag during a driver handoff.
+        # It is a distinct SDK source, never an extrapolated lap counter.
+        valid_results = {idx: row for idx, row in (results or {}).items()
+                         if isinstance(idx, int) and idx >= 0 and isinstance(row, dict)}
+        if (isinstance(team_idx, int) and team_idx >= 0
+                and team_idx not in roster and team_car_number is not None):
+            roster[team_idx] = {"CarIdx": team_idx,
+                                "CarNumber": str(team_car_number),
+                                "UserName": None}
         completed = get("CarIdxLapCompleted", []) or []
         times = get("CarIdxLastLapTime", []) or []
         pits = get("CarIdxOnPitRoad", []) or []
         stamp = number(session_time) if number(session_time) is not None else time.time()
         changed = False
         for idx, car in roster.items():
-            now_lap = at(completed, idx)
-            if not isinstance(now_lap, (int, float)) or not math.isfinite(now_lap) or now_lap < 0:
+            sdk_raw = number(at(completed, idx))
+            sdk_lap = int(sdk_raw) if sdk_raw is not None and sdk_raw >= 0 else None
+            official = valid_results.get(idx) or {}
+            result_raw = number(official.get("LapsComplete"))
+            result_lap = int(result_raw) if result_raw is not None and result_raw >= 0 else None
+            if sdk_lap is None and result_lap is None:
                 continue
-            lap = int(now_lap)
-            pit = at(pits, idx)
+            use_results = result_lap is not None and (
+                sdk_lap is None or result_lap > sdk_lap)
+            lap = result_lap if use_results else sdk_lap
+            pit = at(pits, idx) if not use_results else None
+            # The SDK pit flag may remain frozen at True through the handoff.
+            # Clear its pending edge; do not classify an advancing official lap
+            # as another pit entry from stale old-driver telemetry.
+            if use_results:
+                self.pit_pending.pop(idx, None)
+                self.pit_seen.pop(idx, None)
             last_pit = self.pit_seen.get(idx)
             if isinstance(pit, bool):
                 if last_pit is not None and pit != last_pit:
@@ -149,7 +171,8 @@ class LapDatabase:
             previous = self.car_seen.get(idx)
             driver = str(car.get("UserName") or "")[:100] or None
             car_number = str(car.get("CarNumber") or "")[:12] or None
-            last_time = positive(at(times, idx))
+            last_time = (positive(official.get("LastTime")) if use_results
+                         else positive(at(times, idx)))
             if previous is None:
                 row = self.db.execute(
                     "SELECT MAX(lap) FROM laps WHERE race=? AND car_idx=?",
@@ -165,7 +188,10 @@ class LapDatabase:
                                        "SDK_MISSING", stamp)
                 kind = self.pit_pending.pop(idx, None) or ("Entrada box" if pit is True else "Normal")
                 self._save_lap(idx, lap, car_number, driver, last_time, kind,
-                               "SDK_OBSERVED" if last_time is not None else "SDK_NO_TIME", stamp)
+                               ("RESULTS_OBSERVED" if last_time is not None else "RESULTS_NO_TIME")
+                               if use_results else
+                               ("SDK_OBSERVED" if last_time is not None else "SDK_NO_TIME"),
+                               stamp)
                 changed = True
                 if idx == team_idx and local_driving and number(get("FuelLevel")) is not None:
                     fuel = number(get("FuelLevel"))
