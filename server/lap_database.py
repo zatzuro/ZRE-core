@@ -54,7 +54,16 @@ class LapDatabase:
           remaining REAL NOT NULL, source TEXT NOT NULL, recorded_at REAL NOT NULL
         );
         CREATE INDEX IF NOT EXISTS fuel_latest ON fuel_events(race, car_idx, lap, id);
+        CREATE TABLE IF NOT EXISTS race_meta (
+          race TEXT PRIMARY KEY, last_seen_utc REAL NOT NULL,
+          protected INTEGER NOT NULL DEFAULT 0
+        );
         """)
+        # Existing rows predate metadata; grant a fresh seven-day grace
+        # rather than treating SDK SessionTime as wall-clock time.
+        self.db.execute(
+            "INSERT OR IGNORE INTO race_meta(race,last_seen_utc) "
+            "SELECT DISTINCT race,? FROM laps", (time.time(),))
         self.race = None
         self.car_seen = {}
         self.pit_seen = {}
@@ -62,9 +71,42 @@ class LapDatabase:
         self.last_snapshot = {}
         self.snapshot_time = 0
         self.team_idx = None
+        self._last_touch = 0.0
+        self._last_maintenance = time.time()
+        self.cleanup_expired(now=self._last_maintenance)
 
     def close(self):
         self.db.close()
+
+    def cleanup_expired(self, now=None, retention_days=7):
+        """Purge only completed-by-inactivity, unprotected, NON-current races.
+        Use wall-clock UTC, never the SDK SessionTime that resets each session.
+        Protected historical sessions are not deleted.
+        """
+        now = time.time() if now is None else float(now)
+        cutoff = now - max(1, int(retention_days)) * 86400
+        expired = [row[0] for row in self.db.execute(
+            "SELECT race FROM race_meta WHERE last_seen_utc<? AND protected=0",
+            (cutoff,)) if row[0] != self.race]
+        with self.db:
+            for race in expired:
+                self.db.execute("DELETE FROM fuel_events WHERE race=?", (race,))
+                self.db.execute("DELETE FROM laps WHERE race=?", (race,))
+                self.db.execute("DELETE FROM race_meta WHERE race=?", (race,))
+        return len(expired)
+
+    def protect(self, race, enabled=True):
+        self.db.execute(
+            "UPDATE race_meta SET protected=? WHERE race=?",
+            (1 if enabled else 0, str(race)))
+
+    def _touch(self, now):
+        if now - self._last_touch >= 60 or not self._last_touch:
+            self.db.execute(
+                "INSERT INTO race_meta(race,last_seen_utc) VALUES(?,?) "
+                "ON CONFLICT(race) DO UPDATE SET last_seen_utc=excluded.last_seen_utc",
+                (self.race, now))
+            self._last_touch = now
 
     def observe(self, race, get, drivers, team_idx, local_driving=False,
                 tank=None, consumption=None, pace=None, plan=None, rival_idx=None,
@@ -73,11 +115,17 @@ class LapDatabase:
             return {"available": False, "reason": "SIN IDENTIDAD DE SESIÓN"}
         if self.race != str(race):
             self.race = str(race)
+            self._last_touch = 0
             self.car_seen.clear()
             self.pit_seen.clear()
             self.pit_pending.clear()
             self.last_snapshot = {}
             self.snapshot_time = 0
+        now = time.time()
+        self._touch(now)
+        if now - self._last_maintenance >= 3600:
+            self.cleanup_expired(now=now)
+            self._last_maintenance = now
         self.team_idx = team_idx
         roster = {d.get("CarIdx"): d for d in drivers or []
                   if isinstance(d, dict) and isinstance(d.get("CarIdx"), int)
@@ -121,7 +169,7 @@ class LapDatabase:
                 changed = True
                 if idx == team_idx and local_driving and number(get("FuelLevel")) is not None:
                     fuel = number(get("FuelLevel"))
-                    if fuel >= 0 and (tank is None or fuel <= float(tank) + 0.5):
+                    if 0 <= fuel <= 300 and (tank is None or fuel <= float(tank) + 0.5):
                         self._fuel_event(idx, lap, fuel, "REAL_LOCAL")
             self.car_seen[idx] = max(previous, lap)
         if changed or time.monotonic() - self.snapshot_time > 1.5 or not self.last_snapshot:
@@ -308,3 +356,25 @@ class LapDatabase:
                 "projected": projected, "averages": averages,
                 "fuelEvidenceCount": {k: len(v) for k, v in evidence.items()},
                 "lastManualLap": max((a["lap"] for a in anchors if a["source"] == "MANUAL"), default=None)}
+
+
+class UnavailableLapDatabase:
+    """Fail-open for dashboard operation, fail-closed for historical fuel edits.
+
+    An unavailable SQLite DB must not prevent the live iRacing dashboard or
+    other established screens from starting.
+    """
+    race = None
+    team_idx = None
+
+    def __init__(self, reason="Historial no disponible · almacenamiento local"):
+        self.reason = reason
+
+    def observe(self, *args, **kwargs):
+        return {"available": False, "reason": self.reason}
+
+    def edit_fuel(self, *args, **kwargs):
+        return self.reason
+
+    def close(self):
+        return None
