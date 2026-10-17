@@ -33,6 +33,34 @@ def at(values, idx):
     return values[idx] if isinstance(values, (list, tuple)) and isinstance(idx, int) and 0 <= idx < len(values) else None
 
 
+def choose_lap_counter(sdk_completed, laps_started, result_completed):
+    """Select the furthest independently evidenced line crossing.
+
+    CarIdxLap counts laps STARTED, so at least started-1 were completed.
+    YAML ResultsPositions updates less frequently; neither frozen source
+    must suppress the independently advancing started-lap array.
+    This derives a count, not a lap time or a driver identity.
+    """
+    def lap(value):
+        raw = number(value)
+        return int(raw) if raw is not None and raw >= 0 else None
+
+    sdk, result, started = lap(sdk_completed), lap(result_completed), lap(laps_started)
+    candidates = [(n, source) for n, source in (
+        (sdk, "SDK_COMPLETED"),
+        (result, "RESULTS_COMPLETED"),
+        (started - 1 if started is not None and started > 0 else None,
+         "STARTED_LAP_DERIVED"),
+    ) if n is not None]
+    if not candidates:
+        return None, "SIN_CONTADOR"
+    # When tied, prefer the direct completed counter, then results.
+    best = max(candidates, key=lambda entry: (
+        entry[0], {"SDK_COMPLETED": 2, "RESULTS_COMPLETED": 1,
+                   "STARTED_LAP_DERIVED": 0}[entry[1]]))
+    return best
+
+
 class LapDatabase:
     def __init__(self, root):
         target = Path(root) / "data" / "lap_history.sqlite3"
@@ -71,6 +99,9 @@ class LapDatabase:
         self.last_snapshot = {}
         self.snapshot_time = 0
         self.team_idx = None
+        self.team_last_progress = {}
+        self.last_track_pct = {}
+        self.last_crossing_time = {}
         self._last_touch = 0.0
         self._last_maintenance = time.time()
         self.cleanup_expired(now=self._last_maintenance)
@@ -119,6 +150,9 @@ class LapDatabase:
             self.car_seen.clear()
             self.pit_seen.clear()
             self.pit_pending.clear()
+            self.team_last_progress.clear()
+            self.last_track_pct.clear()
+            self.last_crossing_time.clear()
             self.last_snapshot = {}
             self.snapshot_time = 0
         now = time.time()
@@ -141,26 +175,38 @@ class LapDatabase:
                                 "CarNumber": str(team_car_number),
                                 "UserName": None}
         completed = get("CarIdxLapCompleted", []) or []
+        started = get("CarIdxLap", []) or []
+        distances = get("CarIdxLapDistPct", []) or []
+        surfaces = get("CarIdxTrackSurface", []) or []
         times = get("CarIdxLastLapTime", []) or []
         pits = get("CarIdxOnPitRoad", []) or []
         stamp = number(session_time) if number(session_time) is not None else time.time()
         changed = False
         for idx, car in roster.items():
-            sdk_raw = number(at(completed, idx))
-            sdk_lap = int(sdk_raw) if sdk_raw is not None and sdk_raw >= 0 else None
+            sdk_raw = at(completed, idx)
+            started_raw = at(started, idx)
             official = valid_results.get(idx) or {}
-            result_raw = number(official.get("LapsComplete"))
-            result_lap = int(result_raw) if result_raw is not None and result_raw >= 0 else None
-            if sdk_lap is None and result_lap is None:
-                continue
-            use_results = result_lap is not None and (
-                sdk_lap is None or result_lap > sdk_lap)
-            lap = result_lap if use_results else sdk_lap
-            pit = at(pits, idx) if not use_results else None
+            result_raw = official.get("LapsComplete")
+            lap, counter_source = choose_lap_counter(
+                sdk_raw, started_raw, result_raw)
+            if lap is None:
+                # No fresh counter at all: recover only from a previously
+                # confirmed identity/counter AND an observed finish-line wrap.
+                lap = self.car_seen.get(idx)
+                if lap is None:
+                    historical = self.db.execute(
+                        "SELECT MAX(lap) FROM laps WHERE race=? AND car_idx=?",
+                        (self.race, idx)).fetchone()
+                    lap = historical[0] if historical else None
+                if lap is None:
+                    continue
+            use_results = counter_source == "RESULTS_COMPLETED"
+            use_started = counter_source == "STARTED_LAP_DERIVED"
+            pit = at(pits, idx) if counter_source == "SDK_COMPLETED" else None
             # The SDK pit flag may remain frozen at True through the handoff.
             # Clear its pending edge; do not classify an advancing official lap
             # as another pit entry from stale old-driver telemetry.
-            if use_results:
+            if use_results or use_started:
                 self.pit_pending.pop(idx, None)
                 self.pit_seen.pop(idx, None)
             last_pit = self.pit_seen.get(idx)
@@ -171,8 +217,9 @@ class LapDatabase:
             previous = self.car_seen.get(idx)
             driver = str(car.get("UserName") or "")[:100] or None
             car_number = str(car.get("CarNumber") or "")[:12] or None
-            last_time = (positive(official.get("LastTime")) if use_results
-                         else positive(at(times, idx)))
+            last_time = (None if use_started else
+                         positive(official.get("LastTime")) if use_results else
+                         positive(at(times, idx)))
             if previous is None:
                 row = self.db.execute(
                     "SELECT MAX(lap) FROM laps WHERE race=? AND car_idx=?",
@@ -181,27 +228,104 @@ class LapDatabase:
                 # On first connect only the latest lap time is known.
                 if previous < lap - 1:
                     previous = lap - 1
+            # Independently observed lap-distance wrap: an actual finish
+            # line crossing can still arrive when both completed counters
+            # and started-lap counter are frozen. Never infer from a single
+            # position sample or a long jump/teleport/replay seek.
+            raw_pct = number(at(distances, idx))
+            pct = raw_pct if raw_pct is not None and 0 <= raw_pct <= 1 else None
+            track_surface = number(at(surfaces, idx))
+            previous_position = self.last_track_pct.get(idx)
+            crossing = (
+                pct is not None and previous_position is not None
+                and previous_position[0] >= 0.85 and pct <= 0.15
+                and number(session_time) is not None
+                and 0 < number(session_time) - previous_position[1] <= 12
+                and (track_surface is None or track_surface >= 0)
+                and (idx not in self.last_crossing_time
+                     or number(session_time) - self.last_crossing_time[idx]
+                        >= max(20, (positive(pace) or 90) * 0.5))
+            )
+            if pct is not None and number(session_time) is not None:
+                # SDK clock resets are not crossings, and initial frames
+                # only establish a baseline to observe a future wrap.
+                self.last_track_pct[idx] = (pct, number(session_time))
+            if crossing and lap <= previous:
+                self.last_crossing_time[idx] = number(session_time)
+                lap = previous + 1
+                counter_source = "DIST_CROSSING_OBSERVED"
+                use_started = True
+                use_results = False
+                pit = None
+                last_time = None
+                self.pit_pending.pop(idx, None)
+                self.pit_seen.pop(idx, None)
             if lap > previous:
                 if lap - previous > 1:
                     for missing in range(previous + 1, lap):
                         self._save_lap(idx, missing, car_number, None, None, "Normal",
                                        "SDK_MISSING", stamp)
                 kind = self.pit_pending.pop(idx, None) or ("Entrada box" if pit is True else "Normal")
-                self._save_lap(idx, lap, car_number, driver, last_time, kind,
-                               ("RESULTS_OBSERVED" if last_time is not None else "RESULTS_NO_TIME")
-                               if use_results else
-                               ("SDK_OBSERVED" if last_time is not None else "SDK_NO_TIME"),
-                               stamp)
+                self._save_lap(
+                    idx, lap, car_number,
+                    None if use_started else driver, last_time, kind,
+                    ("DIST_CROSSING_OBSERVED" if counter_source == "DIST_CROSSING_OBSERVED"
+                     else "STARTED_LAP_DERIVED") if use_started else
+                    ("RESULTS_OBSERVED" if last_time is not None else "RESULTS_NO_TIME")
+                    if use_results else
+                    ("SDK_OBSERVED" if last_time is not None else "SDK_NO_TIME"),
+                    stamp)
                 changed = True
-                if idx == team_idx and local_driving and number(get("FuelLevel")) is not None:
+                if idx == team_idx:
+                    self.team_last_progress[idx] = now
+                if idx == team_idx and local_driving and not use_started and number(get("FuelLevel")) is not None:
                     fuel = number(get("FuelLevel"))
                     if 0 <= fuel <= 300 and (tank is None or fuel <= float(tank) + 0.5):
                         self._fuel_event(idx, lap, fuel, "REAL_LOCAL")
+            elif lap == previous and last_time is not None and not use_started:
+                # A started-lap counter can recover the crossing before the
+                # official last-time arrives. Reconcile *that same* last lap
+                # once it is confirmed; never assign the same last time to
+                # several earlier missed laps.
+                old = self.db.execute(
+                    "SELECT source,lap_time FROM laps WHERE race=? AND car_idx=? AND lap=?",
+                    (self.race, idx, lap)).fetchone()
+                if old and old["source"] in (
+                    "STARTED_LAP_DERIVED", "SDK_MISSING", "SDK_NO_TIME",
+                    "RESULTS_NO_TIME") and old["lap_time"] is None:
+                    self._save_lap(
+                        idx, lap, car_number, driver, last_time,
+                        "Normal", "RESULTS_OBSERVED" if use_results else "SDK_OBSERVED",
+                        stamp)
+                    changed = True
             self.car_seen[idx] = max(previous, lap)
+            if idx == team_idx and idx not in self.team_last_progress:
+                self.team_last_progress[idx] = now
         if changed or time.monotonic() - self.snapshot_time > 1.5 or not self.last_snapshot:
             self.last_snapshot = self.snapshot(team_idx, rival_idx, tank, consumption, pace, plan)
             self.snapshot_time = time.monotonic()
-        return self.last_snapshot
+        # Even when the table is unchanged, freshness must advance on every
+        # SDK frame, otherwise a frozen counter looks healthy indefinitely.
+        state = self.last_snapshot
+        team_last = self.car_seen.get(team_idx)
+        active_started = at(started, team_idx)
+        age = (max(0, now - self.team_last_progress[team_idx])
+               if team_idx in self.team_last_progress else None)
+        warning_after = max(150.0, 2.5 * (positive(pace) or 90))
+        state["sync"] = {
+            "state": ("SIN_COCHE" if team_idx is None else
+                      "SIN_FUENTE" if team_last is None else
+                      "DESACTUALIZADO" if age is not None and age > warning_after else
+                      "ACTIVO"),
+            "lastCompleted": team_last,
+            "currentStarted": int(active_started) if number(active_started) is not None and number(active_started) >= 0 else None,
+            "sdkCompleted": number(at(completed, team_idx)),
+            "resultsCompleted": number((valid_results.get(team_idx) or {}).get("LapsComplete")),
+            "ageSeconds": round(age, 1) if age is not None else None,
+            "source": next((row["source"] for row in reversed(state.get("team") or [])
+                            if row.get("lap") == team_last), None),
+        }
+        return state
 
     def _save_lap(self, idx, lap, car, driver, lap_time, kind, source, stamp):
         self.db.execute(

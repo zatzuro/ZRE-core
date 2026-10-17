@@ -36,7 +36,7 @@ try:
     from server.race_dashboard import race_view
     from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from server.race_state import RaceIdentity
-    from server.lap_database import LapDatabase, UnavailableLapDatabase
+    from server.lap_database import LapDatabase, UnavailableLapDatabase, choose_lap_counter
     from server.team_context import TeamCarContext
     from server.team_timing import relative_position,relative_window,estimated_team_fuel
     from server.spotter_control import SpotterControl
@@ -57,7 +57,7 @@ except ModuleNotFoundError:
     from race_dashboard import race_view
     from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from race_state import RaceIdentity
-    from lap_database import LapDatabase, UnavailableLapDatabase
+    from lap_database import LapDatabase, UnavailableLapDatabase, choose_lap_counter
     from team_context import TeamCarContext
     from team_timing import relative_position,relative_window,estimated_team_fuel
     from spotter_control import SpotterControl
@@ -1299,18 +1299,33 @@ class DashboardSource:
         car=by_idx.get(idx,{}) if idx is not None else {}
         result=results.get(idx,{}) if idx is not None else {}
         lap=at('CarIdxLap',idx)
-        sdk_completed=number(at('CarIdxLapCompleted',idx))
-        sdk_completed=int(sdk_completed) if sdk_completed is not None and sdk_completed>=0 else None
-        # ResultsPositions may continue advancing after the local client
-        # relinquishes the car even when its CarIdx arrays are stale.
+        # Team-car lap counters are independent of who is driving. A spotter
+        # may see BOTH Completed and YAML ResultsPositions freeze while
+        # CarIdxLap (laps STARTED) continues to move.
         fresh_result=result if result.get('positionSource')!='RECOVERED_SDK_SNAPSHOT' else {}
-        result_completed=number(fresh_result.get('LapsComplete'))
-        result_completed=int(result_completed) if result_completed is not None and result_completed>=0 else None
-        official_ahead=(result_completed is not None and
-                        (sdk_completed is None or result_completed>sdk_completed))
-        completed=result_completed if official_ahead else sdk_completed
-        last_lap=(seconds(fresh_result.get('LastTime')) if official_ahead
-                  else seconds(at('CarIdxLastLapTime',idx)) or seconds(fresh_result.get('LastTime')))
+        completed, lap_counter_source=choose_lap_counter(
+            at('CarIdxLapCompleted',idx), at('CarIdxLap',idx),
+            fresh_result.get('LapsComplete'))
+        official_ahead=lap_counter_source=='RESULTS_COMPLETED'
+        started_ahead=lap_counter_source=='STARTED_LAP_DERIVED'
+        last_lap=(None if started_ahead else
+                  seconds(fresh_result.get('LastTime')) if official_ahead else
+                  seconds(at('CarIdxLastLapTime',idx)) or
+                  seconds(fresh_result.get('LastTime')))
+        # The persistent lap ledger may have directly witnessed additional
+        # start/finish crossings from CarIdxLapDistPct while BOTH counters
+        # are frozen. Use its verified crossing count (one frame behind),
+        # never a guessed lap time or driver.
+        synced=(getattr(self.lap_database, 'last_snapshot', None) or {}).get('sync') or {}
+        ledger_lap=synced.get('lastCompleted')
+        if (idx is not None and synced.get('source')=='DIST_CROSSING_OBSERVED'
+                and isinstance(ledger_lap,int)
+                and (completed is None or ledger_lap>completed)):
+            completed=ledger_lap
+            lap_counter_source='DIST_CROSSING_OBSERVED'
+            started_ahead=True
+            official_ahead=False
+            last_lap=None
         pace=self.strategy_settings.get('averageLapSeconds') or last_lap or seconds(result.get('FastestTime'))
         consumption=self.strategy_settings.get('consumptionLiters') or (sum(self.fuel_per_lap[-8:])/len(self.fuel_per_lap[-8:]) if self.fuel_per_lap else None)
         fuel_raw=self.get('FuelLevel')

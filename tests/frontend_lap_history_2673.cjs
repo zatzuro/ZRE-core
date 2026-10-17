@@ -54,4 +54,23 @@ assert.equal(commands.length,1);
 assert.equal(commands[0].type,'lapFuelEdit');
 assert.equal(commands[0].lap,41);
 assert.equal(commands[0].remaining,27.9);
+data.sync={state:'ACTIVO',lastCompleted:41,currentStarted:42,source:'SDK_COMPLETED'};
+win.ZRELapHistory.render({connected:true,lapDatabase:data},()=>{});
+assert.ok(get('lh-status').textContent.includes('V41'));
+assert.ok(get('lh-status').textContent.includes('vuelta en curso 42'));
+data.sync={state:'DESACTUALIZADO',lastCompleted:41,currentStarted:42,
+           source:'SDK_COMPLETED',ageSeconds:245};
+win.ZRELapHistory.render({connected:true,lapDatabase:data},()=>{});
+assert.ok(get('lh-status').textContent.includes('SIN SINCRONIZACIÓN'));
+assert.ok(get('lh-status').textContent.includes('245 s'));
+data.team.push({lap:42,car_number:'18',driver:null,lap_time:null,
+  remaining:null,avgConsumption:2.5,kind:'Normal',state:'REAL',
+  source:'STARTED_LAP_DERIVED',fuelSource:'SIN_DATO'});
+data.projected=[];
+data.sync={state:'ACTIVO',lastCompleted:42,currentStarted:43,
+           source:'STARTED_LAP_DERIVED',ageSeconds:0};
+win.ZRELapHistory.render({connected:true,lapDatabase:data},()=>{});
+assert.ok(get('lh-status').textContent.includes('V42'));
+assert.ok(get('lh-status').textContent.includes('sin tiempo confirmado'));
+console.log('ZRE lap history freshness alerts / started-lap recovery: PASS');
 console.log('ZRE lap history single-table and manual fuel regression: PASS');
