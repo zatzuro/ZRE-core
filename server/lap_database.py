@@ -224,10 +224,10 @@ class LapDatabase:
                 row = self.db.execute(
                     "SELECT MAX(lap) FROM laps WHERE race=? AND car_idx=?",
                     (self.race, idx)).fetchone()
+                # Cold joins know only the most recent observed lap; but
+                # reconnects with prior durable history MUST preserve gaps.
+                # Previous code skipped the missing laps on every restart.
                 previous = row[0] if row and row[0] is not None else lap - 1
-                # On first connect only the latest lap time is known.
-                if previous < lap - 1:
-                    previous = lap - 1
             # Independently observed lap-distance wrap: an actual finish
             # line crossing can still arrive when both completed counters
             # and started-lap counter are frozen. Never infer from a single
