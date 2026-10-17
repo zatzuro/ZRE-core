@@ -2034,7 +2034,9 @@ async def close_session_journal(app):
     source.finalize_setup_stint_before_reset("shutdown")
     source.quali.close_session("shutdown")
     await asyncio.to_thread(source.recorder.close)
-    await asyncio.to_thread(source.lap_database.close)
+    # SQLite was created on the event-loop thread; close it on that same thread.
+    # Moving this call to asyncio.to_thread violates sqlite3.check_same_thread.
+    source.lap_database.close()
 
 async def version_status(request):
     from zre_build import identity
