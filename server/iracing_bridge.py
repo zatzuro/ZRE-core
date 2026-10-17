@@ -1294,7 +1294,7 @@ class DashboardSource:
         reference_fuel=estimated_team_fuel(*self.team_fuel_reference,completed,consumption) if self.team_fuel_reference_valid and self.team_fuel_reference and completed is not None else None
         if reference_fuel is None and self.team_fuel_reference_valid and self.team_fuel_reference and completed==self.team_fuel_reference[1]:
             reference_fuel=self.team_fuel_reference[0]
-        if fuel_validated is not None and context.local_driving and idx is not None and completed is not None:
+        if fuel_validated is not None and self.spotter_control.fuel_liters is None and idx is not None and completed is not None:
             self.team_fuel_reference=(fuel_validated,completed)
             self.team_fuel_reference_valid=True
             self.team_fuel_reference_source='REAL LOCAL' if context.local_driving else 'SDK OBSERVADO'
@@ -1310,8 +1310,12 @@ class DashboardSource:
             self.spotter_control.pit_transition(False,completed)
         manual_fuel=self.spotter_control.fuel_at(completed,consumption)
         fuel_used=(fuel_validated if context.local_driving and fuel_validated is not None else
-                   manual_fuel if manual_fuel is not None else reference_fuel)
-        fuel_source='REAL LOCAL' if context.local_driving and fuel_validated is not None else 'ESTIMADO' if fuel_used is not None else 'SIN DATO'
+                   manual_fuel if manual_fuel is not None else
+                   fuel_validated if fuel_validated is not None else reference_fuel)
+        fuel_source=('REAL LOCAL' if context.local_driving and fuel_validated is not None else
+                     'MANUAL · ESTIMADO' if manual_fuel is not None else
+                     'SDK OBSERVADO' if fuel_validated is not None else
+                     'ESTIMADO' if fuel_used is not None else 'SIN DATO')
         if idx is not None and completed is not None:
             if self.strategy_stint_start_lap is None and pit is False:
                 self.strategy_stint_start_lap=completed
@@ -1424,7 +1428,7 @@ class DashboardSource:
                       'position':f"P{own['pos']}" if own else 'P—',
                       'lap':f'VUELTA {lap}' if lap is not None else 'VUELTA —',
                       'state':self.session_type_text(session.get('SessionType','EN SESIÓN'))},
-            'self':{'fuel':f'{fuel_used:.1f} L · {fuel_source}' if fuel_validated is not None else f'≈ {fuel_used:.1f} L · ESTIMADO' if fuel_used is not None else '—',
+            'self':{'fuel':f'{fuel_used:.1f} L · {fuel_source}' if fuel_used is not None and fuel_source in ('REAL LOCAL','SDK OBSERVADO') else f'≈ {fuel_used:.1f} L · ESTIMADO' if fuel_used is not None else '—',
                     'fuelValue':fuel_used,'fuelSource':fuel_source,'lastUse':f'{consumption:.2f} L/v · EST.' if consumption else '—',
                     'bestUse':'—','worstUse':'—','lastLap':self.lap_text(last_lap),
                     'bestLap':'—','laps':list(self.observed_team_history.get(idx,[])),'wear':{'FL':'—','FR':'—','RL':'—','RR':'—'},
