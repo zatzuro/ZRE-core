@@ -343,7 +343,7 @@ jobs:
           gh release create v2.6.7.1 --target "$GITHUB_SHA" --title "ZRE Core 2.6.7.1" --notes-file diagnostics/QA-2.6.7.1.md --latest
 
   release-2672:
-    if: github.ref == 'refs/heads/release-2.6.7.2' || github.ref == 'refs/heads/release-2.6.7.3'
+    if: github.ref == 'refs/heads/release-2.6.7.2'
     needs: [validate, practice-visual, windows-test-install]
     runs-on: ubuntu-latest
     permissions:
