@@ -6,6 +6,7 @@ former even while the latter and SessionInfo YAML remain stale.
 Never fabricate lap times or attribute a driver from stale per-car data.
 """
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -34,7 +35,7 @@ class LiveLapSyncTests(unittest.TestCase):
         self.roster = [{"CarIdx": 8, "CarNumber": "18", "UserName": "David",
                         "UserID": 202, "TeamID": 10}]
         self.results = {8: {"LapsComplete": 268, "LastTime": 93.1}}
-        self.now = 1000000.0
+        self.now = time.time()
 
     def tearDown(self):
         self.db.close()
