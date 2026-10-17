@@ -114,6 +114,38 @@ with tempfile.TemporaryFile(mode="w+") as log:
             assert page.locator("#lap-history-view").is_hidden()
             page.locator("#screen-mode-select").select_option("lap-history")
             assert page.locator("#lh-rows tr").count()==4
+            # Real handoff sequence through one WebSocket and one UI:
+            # teammate -> local pilot -> teammate, progressing lap numbers.
+            from copy import deepcopy
+            local=deepcopy(packet)
+            local["teamContext"]["autoMode"]="driver"
+            local["lapDatabase"]["team"].append({
+                "lap":42,"car_number":"18","driver":"Santiago",
+                "lap_time":91.8,"remaining":24.9,"avgConsumption":2.6,
+                "kind":"Normal","state":"REAL",
+                "source":"SDK_OBSERVED","fuelSource":"REAL_LOCAL"})
+            local["lapDatabase"]["projected"]=[
+                {"lap":43,"car_number":"18","driver":None,"lap_time":92,
+                 "remaining":22.3,"avgConsumption":2.6,
+                 "kind":"Normal","state":"PROYECTADO","fuelSource":"ESTIMADO"}]
+            page.evaluate("data=>window.__ws.onmessage({data:JSON.stringify(data)})",local)
+            assert page.locator("#lh-rows tr").count()==4
+            assert page.locator("#lh-rows tr").nth(2).get_attribute("data-state")=="REAL"
+            teammate=deepcopy(local)
+            teammate["teamContext"]["autoMode"]="spotter"
+            teammate["lapDatabase"]["team"].append({
+                "lap":43,"car_number":"18","driver":"David",
+                "lap_time":93.1,"remaining":22.3,"avgConsumption":2.6,
+                "kind":"Normal","state":"REAL",
+                "source":"RESULTS_OBSERVED","fuelSource":"ESTIMADO"})
+            teammate["lapDatabase"]["projected"]=[
+                {"lap":44,"car_number":"18","driver":None,"lap_time":93,
+                 "remaining":19.7,"avgConsumption":2.6,
+                 "kind":"Normal","state":"PROYECTADO","fuelSource":"ESTIMADO"}]
+            page.evaluate("data=>window.__ws.onmessage({data:JSON.stringify(data)})",teammate)
+            assert page.locator("#lh-rows tr").count()==5
+            assert page.locator("#lh-rows tr").nth(3).get_attribute("data-state")=="REAL"
+            assert "David" in page.locator("#lh-rows tr").nth(3).inner_text()
             assert not errors, errors
             browser.close()
             print("PASS: comparison table, KPIs, edit, navigation and 1366/1920/2560 Chromium")

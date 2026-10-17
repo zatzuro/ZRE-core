@@ -469,7 +469,9 @@ class DashboardSource:
                         index,local_driving=(payload.get('teamDebug') or {}).get('localDriving') is True,
                         tank=self.strategy_settings.get('tankCapacityLiters'),
                         consumption=baseline,pace=self.strategy_settings.get('averageLapSeconds'),
-                        plan=plan,rival_idx=rival_idx,session_time=self.get('SessionTime'))
+                        plan=plan,rival_idx=rival_idx,session_time=self.get('SessionTime'),
+                        results=getattr(self,'_lap_session_results',{}),
+                        team_car_number=self.team_car_number)
                     payload['lapDatabase']['error']=self.lap_database_error
                 except (sqlite3.Error,ValueError,TypeError,KeyError,OverflowError):
                     logger.exception('LAP DATABASE CAPTURE FAILED')
@@ -719,6 +721,9 @@ class DashboardSource:
                     "sessionId":weekend.get("SessionID"),"subSessionId":weekend.get("SubSessionID"),"trackId":weekend.get("TrackID"),"sessionNum":session_num,"carIdx":context.car_idx})
                 self.last_strategy_log_signature=None
             self.restore_session_journal(weekend,session_num)
+            # Preserve the CURRENT official per-car lap counters separately.
+            # The recovered session journal is never treated as a live source.
+            self._lap_session_results = dict(results)
             # SDK results always win. Previously captured results are only
             # displayed as STALE history when the current ResultsPositions
             # packet is missing/incomplete (common after a reconnect).
@@ -1294,10 +1299,18 @@ class DashboardSource:
         car=by_idx.get(idx,{}) if idx is not None else {}
         result=results.get(idx,{}) if idx is not None else {}
         lap=at('CarIdxLap',idx)
-        completed=at('CarIdxLapCompleted',idx)
-        if completed is None:completed=result.get('LapsComplete')
-        completed=int(completed) if completed is not None and completed>=0 else None
-        last_lap=seconds(at('CarIdxLastLapTime',idx)) or seconds(result.get('LastTime'))
+        sdk_completed=number(at('CarIdxLapCompleted',idx))
+        sdk_completed=int(sdk_completed) if sdk_completed is not None and sdk_completed>=0 else None
+        # ResultsPositions may continue advancing after the local client
+        # relinquishes the car even when its CarIdx arrays are stale.
+        fresh_result=result if result.get('positionSource')!='RECOVERED_SDK_SNAPSHOT' else {}
+        result_completed=number(fresh_result.get('LapsComplete'))
+        result_completed=int(result_completed) if result_completed is not None and result_completed>=0 else None
+        official_ahead=(result_completed is not None and
+                        (sdk_completed is None or result_completed>sdk_completed))
+        completed=result_completed if official_ahead else sdk_completed
+        last_lap=(seconds(fresh_result.get('LastTime')) if official_ahead
+                  else seconds(at('CarIdxLastLapTime',idx)) or seconds(fresh_result.get('LastTime')))
         pace=self.strategy_settings.get('averageLapSeconds') or last_lap or seconds(result.get('FastestTime'))
         consumption=self.strategy_settings.get('consumptionLiters') or (sum(self.fuel_per_lap[-8:])/len(self.fuel_per_lap[-8:]) if self.fuel_per_lap else None)
         fuel_raw=self.get('FuelLevel')
@@ -1309,8 +1322,9 @@ class DashboardSource:
             self.team_fuel_reference=(fuel_validated,completed)
             self.team_fuel_reference_valid=True
             self.team_fuel_reference_source='REAL LOCAL' if context.local_driving else 'SDK OBSERVADO'
-        pct=at('CarIdxLapDistPct',idx)
-        pit=at('CarIdxOnPitRoad',idx)
+        # Do not claim the car is still in boxes from an outdated pit flag.
+        pct=at('CarIdxLapDistPct',idx) if not official_ahead else None
+        pit=at('CarIdxOnPitRoad',idx) if not official_ahead else None
         self.team_completed_now=completed
         if pit is True and not self.strategy_last_on_pit:
             self.spotter_pre_pit_fuel=self.spotter_control.fuel_at(completed,consumption)
