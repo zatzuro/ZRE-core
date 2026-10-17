@@ -56,12 +56,14 @@ class LapDatabaseTests(unittest.TestCase):
         self.assertEqual(report["team"][-1]["fuelSource"], "MANUAL")
         self.assertAlmostEqual(report["averages"]["Normal"], 2.6)
         self.assertTrue(report["projected"])
+        self.assertIsNone(self.db.edit_fuel(11, 27.3, 0, tank=60))
+        self.assertEqual(self.db.snapshot(0, 1, 60, 2.8, 92, None)["team"][-1]["remaining"], 27.3)
         self.db.close()
         self.db = LapDatabase(Path(self.directory.name))
         self.db.race = "session-777"
         self.db.team_idx = 0
         persisted = self.db.snapshot(0, 1, 60, 2.8, 92, None)
-        self.assertAlmostEqual(persisted["team"][-1]["remaining"], 27.4)
+        self.assertAlmostEqual(persisted["team"][-1]["remaining"], 27.3)
 
     def test_spotter_never_saves_untrusted_remote_fuel(self):
         self.observe(driving=False)

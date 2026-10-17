@@ -145,8 +145,8 @@ class LapDatabase:
         existing = self.db.execute(
             "SELECT remaining,source FROM fuel_events WHERE race=? AND car_idx=? AND lap=? ORDER BY id DESC LIMIT 1",
             (self.race, idx, lap)).fetchone()
-        if existing and existing["source"] == "MANUAL":
-            return
+        if existing and existing["source"] == "MANUAL" and source != "MANUAL":
+            return  # Protect manual correction from SDK refresh; allow manual re-edits.
         if existing and existing["source"] == source and abs(existing["remaining"] - fuel) < 0.02:
             return
         self.db.execute("INSERT INTO fuel_events(race,car_idx,lap,remaining,source,recorded_at) VALUES(?,?,?,?,?,?)",
