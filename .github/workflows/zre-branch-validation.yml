@@ -90,6 +90,9 @@ jobs:
           if [ "$GITHUB_HEAD_REF" = "develop/2.6.6-race-v2" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7-functionality-storage-quali-race" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7.1-navigation-controls-black-theme" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7.1-functional-p0-tire-integrity" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7.1" ]; then python diagnostics/race_v2_visual_266.py; python diagnostics/senior_266_browser.py; fi
           if [ "$GITHUB_HEAD_REF" = "develop/2.6.6.1-screen-menu" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7-functionality-storage-quali-race" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7.1-navigation-controls-black-theme" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7.1-functional-p0-tire-integrity" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.6.1" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7.1" ]; then python diagnostics/screen_menu_2661_browser.py; fi
           if [ "$GITHUB_HEAD_REF" = "develop/2.6.7-functionality-storage-quali-race" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7.1-navigation-controls-black-theme" ] || [ "$GITHUB_HEAD_REF" = "develop/2.6.7.1-functional-p0-tire-integrity" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7" ] || [ "$GITHUB_REF" = "refs/heads/release-2.6.7.1" ]; then python diagnostics/functional_267_browser.py; fi
+      - name: Test single-table lap history in Chromium
+        if: github.ref == 'refs/heads/release-2.6.7.3'
+        run: python diagnostics/lap_history_browser_2673.py
       - name: Archive actual Chromium screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -114,6 +117,7 @@ jobs:
             diagnostics/senior-266-screenshots/
             diagnostics/screen-menu-2661-screenshots/
             diagnostics/functionality-267-screenshots/
+            diagnostics/lap-history-2673-screenshots/
           if-no-files-found: warn
 
   windows-test-install:
