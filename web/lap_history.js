@@ -105,7 +105,19 @@
  function render(packet,sendCommand){
   current=packet;send=sendCommand;
   const data=packet.lapDatabase||{available:false};
-  const message=data.available?data.error||'REAL = vuelta terminada; el Remaining puede ser estimado. Δ positivo favorece a nuestro equipo.':data.reason||'Esperando historial SDK.';
+  const sync=data.sync||{};
+  const inProgress=sync.currentStarted!=null?' · vuelta en curso '+sync.currentStarted:'';
+  const completed=sync.lastCompleted!=null?'V'+sync.lastCompleted:'—';
+  const derived=['STARTED_LAP_DERIVED','DIST_CROSSING_OBSERVED'].includes(sync.source)?' · avance observado sin tiempo confirmado':'';
+  const warning=sync.state==='DESACTUALIZADO'
+    ?'SIN SINCRONIZACIÓN · última vuelta registrada '+completed+
+      ' · sin progreso hace '+Math.round(sync.ageSeconds||0)+' s'+
+      ' · revisar señal iRacing/Spotter'
+    :sync.state==='SIN_FUENTE' || sync.state==='SIN_COCHE'
+      ?'SIN DATOS ACTUALES DEL COCHE · verifique equipo seleccionado'
+      :'ÚLTIMA META '+completed+inProgress+derived+
+       ' · Remaining puede ser estimado';
+  const message=data.available?(data.error||warning):(data.reason||'Esperando historial SDK.');
   assign('lh-status',message);
   if(!data.available)return;
   options(data);
