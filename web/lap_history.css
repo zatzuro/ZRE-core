@@ -1,0 +1,38 @@
+/* Lap history: horizontally scrollable single-table race and fuel comparison. */
+body[data-view="lap-history"] .dashboard{max-width:none;}
+#lap-history-view{display:flex;flex-direction:column;min-height:0;gap:12px;color:#f7f9ff;}
+#lap-history-view[hidden]{display:none!important;}
+.lh-top{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;}
+.lh-top h1{font-size:clamp(20px,2vw,30px);margin:2px 0;}
+.lh-top p{margin:0;color:#9aa9bb;font-size:12px;}
+.lh-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+#lap-history-view select,#lap-history-view input{background:#101821;color:#f5f9ff;border:1px solid #53677d;border-radius:6px;padding:8px;max-width:220px;}
+.lh-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+.lh-kpi{padding:9px 12px;background:#0b151f;border:1px solid #30485b;border-radius:8px;min-width:0;}
+.lh-kpi small,.lh-kpi em{display:block;font:11px system-ui;color:#92a8bf;}
+.lh-kpi strong{display:block;font-size:22px;line-height:1.5;font-variant-numeric:tabular-nums;}
+.lh-kpi em{font-style:normal;}
+.lh-fuel-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:10px 12px;background:#0b151f;border:1px solid #30485b;border-radius:8px;}
+.lh-fuel-form label{display:grid;gap:4px;color:#bccce0;font-size:12px;}
+.lh-fuel-form button{background:#205980;color:#fff;border:1px solid #6ccaff;border-radius:6px;padding:9px 15px;cursor:pointer;}
+.lh-fuel-form button:hover{background:#2878ae;}
+#lh-edit-status{font-size:12px;color:#ccd9e8;}
+.lh-table-shell{min-height:160px;flex:1;overflow:auto;border:1px solid #30485b;border-radius:8px;background:#080e15;}
+#lh-table{border-collapse:separate;border-spacing:0;width:100%;min-width:1240px;font-variant-numeric:tabular-nums;font-size:12px;}
+#lh-table th,#lh-table td{padding:7px 9px;border-right:1px solid #263a49;border-bottom:1px solid #253443;white-space:nowrap;text-align:left;}
+#lh-table thead th{position:sticky;top:0;background:#1d3242;color:#fff;z-index:2;font-size:11px;}
+#lh-table thead tr:first-child th{background:#243d52;text-transform:uppercase;}
+#lh-table td:first-child,#lh-table th:first-child{position:sticky;left:0;z-index:1;background:#182635;font-weight:700;}
+#lh-table thead th:first-child{z-index:4;}
+#lh-table tbody tr[data-state="PROYECTADO"]{background:#1a1720;color:#efc77d;}
+#lh-table tbody tr[data-state="PROYECTADO"] td:first-child{background:#332719;}
+#lh-table tbody tr[data-state="REAL"]{background:#0d1b25;color:#eef6fc;}
+#lh-table tbody tr:hover{filter:brightness(1.25);}
+.lh-fuel{color:#77d9a3;font-weight:700;}
+.lh-edit-button{margin-left:7px;padding:1px 5px;border:1px solid #538c7a;border-radius:4px;background:#142f25;color:#bafee1;cursor:pointer;}
+.lh-positive{color:#67d79d;font-weight:700;}
+.lh-negative{color:#ff908f;font-weight:700;}
+.lh-driver{max-width:150px;overflow:hidden;text-overflow:ellipsis;}
+.lh-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:9px;font-size:11px;color:#93a8bb;}
+@media(max-width:1100px){.lh-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}.lh-table-shell{max-height:70vh;}}
+@media(max-width:620px){.lh-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}.lh-kpi strong{font-size:17px;}}

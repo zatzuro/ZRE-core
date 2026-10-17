@@ -15,6 +15,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import sys
+import sqlite3
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -35,6 +36,7 @@ try:
     from server.race_dashboard import race_view
     from server.strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from server.race_state import RaceIdentity
+    from server.lap_database import LapDatabase
     from server.team_context import TeamCarContext
     from server.team_timing import relative_position,relative_window,estimated_team_fuel
     from server.spotter_control import SpotterControl
@@ -55,6 +57,7 @@ except ModuleNotFoundError:
     from race_dashboard import race_view
     from strategy_runtime import strategy_payload as endurance_strategy_payload,clock_text,RacePlanRuntime,leader_from_results,is_caution_flag
     from race_state import RaceIdentity
+    from lap_database import LapDatabase
     from team_context import TeamCarContext
     from team_timing import relative_position,relative_window,estimated_team_fuel
     from spotter_control import SpotterControl
@@ -309,6 +312,8 @@ class DashboardSource:
         self.race_plan_audio_state=None
         self.race_plan_audio_target=None
         self.recorder = SessionRecorder(ROOT / "session_replay.jsonl")
+        self.lap_database = LapDatabase(ROOT)
+        self.lap_database_error = None
         self.quali = QualiRuns(self.recorder)
         self.last_strategy_log_signature=None
         self.strategy_prediction_audit={}
@@ -428,6 +433,36 @@ class DashboardSource:
                     self.recorder.write({"type":"sdk_connected","sessionTime":self.last_session_time,
                                          "source":"SDK_OBSERVED"})
                 self._sdk_link_state=True
+                try:
+                    key=self.session_key
+                    race_key='|'.join(str(x) for x in (
+                        key.subsession_id if key.subsession_id not in (None,'') else key.session_id,
+                        key.track_id,key.session_num)) if key else None
+                    index=self.team_car_idx
+                    director=payload.get('raceDirector') or {}
+                    selected=(payload.get('raceDashboard') or {}).get('rival') or {}
+                    rival_idx=selected.get('effectiveCarIdx')
+                    if rival_idx is None:rival_idx=director.get('effectiveCarIdx')
+                    if rival_idx is None:rival_idx=self.race_director.selected_idx
+                    if not isinstance(rival_idx,int):rival_idx=None
+                    model=self.race_plan_runtime.fuel_model.estimate()
+                    baseline=(self.strategy_settings.get('consumptionLiters') or
+                              model.strategy_lpl or
+                              (sum(self.fuel_per_lap[-10:])/len(self.fuel_per_lap[-10:])
+                               if self.fuel_per_lap else None))
+                    old_plan=payload.get('racePlan') or {}
+                    plan=old_plan if old_plan.get('stops') else (
+                        (payload.get('racePlanVNext') or {}).get('currentPlan') or {})
+                    payload['lapDatabase']=self.lap_database.observe(
+                        race_key,self.get,self.get('DriverInfo',{}).get('Drivers',[]),
+                        index,local_driving=(payload.get('teamDebug') or {}).get('localDriving') is True,
+                        tank=self.strategy_settings.get('tankCapacityLiters'),
+                        consumption=baseline,pace=self.strategy_settings.get('averageLapSeconds'),
+                        plan=plan,rival_idx=rival_idx,session_time=self.get('SessionTime'))
+                    payload['lapDatabase']['error']=self.lap_database_error
+                except (sqlite3.Error,ValueError,TypeError,KeyError,OverflowError):
+                    logger.exception('LAP DATABASE CAPTURE FAILED')
+                    payload['lapDatabase']={'available':False,'reason':'Error de almacenamiento de vueltas'}
                 self.session_state.remember_payload(payload)
                 return payload
             except Exception as exc:
@@ -1259,7 +1294,7 @@ class DashboardSource:
         reference_fuel=estimated_team_fuel(*self.team_fuel_reference,completed,consumption) if self.team_fuel_reference_valid and self.team_fuel_reference and completed is not None else None
         if reference_fuel is None and self.team_fuel_reference_valid and self.team_fuel_reference and completed==self.team_fuel_reference[1]:
             reference_fuel=self.team_fuel_reference[0]
-        if fuel_validated is not None and idx is not None and completed is not None:
+        if fuel_validated is not None and self.spotter_control.fuel_liters is None and idx is not None and completed is not None:
             self.team_fuel_reference=(fuel_validated,completed)
             self.team_fuel_reference_valid=True
             self.team_fuel_reference_source='REAL LOCAL' if context.local_driving else 'SDK OBSERVADO'
@@ -1274,9 +1309,13 @@ class DashboardSource:
         elif pit is False and self.strategy_last_on_pit:
             self.spotter_control.pit_transition(False,completed)
         manual_fuel=self.spotter_control.fuel_at(completed,consumption)
-        fuel_used=(fuel_validated if fuel_validated is not None else
-                   manual_fuel if manual_fuel is not None else reference_fuel)
-        fuel_source=('REAL LOCAL' if context.local_driving else 'SDK OBSERVADO') if fuel_validated is not None else 'ESTIMADO' if fuel_used is not None else 'SIN DATO'
+        fuel_used=(fuel_validated if context.local_driving and fuel_validated is not None else
+                   manual_fuel if manual_fuel is not None else
+                   fuel_validated if fuel_validated is not None else reference_fuel)
+        fuel_source=('REAL LOCAL' if context.local_driving and fuel_validated is not None else
+                     'MANUAL · ESTIMADO' if manual_fuel is not None else
+                     'SDK OBSERVADO' if fuel_validated is not None else
+                     'ESTIMADO' if fuel_used is not None else 'SIN DATO')
         if idx is not None and completed is not None:
             if self.strategy_stint_start_lap is None and pit is False:
                 self.strategy_stint_start_lap=completed
@@ -1389,7 +1428,7 @@ class DashboardSource:
                       'position':f"P{own['pos']}" if own else 'P—',
                       'lap':f'VUELTA {lap}' if lap is not None else 'VUELTA —',
                       'state':self.session_type_text(session.get('SessionType','EN SESIÓN'))},
-            'self':{'fuel':f'{fuel_used:.1f} L · {fuel_source}' if fuel_validated is not None else f'≈ {fuel_used:.1f} L · ESTIMADO' if fuel_used is not None else '—',
+            'self':{'fuel':f'{fuel_used:.1f} L · {fuel_source}' if fuel_used is not None and fuel_source in ('REAL LOCAL','SDK OBSERVADO') else f'≈ {fuel_used:.1f} L · ESTIMADO' if fuel_used is not None else '—',
                     'fuelValue':fuel_used,'fuelSource':fuel_source,'lastUse':f'{consumption:.2f} L/v · EST.' if consumption else '—',
                     'bestUse':'—','worstUse':'—','lastLap':self.lap_text(last_lap),
                     'bestLap':'—','laps':list(self.observed_team_history.get(idx,[])),'wear':{'FL':'—','FR':'—','RL':'—','RR':'—'},
@@ -2024,6 +2063,24 @@ async def websocket(request):
                         source.manual_team_car_number=str(setting.get('value') or '').strip() or None
                     elif setting.get('type')=='spotterEvent':
                         source.apply_spotter_event(setting)
+                    elif setting.get('type')=='lapFuelEdit':
+                        try:
+                            chosen_lap=int(setting.get('lap'))
+                            reading=float(setting.get('remaining'))
+                            err=source.lap_database.edit_fuel(
+                                chosen_lap,reading,source.team_car_idx,
+                                source.strategy_settings.get('tankCapacityLiters'))
+                            source.lap_database_error=err
+                            if err is None:
+                                source.spotter_control.fuel_liters=reading
+                                source.spotter_control.fuel_lap=chosen_lap
+                                source.spotter_control.fuel_source='MANUAL · ESTIMADO'
+                                source.team_fuel_reference_valid=False
+                                source.recorder.write({'type':'manual_team_fuel',
+                                    'lap':chosen_lap,'remaining':reading,
+                                    'source':'MANUAL_REPORTED'})
+                        except (ValueError,TypeError,OverflowError):
+                            source.lap_database_error='Lectura de combustible inválida'
                     elif setting.get('type')=='stopOverride':
                         source.spotter_event_error=source.apply_stop_override(setting)
                     elif setting.get("type")=="settings" and setting.get("key")=="teamDriver":
